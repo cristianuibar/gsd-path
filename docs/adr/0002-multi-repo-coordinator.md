@@ -2,45 +2,35 @@
 
 Status: accepted.
 
-One milestone may change several Git repositories. One repository, the
-**coordinator**, holds `.project/`: STATE, tasks, the verify ledger, the
-archive, and the ship commit. The other repositories are **members**, listed in
-the coordinator's `.project/MEMBERS.md`. `members add` creates this file when
-it is absent, including in an existing Path project. The fixed format of
-`.project/REPOSITORY.md` stays unchanged. A milestone names the members it
-changes; only those get a bound branch. Every CLI keeps one `--repo` (the
-coordinator) and reads members from `MEMBERS.md`. A project without that file
-behaves exactly as before.
+One milestone may change several Git repositories. One **coordinator** holds
+`.project/`: state, tasks, review, archive, and the ship commit. Its
+`.project/MEMBERS.md` lists the **members**; `members add` creates the file for
+new or existing Path projects. The fixed `REPOSITORY.md` format stays unchanged.
+Every CLI keeps one `--repo` (the coordinator). Without `MEMBERS.md`, Path keeps
+its single-repo behavior and output.
 
-One task changes one repository (`repo:` in the task frontmatter, default the
-coordinator). A change across repositories is two tasks with a dependency. A
-member task lands as a product commit in the member plus a record commit in
-the coordinator; a journal makes the pair resumable.
+One task changes one repo (`repo:` defaults to the coordinator). A member task
+lands a product commit in the member and a record commit in the coordinator;
+a journal makes the pair resumable. Build locks the participating members in
+their `MEMBERS.md` order under `.project/build/`, not in STATE. Ship integrates
+and tags those members in that order, then closes the coordinator. It records
+each member's reviewed HEAD and integration. Git cannot merge repos atomically,
+so a failed close remains partially shipped until resume or a patch plan.
 
-Ship closes participating members in their order in `MEMBERS.md`, then the
-coordinator. Build locks that order for the milestone so resume uses the same
-sequence. The coordinator ship commit records each member's integration. Git
-cannot merge across repositories atomically, so a failure after some members
-merge leaves the milestone **partially shipped** until resume or a patch plan
-completes it.
+**Considered options:** a workspace folder outside Git holds `.project/` (the
+ship commit and archive leave Git); linked peer projects each hold `.project/`
+(no shared milestone or close); open every PR and merge all at the end
+(pull-request mode only).
 
-**Considered options:** a workspace folder outside Git holds `.project/` (all
-repositories equal, but the ship commit and archive leave Git); linked peer
-projects, each with its own `.project/` and cross-repo ordering (small change,
-but no shared milestone or close); open every pull request and merge all at
-the end (smaller failure window, pull-request mode only).
-
-**Consequences:** member branches and tags carry the coordinator's name
-(`gsd-path/<coord>-M00N`, `milestone/<coord>-NNN-slug`) so they cannot collide
-with a member's own Path history. Joining as a member adds no new tracked Path
-files; any existing `.project/` in a member stays untouched. Its hooks and a
-marker with the absolute coordinator path live in the member's Git directory.
-The member hook runs the coordinator's `.gsd-path/git_guard.py` through that
-path.
-The guard hook must gate writes into member worktrees; today it allows every
-write outside its own repository. A member's remote default must be `main`.
-A member may set its own integration mode for branch protection. The
-coordinator may be a product repository or a dedicated program repository.
-Submodules, nested repositories, and one
-task across two repositories stay out of scope. The work plan is
-[multi-repo-work.md](../multi-repo-work.md).
+**Consequences:** member branches and tags include the coordinator name
+(`gsd-path/<coord>-M00N`, `milestone/<coord>-NNN-slug`). All branch checks must
+accept this pattern only for verified members. Joining adds no new tracked Path
+files and leaves a member's existing `.project/` untouched. Its shared Git
+directory holds a validated coordinator marker and exact push authorization;
+member hooks call the coordinator guard. Member sidecars get untracked host
+guard configs and a shared, pinned layout for cross-repo Verify. Ship records a
+`Reviewed-HEAD` for each member. Member execution stays disabled until the
+two-repo proof passes. A member's remote default must be `main`; each member
+may choose its integration mode. The coordinator may be a product repo or a
+dedicated program repo. Submodules, nested repos, and one task across two repos
+stay out of scope. The work plan is [multi-repo-work.md](../multi-repo-work.md).

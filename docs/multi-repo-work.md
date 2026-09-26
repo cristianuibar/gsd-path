@@ -4,78 +4,86 @@ Design: [ADR 0002](adr/0002-multi-repo-coordinator.md).
 
 ## Contract
 
-One milestone can define, plan, build, and ship changes across several Git
-repositories, for new repositories (greenfield) and existing ones
-(brownfield). A project without `.project/MEMBERS.md` keeps today's behavior and
-output.
+One milestone can define, plan, build, and ship work across several Git repos,
+both new (greenfield) and existing (brownfield). One task changes one repo.
+Every CLI takes one `--repo`, the coordinator. Joining a member adds no new
+tracked Path files there and leaves an existing member `.project/` untouched.
+Without `.project/MEMBERS.md`, behavior and output stay single-repo. Member
+execution remains disabled until S5 proves it end to end.
 
-## Where Path assumes one repository
+## Where Path assumes one repo
 
 Function names, not line numbers, because main moves.
 
-| Area | Assumption |
+| Area | Current contract to change |
 | --- | --- |
-| Root | `pipeline_state._repo_root`, `build_state._repo_root`, `pipeline_git._require_worktree_root`, `isolation.worktree_root`: `--repo` must be the Git top level. `_track_root`: `.project` stays inside it. |
-| STATE | `pipeline_state.STATE_FIELDS` has one `branch`. The parser rejects unknown fields. `git_guard` and `guard_hook` parse their own copies. |
-| Binding | `.project/REPOSITORY.md` holds one remote, default, SHA, checkout, and worktree in a fixed format. It has no member list. |
-| Tasks | Frontmatter `files:` is repo-relative with no repo field. `check_task_briefs` checks paths at one `--base`. `build_state._overlap` compares plain paths. |
-| Landing | `isolation.land` writes product files and the task file in one commit and refuses a worktree from another repository. `git_guard.product_commit_violations` requires both in the same commit. |
-| Ledgers | The verify ledger key is (command, SHA). The dispatch budget ledger is in the one common Git directory. |
-| Ship | `integration.integrate`, `integrate_pull_request`, `validate_integrated`: one `origin`, default must be `main`, one tag. `archive_milestone.find_ship_commit`: one ship commit. |
-| Guards | `guard_hook.path_kind` returns `external` for writes outside the guard's own repository, and those are always allowed. `git_guard` protects only a tree with `.project/STATE.md`. |
-| Install | Git hooks run `$(git rev-parse --show-toplevel)/.gsd-path/git_guard.py`, one project per install. |
-| Undo, diagnose | `pipeline_undo.classify_undo`, `pipeline_diagnose._leftover_worktrees`: one branch, one repository. |
+| Root and binding | `pipeline_state._repo_root`, `build_state._repo_root`, `pipeline_git._require_worktree_root`, and `isolation.worktree_root` use one Git root. `REPOSITORY.md` has a fixed single-repo format. |
+| Strict STATE parsers | `pipeline_state._state_from_text`, `git_guard.strict_ship_state`, `guard_hook.valid_status_state`, and `install._valid_status_state` reject unknown fields. Do not add STATE `repos:`. |
+| Branch pattern | `_common.BOUND_BRANCH_RE` accepts only `gsd-path/M00N`. Its users include `pipeline_state`, `pipeline_git`, `isolation.require_bound`, `dispatch_driver.milestone_slug` and its budget ledger, `integration.is_bound_branch`, `pipeline_undo.classify_undo`, `git_guard.pre_push_violations`, `guard_hook`, `install`, `archive_milestone`, and `bootstrap_repository`. |
+| Tasks and dispatch | `check_handoffs` and `check_task_briefs` assume one base. `build_state._overlap` compares paths without a repo. `build_state._validate_ready_metadata` checks a base in the coordinator; `dispatch_driver.finish_task` reads the task file in the product worktree. |
+| Landing proof | `isolation._landing_state`, `git_guard.product_commit_violations`, and `build_state.LANDED_VERDICTS` expect product paths and the task file in one commit. |
+| Verify ledger | `_common.latest_verify_entry`, `build_state.verify_lookup`, `isolation._verify_ledger_pass`, and `lean_verification.verify_project` use (command, SHA). |
+| Sidecar placement | `worktree_paths._workspace` gives each repo a separate hashed root; `../<member>` does not resolve across them. |
+| Guards and install | `guard_hook.path_kind` calls member writes `external` and allows them. `git_guard.head_frontmatter` reads the member's own STATE. `install` hooks call a guard under their own worktree. |
+| Artifact allowlists | `isolation.PROJECT_ENTRIES` and `lean_verification._require_ship_inputs` reject a new `.project/MEMBERS.md`. |
+| Ship body | `git_guard.ship_contract_violations`, `archive_milestone.require_canonical_commit_body`, and `pipeline_undo._archive_metadata_error` require the current exact ship body. |
+| Lookahead drift | `state_checkpoint._classify_plan_drift` compares the approved plan against one repo. |
+| Close and retirement | `integration.integrate`, `integrate_pull_request`, and `validate_integrated` close one repo. `pipeline_git.bind_next_milestone_branch` and `retire_previous_branch` retire one branch. |
 
 ## Slices
 
-Each slice ships as its own PR, and the single-repo output must stay the same.
+Each slice ships in its own PR. Every slice changes all readers of any contract
+it changes. S1–S4 leave the no-`MEMBERS.md` path and output unchanged and keep
+member execution disabled.
 
-| Slice | Change |
+| Slice | Work |
 | --- | --- |
 | S0 | This ADR and plan. |
-| S1 Binding | New `scripts/members.py`: read `.project/MEMBERS.md`; `list`, `add`, `validate`. `add` creates that file if absent, including for an existing Path project, without changing `REPOSITORY.md`. It checks: clean worktree, default branch, GitHub `origin`, not nested, not a submodule, no active milestone of its own, no branch or tag collision. Members change only at a milestone boundary. Build locks the participating members in their `MEMBERS.md` order in STATE `repos:` for this milestone. Add Coordinator and Member to `CONTEXT.md`. |
-| S2 Tasks | Task `repo:` field. Brief checks run at each member's base. `_overlap` compares `(repo, path)`. A dispatch round stores a base per member. Plan checks reject a `repo` outside `STATE.repos`. |
-| S3 Landing | Member landing: product commit in the member (Task, Base, Files, `Coordinator:`), then a coordinator record commit (`Member-Commit: <repo>@<sha>`), with a resumable journal in the coordinator Git directory. Verify ledger key becomes (command, repo, SHA). One task changes one repo, but milestone Verify may test repos together, such as web tests against sdk. Its sidecars sit side by side per member so `../<member>` paths resolve. |
-| S4 Guards | `guard_hook` classifies writes in member worktrees and sidecars as member product and applies phase rules to them. `git_guard` member mode reads a marker in the member Git directory: commits on the member bound branch need a valid Task trailer; `gsd-path/*` pushes need ship authorization. `install.py --member-of <coordinator>` writes only hooks and that marker into the member Git directory, and keeps existing hooks. The marker stores the absolute coordinator path; member hooks run the coordinator's `.gsd-path/git_guard.py` through that path. Joining adds no new tracked Path files and leaves any existing member `.project/` untouched. |
-| S5 Ship | Final review covers each member. Then, in the participating members' `MEMBERS.md` order locked in STATE `repos:` at build start, integrate, tag, and record each member. Resume uses that same order. Then the coordinator ship commit (`Member: <name> <integrate-sha> <tag>`) and its integration. `validate-integrated` checks every repository. A failure leaves the milestone partially shipped; resume continues from the journal. In pull-request mode, member k+1's PR opens only after member k merges. |
-| S6 Operate | Undo, diagnose, and status run per member. Undo blocks when a member branch is already an ancestor of that member's `origin/main`. |
-| S7 Greenfield | The router asks one repository or several. Bootstrap creates the coordinator, then `members add --create` reuses the bootstrap stages per repository (one journal each). STATE is written after every member verifies. |
-| S8 Docs | Update README, GUIDE, OPERATE, and SHIP.md. Regenerate all 11 host receipts before any release. |
+| S1 Member contract | Add `scripts/members.py` with `add` and `validate`. `add` creates `.project/MEMBERS.md` if absent, including for a brownfield coordinator, without changing `REPOSITORY.md`. Validate clean worktree, GitHub `origin`, remote default `main`, no nested repo or submodule, no active member milestone, and no branch or tag collision. Allow `MEMBERS.md` in `isolation.PROJECT_ENTRIES` and `lean_verification._require_ship_inputs`. Define member identity and Coordinator/Member terms in `CONTEXT.md`. At build start, lock the participating members in their `MEMBERS.md` order in a file under `.project/build/`; plan approval through `state_checkpoint` may record it. Ship and resume read that lock. Membership changes only at a milestone boundary. |
+| S2 Binding and guards | Change `_common`, `pipeline_git`, `isolation`, `git_guard`, `guard_hook`, `install`, and `worktree_paths` together. Add a member branch pattern for a verified member role and update every branch-pattern user named above, including `pipeline_state`, `dispatch_driver`, `integration`, `pipeline_undo`, `archive_milestone`, and `bootstrap_repository`; keep `gsd-path/<coord>-M00N`. Store a marker under `$(git rev-parse --git-common-dir)/gsd-path/`, shared by linked worktrees, with the absolute coordinator path. Validate it on every call and fail closed with `install.py --member-of <coordinator> --repair` as the named repair command. Member hooks call the coordinator's `.gsd-path/git_guard.py`; install preserves other hooks and records ownership so `--update` composes. In member mode, `git_guard` ignores the member's own STATE. `isolation` writes untracked member sidecar host-hook configs, excluded by `.git/info/exclude`, that use the coordinator guard. `guard_hook.path_kind` treats member worktrees and sidecars as member product. Before a member push, record the exact authorized SHA in durable member Git metadata; member pre-push accepts only that SHA. `worktree_paths` pins a shared per-milestone sidecar layout and receipt, with one sidecar per member beside the others, so milestone Verify can use `../<member>` (for example, web tests against sdk). |
+| S3 Tasks and landing proof | Change `check_handoffs`, `check_task_briefs`, `state_checkpoint`, `build_state`, `dispatch_driver`, `isolation`, `build_recovery`, `_common` ledger, and `lean_verification` together. Add task `repo:` (default coordinator); check briefs and `(repo, path)` overlap against the named repo and its base. Read task metadata from the coordinator; resolve Git base and product worktree in the member. A member task lands only when its coordinator record exists and its product commit exists on the member bound branch with parent equal to Base. Journal member product commit then coordinator record for resume. Change the Verify ledger key to (command, repo, SHA) across all four readers, while accepting old single-repo rows. `state_checkpoint._classify_plan_drift` compares approved member paths with each member's recorded base and current tip. Plan checks reject a task for a member already integrated in this milestone. |
+| S4 Close and recovery | Change `integration`, `archive_milestone`, `git_guard`, `pipeline_state`, `pipeline_undo`, `pipeline_diagnose`, `status_runtime`, and `pipeline_git` together. Final review binds a reviewed HEAD for each member. The exact ship body keeps the coordinator's `Reviewed-HEAD` and adds `Member-Reviewed-HEAD: <member>@<sha>` and `Member: <name> <integrate-sha> <tag>` for each member; update all three parsers together. Close participating members in the locked order, then the coordinator. The ship journal records each member as `pending` or `integrated`; resume verifies completed members and never integrates them again. Each member uses its own `direct` or `pull-request` mode; member k+1's PR opens only after member k merges. `validate-integrated` checks all repos. Undo of member landing journals a reset to Base in the member, then the coordinator record, and refuses once that member commit is an ancestor of its `origin/main`. `bind_next_milestone_branch` and `retire_previous_branch` journal and validate member branch retirement after integration. |
+| S5 Activation | Bootstrap writes coordinator STATE first, then the router runs `members add --create` per new member. Each member journal keeps its approved target and resume step. Update README, GUIDE, OPERATE, and SHIP.md. Run the two-repo cases below before enabling member execution. Regenerate host receipts in `tests/hosts/*`; those single-repo receipts alone do not prove multi-repo behavior. |
 
 ## Brownfield and greenfield
 
 | Case | Handling |
 | --- | --- |
-| All repositories new | S7. |
-| Existing Path project adds repositories | S1 `members add` creates `.project/MEMBERS.md` at a milestone boundary. Past milestones stay single-repo. |
-| Member has its own `.project/` | Allowed only with no active milestone. Joining leaves its `.project/` untouched and adds no new tracked Path files. While bound, its router refuses to start one. Namespaced branches and tags prevent collisions. |
-| Member is a GSD Core project | Run `gsd-path-migrate` in that repository first. |
-| Member has branch protection | Set that member's integration mode to `pull-request` (decision 2). |
+| All repos new | S5 creates the coordinator, then adds each member with its own resumable bootstrap journal. |
+| Existing Path project adds repos | S1 `members add` creates `.project/MEMBERS.md` at a milestone boundary. Past milestones stay single-repo. |
+| Member has its own `.project/` | Allowed only without an active milestone. Joining leaves it untouched; its router refuses a new milestone while bound. Namespaced branches and tags avoid collisions. |
+| Member is a GSD Core project | Run `gsd-path-migrate` in that repo first. |
+| Member has branch protection | Choose `pull-request` for that member. |
 
 ## Proof
 
-Each slice uses temp repositories with bare remotes. Required cases:
+Use temp repos with bare remotes. Prove each changed contract through its
+executable interface; do not infer multi-repo behavior from host receipts.
 
-- Single-repo regression: no `.project/MEMBERS.md` gives unchanged output.
-- A two-repo quick-lane run, end to end.
-- A crash between the member commit and the coordinator record, then resume.
-- Ship fails on the second member: partially shipped, then resume.
-- A member with its own shipped M004 joins with no collision; a member with an active milestone is refused.
-- The guard refuses a member write in the wrong phase.
+- No `MEMBERS.md`: existing single-repo commands and output stay unchanged.
+- Brownfield `members add` creates `MEMBERS.md`; ship input validation accepts it, `REPOSITORY.md` stays fixed, and non-`main` defaults are refused.
+- A two-repo quick-lane run covers task dispatch, cross-repo milestone Verify with `../<member>`, final review, ordered ship, and next-milestone branch retirement.
+- Namespaced member branches work through dispatch, landing, push checks, and retirement without accepting them as coordinator branches.
+- Member writes are denied in the wrong phase, including a coordinator-session write into a member outside build. Sidecar host configs stay untracked and compose with existing hooks.
+- A missing or invalid common-Git-dir marker fails closed and names the repair command. Member pre-push accepts only the exact authorized SHA and refuses another SHA.
+- A member with shipped M004 and a missing local tag joins and lands a task without applying its own STATE; an active member milestone is refused.
+- A crash between member product commit and coordinator record resumes. Deleting the member commit after the record makes the task not landed.
+- A member Verify ledger row resolves by (command, repo, SHA); older single-repo rows still resolve.
+- Lookahead plan drift in a member is detected against that member's recorded base and tip.
+- Ship fails on the second member: the journal records the first as integrated, resume verifies and skips it, then completes the milestone. A new task for that integrated member is refused.
+- Ship-body validation binds each member's reviewed HEAD to final review and rejects missing or changed member lines.
+- Member landing undo resumes after interruption and refuses an integrated member commit.
+- Greenfield bootstrap resumes each member from its approved target; a two-repo host proof passes before activation. Single-repo host receipts alone do not count.
 
 ## Decisions
 
-1. A member's remote default must be `main`. `members add` refuses any other
-   default with a clear message. Support for other defaults is separate work.
-2. Each member may set its own integration mode (`direct` or `pull-request`)
-   in `.project/MEMBERS.md`. The milestone mode is the default. This supports members
-   with branch protection.
-3. The greenfield coordinator can be a product repository or a dedicated
-   program repository. The router suggests a program repository when no
-   single repository owns the work.
+1. Member remote default must be `main`; `members add` refuses others.
+2. Each member may set `direct` or `pull-request` in `.project/MEMBERS.md`.
+   The milestone mode is the default.
+3. The coordinator may be a product repo or a dedicated program repo. The
+   router suggests a program repo when no single repo owns the work.
 
 ## Out of scope
 
-Submodules, nested repositories, one task across two repositories, remotes
-other than GitHub, an atomic close across repositories, and `.project/`
-outside Git.
+Submodules, nested repos, one task across two repos, non-GitHub remotes, an
+atomic close across repos, and `.project/` outside Git.
