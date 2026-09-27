@@ -696,6 +696,205 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
             raise IsolationError((deleted.stderr or deleted.stdout).strip() or "git update-ref failed")
 
 
+MEMBER_LANDING_DIR = ("gsd-path", "member-landings")
+
+
+def member_commit_body(task_file: str, paths: Sequence[str], member_base: str, contract: str) -> str:
+    """The member landing body: coordinator task, member base, contract revision, files."""
+    lines = [f"Task: {task_file}", f"Base: {member_base}", f"Contract: {contract}", "Files:"]
+    lines.extend(f"- {path}" for path in sorted(paths))
+    return "\n".join(lines) + "\n"
+
+
+def _member_journal_path(coordinator: Path, task_id: str) -> Path:
+    return common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, f"{validate_task_id(task_id)}.json")
+
+
+def _record_member_journal(path: Path, journal: Dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _common.atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
+
+
+def _member_contract(coordinator: Path, base: str, task_file: str, member: str) -> tuple[str, Set[str]]:
+    shown = run_git(coordinator, "show", f"{base}:{task_file}")
+    if shown.returncode != 0:
+        raise IsolationError(f"task contract is missing at {base}: {task_file}")
+    fields, error = task_frontmatter(shown.stdout)
+    if error or fields is None:
+        raise IsolationError(error or f"unreadable task contract: {task_file}")
+    if fields.get("repo") != member:
+        raise IsolationError(f"{task_file} is not a task for member {member}")
+    files = fields.get("files")
+    if not isinstance(files, list) or not files:
+        raise IsolationError(f"{task_file} declares no files")
+    return str(fields.get("title", "")), {relative_posix(str(path)) for path in files}
+
+
+def _prove_member_commit(
+    repo: Path, commit: str, parent: str, subject: str, body: str, allowed: Set[str]
+) -> Optional[str]:
+    found_parent, error = _single_parent(repo, commit)
+    if error or found_parent != parent:
+        return error or f"commit parent is not {parent}"
+    changed = set(git_output(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames",
+                             parent, commit).splitlines())
+    if not changed:
+        return "commit changes nothing"
+    undeclared = sorted(changed - allowed)
+    if undeclared:
+        return "undeclared paths: " + ", ".join(undeclared)
+    if git_output(repo, "log", "-1", "--format=%s", commit) != subject:
+        return f"subject is not {subject!r}"
+    if git_output(repo, "log", "-1", "--format=%b", commit) != body.strip():
+        return "body is not the member landing block"
+    return None
+
+
+def _commit_member_source(sidecar: Path, journal: Dict[str, object], allowed: Set[str]) -> str:
+    member_base = str(journal["member_base"])
+    pending = uncommitted_paths(sidecar)
+    if pending:
+        if current_sha(sidecar) != member_base:
+            raise IsolationError("dirty member source HEAD must equal the member base")
+        undeclared = sorted(pending - allowed)
+        if undeclared:
+            raise IsolationError("undeclared paths: " + ", ".join(undeclared))
+        git_output(sidecar, "add", "-A", "--", *sorted(pending))
+        body = member_commit_body(str(journal["task_file"]), sorted(pending), member_base, str(journal["base"]))
+        git_output(sidecar, "commit", "-q", "-m", str(journal["subject"]), "-m", body.strip())
+    source = current_sha(sidecar)
+    if source == member_base:
+        raise IsolationError("no changes to land")
+    paths = git_output(sidecar, "diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames",
+                       member_base, source).splitlines()
+    body = member_commit_body(str(journal["task_file"]), paths, member_base, str(journal["base"]))
+    error = _prove_member_commit(sidecar, source, member_base, str(journal["subject"]), body, allowed)
+    if error:
+        raise IsolationError(f"member source commit proof failed: {error}")
+    return source
+
+
+def _pick_member_landing(bound: Path, journal: Dict[str, object]) -> str:
+    if current_sha(bound) != journal["expected_parent"] or uncommitted_paths(bound):
+        raise IsolationError("member bound checkout moved or is dirty before landing")
+    picked = run_git(bound, "cherry-pick", str(journal["source"]))
+    if picked.returncode != 0:
+        run_git(bound, "cherry-pick", "--abort")
+        detail = (picked.stderr or picked.stdout).strip() or "cherry-pick conflict"
+        raise IsolationError(f"conflict: {detail}")
+    return current_sha(bound)
+
+
+def _prove_member_landing(bound: Path, journal: Dict[str, object], landing: str, allowed: Set[str]) -> Optional[str]:
+    source = str(journal["source"])
+    body = git_output(bound, "log", "-1", "--format=%b", source) + "\n"
+    error = _prove_member_commit(bound, landing, str(journal["expected_parent"]),
+                                 str(journal["subject"]), body, allowed)
+    if error:
+        return error
+    if _tree_delta(bound, str(journal["expected_parent"]), landing) != _tree_delta(
+            bound, str(journal["member_base"]), source):
+        return "landing changes differ from the source commit"
+    return None
+
+
+def _write_member_record(coordinator: Path, journal: Dict[str, object]) -> str:
+    task_file = str(journal["task_file"])
+    task_path = coordinator / task_file
+    text, mode = _read_task_text(task_path)
+    stamped = _landed_task_text(text, str(journal["base"]))
+    head, body = split_frontmatter(stamped)
+    head = [line for line in head if not line.startswith("member_base:")]
+    index = next(i for i, line in enumerate(head) if line.startswith("base:")) + 1
+    head.insert(index, f"member_base: {journal['member_base']}")
+    _replace_regular_file(task_path, ("---\n" + "\n".join(head) + "\n---\n" + body).encode("utf-8"), mode)
+    record = (f"Task: {task_file}\nBase: {journal['base']}\n"
+              f"Member: {journal['member']} {journal['landing']} {journal['member_base']}")
+    git_output(coordinator, "add", "--", task_file)
+    git_output(coordinator, "commit", "-q", "-m", str(journal["subject"]), "-m", record)
+    return current_sha(coordinator)
+
+
+def _finish_member_landing(coordinator: Path, path: Path, journal: Dict[str, object]) -> Dict[str, object]:
+    record = _write_member_record(coordinator, journal)
+    path.unlink()
+    return {"commit": record, "landing": journal["landing"], "member": journal["member"],
+            "mode": "member", "source_commit": journal["source"], "state": "landed"}
+
+
+def land_member(
+    coordinator: Path, member: str, task_id: str, title: str, task_file: str, base: str, member_base: str
+) -> Dict[str, object]:
+    """Land a member task: member product commit first, then the coordinator record.
+
+    A journal in the coordinator Git directory is written before the member
+    branch moves, so recover_member_landing never lands the same work twice.
+    """
+    coordinator = require_directory(coordinator, "coordinator")
+    require_bound(coordinator)
+    task_file = relative_posix(task_file)
+    path = _member_journal_path(coordinator, task_id)
+    if os.path.lexists(path):
+        raise IsolationError(f"a member landing is pending for {task_id}; run recover_member_landing first")
+    checkout, project, _ = _member_context(coordinator, member)
+    bound = Path(member_bound_checkout(coordinator, member)["checkout"])
+    sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
+    if require_attached(sidecar) != f"{TASK_BRANCH_PREFIX}{project}-{task_id}":
+        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+    resolved_base = require_commit(coordinator, require_full_sha(base))
+    contract_title, allowed = _member_contract(coordinator, resolved_base, task_file, member)
+    if title != contract_title:
+        raise IsolationError(f"title does not match the task contract: {contract_title!r}")
+    dirty = sorted(uncommitted_paths(coordinator) - {task_file})
+    if dirty:
+        raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
+    journal: Dict[str, object] = {
+        "base": resolved_base, "member": member, "member_base": require_full_sha(member_base),
+        "subject": task_commit_subject(task_id, title), "task_file": task_file, "task_id": task_id,
+    }
+    journal["source"] = _commit_member_source(sidecar, journal, allowed)
+    journal["expected_parent"] = current_sha(bound)
+    journal["landing"] = None
+    _record_member_journal(path, journal)
+    try:
+        landing = _pick_member_landing(bound, journal)
+    except IsolationError:
+        path.unlink()
+        raise
+    error = _prove_member_landing(bound, journal, landing, allowed)
+    if error:
+        raise IsolationError(f"member landing proof failed: {error}; the journal keeps it for recovery")
+    journal["landing"] = landing
+    _record_member_journal(path, journal)
+    return _finish_member_landing(coordinator, path, journal)
+
+
+def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]:
+    """Finish an interrupted member landing from its journal, never picking twice."""
+    coordinator = require_directory(coordinator, "coordinator")
+    path = _member_journal_path(coordinator, task_id)
+    if not os.path.lexists(path):
+        return {"state": "none"}
+    journal = json.loads(path.read_text(encoding="utf-8"))
+    member = str(journal["member"])
+    bound = Path(member_bound_checkout(coordinator, member)["checkout"])
+    _, allowed = _member_contract(coordinator, str(journal["base"]), str(journal["task_file"]), member)
+    if not journal.get("landing"):
+        tip = current_sha(bound)
+        if tip == journal["expected_parent"]:
+            landing = _pick_member_landing(bound, journal)
+        elif _prove_member_landing(bound, journal, tip, allowed) is None:
+            landing = tip
+        else:
+            raise IsolationError("the member bound branch moved after the landing journal was written")
+        error = _prove_member_landing(bound, journal, landing, allowed)
+        if error:
+            raise IsolationError(f"member landing proof failed: {error}")
+        journal["landing"] = landing
+        _record_member_journal(path, journal)
+    return _finish_member_landing(coordinator, path, journal)
+
+
 def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:
     primary = require_directory(primary, "primary worktree")
     if worktree_root(primary) != primary:

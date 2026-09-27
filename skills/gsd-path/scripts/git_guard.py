@@ -775,7 +775,11 @@ def main(argv):
         return report(found, "push")
     try:
         # A member follows its coordinator, so its own STATE does not gate commits.
-        member = members.member_role(repo_root()) is not None
+        role = members.member_role(repo_root())
+        member = role is not None
+        if member and current_branch().startswith(f"gsd-path/{role['project']}-"):
+            return report([f"direct commits on the member bound branch {current_branch()} are refused; "
+                           "member tasks land there through Path"], "commit")
         reason = None if member else closed_milestone_reason()
         if reason:
             return report([reason], "commit")
