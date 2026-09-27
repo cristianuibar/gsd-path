@@ -195,6 +195,27 @@ class MemberLandingTests(unittest.TestCase):
     def test_crash_before_the_record_writes_the_record_only(self) -> None:
         self.crash_then_recover("_write_member_record")
 
+    def test_recovery_requires_the_coordinator_state_branch(self) -> None:
+        self.edit()
+        git(self.coordinator, "checkout", "-q", "-b", "gsd-path/M002")
+        with self.assertRaisesRegex(isolation.IsolationError, "STATE bound branch"):
+            self.land()
+        self.assertEqual(self.bound_tip(), self.member_base)
+        git(self.coordinator, "checkout", "-q", "gsd-path/M001")
+        with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
+            with self.assertRaises(RuntimeError):
+                self.land()
+        landing = self.bound_tip()
+        git(self.coordinator, "checkout", "-q", "gsd-path/M002")
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        with self.assertRaisesRegex(isolation.IsolationError, "STATE bound branch"):
+            isolation.recover_member_landing(self.coordinator, "T001")
+        self.assertTrue(self.journal().exists())
+        self.assertEqual(self.bound_tip(), landing)
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        git(self.coordinator, "checkout", "-q", "gsd-path/M001")
+        self.assert_landed_once(isolation.recover_member_landing(self.coordinator, "T001"))
+
     def test_crash_after_record_commit_reuses_proven_record(self) -> None:
         self.edit()
         with mock.patch.object(Path, "unlink", side_effect=RuntimeError("crash")):

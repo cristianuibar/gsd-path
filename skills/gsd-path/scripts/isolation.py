@@ -710,6 +710,20 @@ def _member_journal_path(coordinator: Path, task_id: str) -> Path:
     return common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, f"{validate_task_id(task_id)}.json")
 
 
+def _require_member_coordinator_branch(coordinator: Path) -> None:
+    branch = require_bound(coordinator)
+    if __package__:
+        from .pipeline_state import load_state
+    else:
+        try:
+            from pipeline_state import load_state
+        except ImportError:
+            from scripts.pipeline_state import load_state
+    state, _, _ = load_state(coordinator)
+    if branch != state.branch:
+        raise IsolationError(f"coordinator branch {branch} differs from STATE bound branch {state.branch}")
+
+
 def _record_member_journal(path: Path, journal: Dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     _common.atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
@@ -860,7 +874,7 @@ def land_member(
     member branch and coordinator stay unchanged.
     """
     coordinator = require_directory(coordinator, "coordinator")
-    require_bound(coordinator)
+    _require_member_coordinator_branch(coordinator)
     task_file = relative_posix(task_file)
     path = _member_journal_path(coordinator, task_id)
     if os.path.lexists(path):
@@ -904,6 +918,7 @@ def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]
     path = _member_journal_path(coordinator, task_id)
     if not os.path.lexists(path):
         return {"state": "none"}
+    _require_member_coordinator_branch(coordinator)
     journal = json.loads(path.read_text(encoding="utf-8"))
     member = str(journal["member"])
     bound = Path(member_bound_checkout(coordinator, member)["checkout"])
