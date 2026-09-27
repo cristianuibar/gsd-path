@@ -44,6 +44,7 @@ PROJECT_PROBE_PATHS = (
     ".project/ROADMAP.md",
     ".project/SYNTHESIS.md",
     VERIFY_LEDGER_PATH,
+    ".project/build/members.json",
     ".project/build/evidence.json",
     ".project/archive/001-probe/build/evidence.json",
     ".project/archive/001-probe/build/verify-ledger.jsonl",

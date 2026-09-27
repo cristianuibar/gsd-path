@@ -44,6 +44,8 @@ MEMBER_TAG_FORMAT = "refs/tags/milestone/{}-"
 # The coordinator records one authorization per (ref, object) before it
 # publishes a member Path ref; member pre-push accepts only a matching one.
 AUTHORIZATION_PREFIX = "refs/gsd-path/authorizations/"
+LOCK_PATH = ".project/build/members.json"
+LOCK_SCHEMA = "gsd-path/member-lock/v1"
 HEADER = (
     "# Members\n\n"
     "<!-- Written by members.py add. One section per member repository, in\n"
@@ -324,6 +326,87 @@ def authorized(checkout: Path, project: str, kind: str, ref: str, sha: str) -> b
         checkout, "rev-parse", "--verify", "--quiet", _authorization_ref(project, kind, ref)
     )
     return result.returncode == 0 and result.stdout.strip() == sha
+
+
+def _task_members(coordinator: Path) -> set[str]:
+    try:
+        from check_task_briefs import _frontmatter
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.check_task_briefs import _frontmatter
+    named = set()
+    for task in sorted((coordinator / ".project" / "tasks").glob("*.md")):
+        fields, error = _frontmatter(task.read_text(encoding="utf-8"))
+        if fields is None:
+            raise MembersError(f"{task.name}: {error}")
+        if fields.get("repo"):
+            named.add(str(fields["repo"]))
+    return named
+
+
+def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
+    """At build start, lock the members tasks name (MEMBERS.md order) and create
+    each member's bound branch at its origin/main. None when no task names a member."""
+    root, state = _coordinator(coordinator)
+    named = _task_members(root)
+    lock_path = root / LOCK_PATH
+    build_dir = lock_path.parent
+    if build_dir.is_symlink() or (build_dir.exists() and not build_dir.is_dir()):
+        raise MembersError(f"member lock directory must be real: {build_dir}")
+    if lock_path.is_symlink() or (lock_path.exists() and not lock_path.is_file()):
+        raise MembersError(f"member lock must be a regular file: {lock_path}")
+    if not named:
+        lock_path.unlink(missing_ok=True)
+        return None
+    listed = read_members(root)
+    unknown = sorted(named - {member["name"] for member in listed})
+    if unknown:
+        raise MembersError("tasks name members missing from MEMBERS.md: " + ", ".join(unknown))
+    ignore_error = _common.project_ignore_error(root)
+    if ignore_error:
+        raise MembersError(ignore_error)
+    bound = _common.BOUND_BRANCH_RE.fullmatch(state.branch or "")
+    if bound is None:
+        raise MembersError(f"coordinator branch is not a bound branch: {state.branch}")
+    branch = f"gsd-path/{state.project}-M{bound.group(1)}"
+    previous = {}
+    if lock_path.is_file():
+        previous = {entry["name"]: entry for entry in json.loads(lock_path.read_text(encoding="utf-8"))["members"]}
+    entries = []
+    missing = []
+    for member in listed:
+        if member["name"] not in named:
+            continue
+        checkout = Path(member["checkout"])
+        role = member_role(checkout)
+        if role is None or role["coordinator"] != root or role["name"] != member["name"]:
+            raise MembersError(f"member marker for {member['name']} is missing or stale; "
+                               f"run members.py repair --repo {root}")
+        remote = _git(checkout, "remote", "get-url", "origin")
+        if remote != member["remote"]:
+            raise MembersError(f"member origin changed: {member['remote']} -> {remote}")
+        require_origin_main(checkout)
+        base = _git(checkout, "rev-parse", "refs/remotes/origin/main^{commit}")
+        existing = _common.run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
+        if existing.returncode == 0:
+            tip = existing.stdout.strip()
+            locked = previous.get(member["name"])
+            # Recovery re-entry keeps the locked base; otherwise the branch must be unused.
+            if locked and locked["branch"] == branch and _common.run_git(
+                checkout, "merge-base", "--is-ancestor", locked["base"], tip
+            ).returncode == 0:
+                base = locked["base"]
+            elif _common.run_git(checkout, "merge-base", "--is-ancestor", tip, base).returncode == 0:
+                base = tip
+            else:
+                raise MembersError(f"member {member['name']} branch {branch} has commits not on origin/main")
+        else:
+            missing.append((checkout, base))
+        entries.append({"name": member["name"], "branch": branch, "base": base})
+    for checkout, base in missing:
+        _git(checkout, "update-ref", f"refs/heads/{branch}", base, "")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    _common.atomic_write(lock_path, json.dumps({"schema": LOCK_SCHEMA, "members": entries}, indent=2) + "\n")
+    return entries
 
 
 def render(members: Sequence[dict[str, str]]) -> str:
