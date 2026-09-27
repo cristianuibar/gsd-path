@@ -46,6 +46,7 @@ struct TrayUITest {
         vc.show(status: StatusResponse(projects: [identity]))
         vc.view.layoutSubtreeIfNeeded()
         let identityRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(identityRow.detail.lineBreakMode == .byWordWrapping, "status values wrap between words")
         require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
         let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
         require(identityRow.location.stringValue == "Worktree: M001", "worktree uses its short branch name")
@@ -62,10 +63,10 @@ struct TrayUITest {
         // Board order: blocked first, then active by name, then shipped.
         require(rows.map(\.name.stringValue) == ["Atlas API", "Field Notes", "GSD Path", "Done Thing"], "row order")
         require(rows.map(\.detail.stringValue) == [
-            "M002 · Blocked · ship · no tasks yet",
-            "M001 · research · no tasks yet",
-            "M004 · build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10 · $24.60 · 84 turns",
-            "M001 shipped 2026-09-01 · 4 tasks",
+            "M002 · Blocked · ship\nno tasks yet",
+            "M001 · research\nno tasks yet",
+            "M004 · build · wave 2\n6 of 9 tasks · 2/3 criteria · since 2026-09-10\n$24.60 · 84 turns",
+            "M001 shipped 2026-09-01\n4 tasks",
         ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
         require(rows.allSatisfy { $0.location.isHidden }, "main checkout rows need no worktree label")
         let meter: (ProjectRowView) -> String = { row in

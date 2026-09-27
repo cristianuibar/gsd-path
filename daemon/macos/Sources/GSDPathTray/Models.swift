@@ -245,19 +245,6 @@ extension ProjectStatus {
         }.joined(separator: "  ")
     }
 
-    /// "build · wave 2 · 7 of 12 tasks · 3/5 criteria · since 2026-09-10" — where the current milestone is.
-    var hereText: String {
-        var parts = [phase ?? "no phase"]
-        if let wave = current_wave { parts.append("wave \(wave)") }
-        parts.append(total > 0 ? "\(done) of \(total) tasks" : "no tasks yet")
-        if let criteria = criteria, !criteria.isEmpty {
-            parts.append("\(criteria.filter { $0.verdict == "met" }.count)/\(criteria.count) criteria")
-        }
-        if let since = (phase_log?.first { $0.phase == phase } ?? phase_log?.last)?.date { parts.append("since \(since)") }
-        if let spend = currentSpendText { parts.append(spend) }
-        return parts.joined(separator: " · ")
-    }
-
     /// "$24.60 · 84 turns" for the current milestone; tokens-only projects show turns alone.
     var currentSpendText: String? {
         let number = (roadmap_milestones ?? []).first { $0.slug != nil && $0.slug == milestone }?.number
@@ -280,18 +267,26 @@ extension ProjectStatus {
         return canonicalPhases.indices.map { $0 < index ? .done : $0 == index ? .now : .ahead }
     }
 
-    /// The tray's detail line: "M004 · build · wave 2 · …" while in progress, "M003 shipped 2026-09-06 · 12 tasks" once shipped.
+    /// Status, progress/date and usage occupy separate lines in the tray.
     var trayDetail: String {
         let current = milestoneStack.first { $0.kind == .now }?.number ?? "now"
-        switch projectState {
-        case "shipped":
+        if projectState == "shipped" {
             let manifest = (roadmap_milestones ?? []).first { $0.number == current }?.manifest
             return (["\(current) shipped" + (manifest?.shipped.map { " \($0)" } ?? "")]
-                    + [manifest?.tasks_total.map { "\($0) tasks" }].compactMap { $0 }).joined(separator: " · ")
-        case "unverified": return "\(current) · Unverified · \(hereText)"
-        case "blocked": return "\(current) · Blocked · \(hereText)"
-        default: return "\(current) · \(hereText)"
+                    + [manifest?.tasks_total.map { "\($0) tasks" }].compactMap { $0 }).joined(separator: "\n")
         }
+        var status = [current]
+        if projectState == "blocked" { status.append("Blocked") }
+        if projectState == "unverified" { status.append("Unverified") }
+        status.append(phase ?? "no phase")
+        if let wave = current_wave { status.append("wave \(wave)") }
+        var progress = [total > 0 ? "\(done) of \(total) tasks" : "no tasks yet"]
+        if let criteria = criteria, !criteria.isEmpty {
+            progress.append("\(criteria.filter { $0.verdict == "met" }.count)/\(criteria.count) criteria")
+        }
+        if let since = (phase_log?.first { $0.phase == phase } ?? phase_log?.last)?.date { progress.append("since \(since)") }
+        return ([status.joined(separator: " · "), progress.joined(separator: " · ")]
+                + [currentSpendText].compactMap { $0 }).joined(separator: "\n")
     }
 }
 
