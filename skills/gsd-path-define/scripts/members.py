@@ -350,6 +350,7 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
     named = _task_members(root)
     lock_path = root / LOCK_PATH
     if not named:
+        lock_path.unlink(missing_ok=True)
         return None
     listed = read_members(root)
     unknown = sorted(named - {member["name"] for member in listed})

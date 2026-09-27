@@ -99,6 +99,18 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
         self.assertIsNone(self.branch("web"))
 
+    def test_reentry_removes_lock_when_member_tasks_are_removed(self) -> None:
+        self.tasks("web")
+        self.start()
+        self.assertEqual([entry["name"] for entry in self.lock()["members"]], ["web"])
+        branch = self.branch("web")
+        self.assertIsNotNone(branch)
+
+        self.tasks("")
+        self.assertIsNone(members.lock_build_members(self.coordinator))
+        self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
+        self.assertEqual(self.branch("web"), branch)
+
     def test_existing_unused_member_branch_is_reused(self) -> None:
         self.tasks("web")
         git(self.repos["web"], "branch", "gsd-path/acme-M001", "refs/remotes/origin/main")
