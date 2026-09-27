@@ -183,10 +183,36 @@ def _verify_tokens(block: str) -> List[str]:
     return tokens
 
 
+def _member_bases(root: Path):
+    """Resolve a member name to (checkout, origin/main SHA), reading MEMBERS.md once."""
+    cache: Dict[str, Optional[Tuple[Path, str]]] = {}
+
+    def locate(name: str) -> Optional[Tuple[Path, str]]:
+        if name not in cache:
+            try:
+                import members
+            except ImportError:  # pragma: no cover - package import used by tests
+                from scripts import members
+            try:
+                listed = {member["name"]: Path(member["checkout"]) for member in members.read_members(root)}
+                checkout = listed.get(name)
+                if checkout is None:
+                    cache[name] = None
+                else:
+                    members.require_origin_main(checkout)
+                    cache[name] = (checkout, _resolve_base(checkout, "refs/remotes/origin/main"))
+            except (members.MembersError, BriefError) as error:
+                raise BriefError(f"member {name} is unavailable: {error}") from error
+        return cache[name]
+
+    return locate
+
+
 def _lint_task(
     repo: Path, base: str, path: Path,
     dependency_files: Optional[Dict[str, Set[str]]] = None,
     landed_bases: Optional[Dict[str, str]] = None,
+    member_base=None,
 ) -> Tuple[str, List[str], Optional[str], int]:
     text = path.read_text(encoding="utf-8")
     fields, error = _frontmatter(text)
@@ -198,6 +224,15 @@ def _lint_task(
     checked = 0
     if fields is None:
         return task_id, [error or "invalid frontmatter"], None, checked
+    # A member task's paths resolve in the member at its origin/main, where the
+    # member bound branch starts; `repo:` absent means the coordinator.
+    git_root = repo
+    member = fields.get("repo")
+    if member is not None:
+        located = member_base(member) if isinstance(member, str) and member and member_base else None
+        if located is None:
+            return task_id, [f"repo: names no member in MEMBERS.md: {member}"], None, checked
+        git_root, base = located[0], (landed_bases or {}).get(task_id, located[1])
 
     for field in REQUIRED_FIELDS:
         if field not in fields:
@@ -237,7 +272,7 @@ def _lint_task(
             for parent in candidate.parents:
                 if str(parent) == ".":
                     break
-                kind = _run_git(repo, "cat-file", "-t", f"{base}:{parent}")
+                kind = _run_git(git_root, "cat-file", "-t", f"{base}:{parent}")
                 if kind.returncode == 0 and kind.stdout.strip() != "tree":
                     problems.append(
                         f"files entry {normalized} has non-directory ancestor "
@@ -255,7 +290,7 @@ def _lint_task(
                 token not in declared
                 and token not in supplied
                 and not _supplied_contract(repo, path, token)
-                and not _base_exists(repo, base, token)
+                and not _base_exists(git_root, base, token)
             ):
                 problems.append(f"## {name} names a path missing at the layer base: {token}")
 
@@ -267,7 +302,7 @@ def _lint_task(
         else:
             for token in _verify_tokens(block.group("block")):
                 checked += 1
-                if token not in declared and token not in supplied and not _base_exists(repo, base, token):
+                if token not in declared and token not in supplied and not _base_exists(git_root, base, token):
                     problems.append(f"## Verify names a path missing at the layer base: {token}")
 
     contract = None
@@ -305,9 +340,10 @@ def validate_task_briefs(
     task_files = sorted(tasks_path.glob("*.md"))
     if not task_files:
         raise BriefError(f"no task briefs found in {tasks_dir}")
+    member_base = _member_bases(root)
     for path in task_files:
         task_id, task_problems, contract, task_checked = _lint_task(
-            root, resolved_base, path, dependency_files, landed_bases
+            root, resolved_base, path, dependency_files, landed_bases, member_base
         )
         problems.extend(f"{task_id}: {problem}" for problem in task_problems)
         if contract is not None:

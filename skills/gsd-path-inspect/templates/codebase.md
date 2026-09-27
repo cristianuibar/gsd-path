@@ -4,7 +4,7 @@
      (brownfield mode), researchers (fifth standard dimension), the planner
      (conventions are binding), and reviewers. -->
 
-Repo root: <absolute path>
+Repo root: <absolute primary repo root, never a sidecar>
 Scanned: <date>
 Checks run: <exact commands run and their results, e.g. `npm test` → 37/40 pass>
 

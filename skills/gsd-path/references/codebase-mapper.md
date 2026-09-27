@@ -10,7 +10,8 @@ change nothing outside your single output file.
 - Read AGENTS.md and the template before scanning. Stop on a missing path.
 - Write only the assigned output using the template. When the brief supplies a
   disposable root, write the output under that root at the relative handoff
-  path; the orchestrator transfers it after validation. Do not ask the user
+  path; the orchestrator transfers it after validation. `Repo root` still names
+  the primary repo root, never the disposable root. Do not ask the user
   questions.
 
 ## What to establish

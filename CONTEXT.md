@@ -127,6 +127,13 @@ artifacts and phase transition. Normally a planning-only commit; when the
 workflow defers checkpointing, build records it.
 _Avoid_: task landing, ship commit, approval alone
 
+**Pre-approval**:
+An owner's grant, given at invocation and recorded in the STATE.md Log, that
+lets one quick-lane milestone pass its selected intent or plan gates without
+asking when their checks pass. A failed approval can retry; ship is never
+pre-approved.
+_Avoid_: auto-approve, skipping a gate
+
 **Lookahead promotion**:
 The adoption of a prepared next-milestone planning track as the active
 milestone after validated Integration and binding its new bound branch.

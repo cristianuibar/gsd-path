@@ -66,6 +66,8 @@ PHASES = (
     "shipped",
 )
 STATUSES = ("active", "done", "blocked")
+PRE_APPROVAL_KINDS = ("intent", "plan")
+PRE_APPROVAL_MARKER = "pre-approval: "
 STATE_FIELDS = (
     "pipeline",
     "project",
@@ -1778,6 +1780,55 @@ def configure_integration(
     }
 
 
+def _log_events(text: str) -> list[str]:
+    return [line.split(" — ", 2)[-1] for line in text.splitlines()
+            if line.startswith("- ") and " — " in line]
+
+
+def pre_approve(repo: Path, grant: Optional[str], use: Optional[str]) -> dict[str, object]:
+    """Record an owner's pre-approval grant, or record one granted gate's use."""
+    resolved = _repo_root(repo)
+    project = _track_root(resolved, ".project")
+    with _state_lock(project):
+        state, text, path = load_state(resolved)
+        if grant is not None:
+            kinds = grant.split(",")
+            if not kinds or len(set(kinds)) != len(kinds) or not set(kinds) <= set(PRE_APPROVAL_KINDS):
+                raise PipelineStateError(
+                    f"pre-approval kinds must be distinct values from: {', '.join(PRE_APPROVAL_KINDS)}"
+                )
+            if state.milestone is not None:
+                raise PipelineStateError("pre-approval is granted only before milestone intent approval")
+            event = PRE_APPROVAL_MARKER + json.dumps({"kinds": kinds}, sort_keys=True)
+        else:
+            events = _log_events(text)
+            starts = [index for index, event in enumerate(events) if event.startswith(PRE_APPROVAL_MARKER)]
+            if not starts:
+                raise PipelineStateError("no pre-approval grant is recorded")
+            try:
+                recorded = json.loads(events[starts[-1]][len(PRE_APPROVAL_MARKER):])
+                kinds = recorded["kinds"]
+            except (ValueError, TypeError, KeyError) as error:
+                raise PipelineStateError("invalid pre-approval record") from error
+            if not isinstance(kinds, list):
+                raise PipelineStateError("invalid pre-approval record")
+            if (_build_recovery().context(resolved, text) or {}).get("active") or (project / "review/PATCH-FINDINGS.md").exists():
+                raise PipelineStateError("pre-approval never covers build recovery or patch planning")
+            if use not in kinds:
+                raise PipelineStateError(f"pre-approval does not grant {use}")
+            # The canonical approval event, not this record, consumes the grant.
+            approvals = events[starts[-1] + 1:].count("milestone intent approved")
+            expected = {"intent": ("define", "active", 0), "plan": ("plan", "active", 1)}[use]
+            if (state.phase, state.status, approvals) != expected or (
+                (state.milestone is None) != (use == "intent")
+            ):
+                raise PipelineStateError(f"pre-approval for {use} is used or out of scope")
+            event = f"pre-authorized approval: {use}"
+        rendered = _append_event(text, state.phase, event)
+        _atomic_write(path, rendered)
+    return {"schema": STATE_SCHEMA, "status": "recorded", "event": event, "state": state.json()}
+
+
 def _shipment_roadmap(text: str, state: PipelineState, archive: str) -> str:
     if state.milestone is None or state.branch is None:
         raise PipelineStateError("shipment state must name milestone and branch")
@@ -2116,6 +2167,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     configure.add_argument("--project-dir", default=".project")
     configure.add_argument("--scope", required=True, choices=("default", "milestone"))
     configure.add_argument("--mode", required=True, choices=INTEGRATION_MODES)
+    pre = subparsers.add_parser("pre-approve")
+    pre.add_argument("--repo", required=True, type=Path)
+    pre_mode = pre.add_mutually_exclusive_group(required=True)
+    pre_mode.add_argument("--grant")
+    pre_mode.add_argument("--use", choices=PRE_APPROVAL_KINDS)
     shipment = subparsers.add_parser("record-shipment")
     shipment.add_argument("--repo", required=True, type=Path)
     shipment.add_argument("--archive", required=True)
@@ -2204,6 +2260,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 base,
                 landing,
             )
+        elif args.command == "pre-approve":
+            result = pre_approve(args.repo, args.grant, args.use)
         elif args.command == "record-shipment":
             result = record_shipment(args.repo, args.archive, args.event)
         elif args.command == "configure-integration":

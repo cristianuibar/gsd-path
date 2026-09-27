@@ -10,6 +10,21 @@ Before executing project helpers, read [runtime selection](references/runtime-se
 When the first argument is `config`, read [Path settings](references/config.md)
 and complete that request without initializing state or advancing a phase.
 
+## Pre-approval
+
+`--pre-approve <kinds>` in the arguments (`intent`, `plan`, or `intent,plan`)
+grants those gates ahead of time for this run, for unattended quick lanes.
+After `.project/STATE.md` exists and before milestone intent approval, run
+`python3 <absolute pipeline_state.py> pre-approve --repo <absolute root>
+--grant <kinds>` once; its Log record is the grant. Write only the kinds the
+owner passed. A refused grant stops the run with the helper's message. Ship,
+roadmap, patch selection, and repository setup are never pre-approved. At a
+granted gate, the define or plan contract runs `python3 <absolute
+workflow_run.py> preauthorize --repo <absolute root> --kind <kind>` before
+asking: `complete` passes the gate through its normal approval command;
+`blocked` asks the owner as usual. A grant never answers an interview
+question, ruling, or `NEEDS-USER` item.
+
 # GSD Path Router
 
 Determine the current pipeline phase, report it briefly, and run the next valid

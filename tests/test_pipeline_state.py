@@ -276,6 +276,38 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(overridden["state"]["integration_default"], "pull-request")
             self.assertEqual(overridden["state"]["integration"], "direct")
 
+    def test_pre_approval_grant_is_bound_before_intent_and_consumed_by_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-b", "main")
+            project = repo / ".project"
+            project.mkdir()
+            state = project / "STATE.md"
+            state.write_text(state_text(milestone="null", phase="define", status="active"), encoding="utf-8")
+            for bad in ("ship", "intent,intent", "plan,"):
+                with self.subTest(grant=bad), self.assertRaisesRegex(pipeline_state.PipelineStateError, "distinct"):
+                    pipeline_state.pre_approve(repo, bad, None)
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "no pre-approval"):
+                pipeline_state.pre_approve(repo, None, "intent")
+
+            pipeline_state.pre_approve(repo, "intent", None)
+            pipeline_state.pre_approve(repo, None, "intent")
+            self.assertTrue(state.read_text().endswith("— define — pre-authorized approval: intent\n"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "does not grant plan"):
+                pipeline_state.pre_approve(repo, None, "plan")
+
+            pipeline_state.transition_state(
+                repo,
+                {"phase": "define", "status": "active", "branch": None, "archive": None, "milestone": None},
+                {"status": "done", "milestone": "first"},
+                "milestone intent approved",
+            )
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "before milestone intent approval"):
+                pipeline_state.pre_approve(repo, "intent,plan", None)
+            state.write_text(state.read_text().replace("status: done", "status: active"), encoding="utf-8")
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "used or out of scope"):
+                pipeline_state.pre_approve(repo, None, "intent")
+
     def test_explicit_milestone_override_survives_matching_default_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

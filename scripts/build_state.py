@@ -202,6 +202,11 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
     text = _read_file(path, label)
     fields = _parse_frontmatter(text, label)
     task_id = _required_string(fields, "id", label)
+    if "repo" in fields:
+        # Fail safe until member landing exists: a member task's paths are not coordinator paths.
+        raise BuildStateError(
+            "member-task", f"{label} is a member task (repo: {fields['repo']}); member task execution is not enabled"
+        )
     title = _required_string(fields, "title", label)
     wave_text = _required_string(fields, "wave", label)
     try:

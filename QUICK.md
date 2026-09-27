@@ -105,6 +105,9 @@ Codex invokes it as `$gsd-path-discuss`.
 | Build | Escalations only |
 | Ship | Approve patch waves if blocked; approve archive and ship when green |
 
+For unattended quick-lane runs, see
+[pre-approval in the README](README.md#start-your-first-project).
+
 ---
 
 ## 5. Resume
