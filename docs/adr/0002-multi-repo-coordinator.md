@@ -27,8 +27,8 @@ ship commit and archive leave Git); linked peer projects each hold `.project/`
 member tags, includes the coordinator name. Branch checks accept these names
 only for verified members. Joining adds no new tracked Path
 files and leaves a member's existing `.project/` untouched. Its shared Git
-directory holds a validated coordinator marker and exact push authorization;
-member hooks call the coordinator guard. Member sidecars get untracked host
+directory holds a validated coordinator marker and exact push authorization
+per ref and object; member hooks call the coordinator guard. Member sidecars get untracked host
 guard configs. They sit beside the coordinator verify sidecar in a shared,
 pinned layout for cross-repo Verify. Ship records a
 `Reviewed-HEAD` for each member. A member has no ship commit: its integration
