@@ -92,14 +92,13 @@ def _tree_digest(path: Path, excluded: Sequence[str] = ()) -> str:
 
 
 def _checkpoint_artifact_digest(project: Path, mutable_paths: set[str]) -> str:
-    """Hash every approval artifact except the helper-owned metadata files."""
+    """Hash approval artifacts except helper-owned metadata and OS junk."""
     digest = hashlib.sha256()
     for child in sorted(project.rglob("*")):
         if child.is_symlink():
             raise PipelineStateError(f"checkpoint path contains a symlink: {child}")
         relative = child.relative_to(project).as_posix()
-        # Unsupported entries (OS junk) are refused by the checkpoint itself; leaving them
-        # out lets a refused approval resume after the owner removes them.
+        # Finder can rewrite OS junk during approval; it must not cause artifact drift.
         if (relative in mutable_paths or relative.split("/", 1)[0] not in PROJECT_ENTRIES
                 or _is_junk_file(child)):
             continue
