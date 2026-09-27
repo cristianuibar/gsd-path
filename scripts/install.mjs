@@ -1559,6 +1559,7 @@ export function parseCli(argv) {
     "dry-run": { type: "boolean", default: false },
     local: { type: "boolean", default: false },
     project: { type: "string" },
+    "member-of": { type: "string" },
     doctor: { type: "boolean", default: false },
     hooks: { type: "boolean", default: false },
     "hooks-init": { type: "boolean", default: false },
@@ -1653,6 +1654,7 @@ function usage() {
     "  --doctor              read-only health check of installs, hooks, and state\n" +
     "  --hooks               with --project: install guard hooks (see HOOKS.md)\n" +
     "  --hooks-init          add guards to an existing project without changing its contracts\n" +
+    "  --member-of PATH      with --project: install member git hooks that run PATH's guard\n" +
     "  --runtime-restore     restore the exact declared runtime from --source-root\n" +
     "  --runtime-upgrade     explicitly select the supplied package runtime\n" +
     "  --runtime-migrate     migrate a legacy runtime for review; add --update to continue upgrading\n" +
@@ -1702,7 +1704,8 @@ export async function main(argv, env = process.env) {
     ui.error("--runtime-migrate --update requires --project and cannot be combined with another runtime, doctor, or hook operation");
     return 2;
   }
-  if (!migrateAndUpdate && ["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name])) {
+  if (!migrateAndUpdate && (values["member-of"] !== undefined
+      || ["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name]))) {
     const interpreter = requiredPythonRuntime("project runtime");
     const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
       ...argv.filter(arg => arg !== "--no-color")], { stdio: "inherit", env });

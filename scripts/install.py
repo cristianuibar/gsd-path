@@ -231,6 +231,125 @@ GIT_HOOKS = (
     ("pre-push", pre_push_hook),
 )
 GIT_HOOK_NAMES = tuple(name for name, _ in GIT_HOOKS)
+MEMBER_HOOK_MARKER = "gsd-path member guard"
+CHAINED_HOOK_SUFFIX = ".gsd-path-chained"
+
+
+def member_hook(interpreter: str, name: str) -> str:
+    """A member hook finds its coordinator through the member marker, so a
+    moved coordinator needs only `members.py repair`, then runs any chained hook."""
+    guard = f'{interpreter} "$coordinator/{HOOKS_DIRECTORY}/git_guard.py" {name} "$@"'
+    lines = [
+        "#!/bin/sh",
+        f"# {MEMBER_HOOK_MARKER}: runs the coordinator's git_guard.py named by this",
+        "# repository's member marker, then any chained hook.",
+        "common=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1",
+        f"coordinator=$({interpreter} -c 'import json, sys; print(json.load(open(sys.argv[1]))[\"coordinator\"])' "
+        '"$common/gsd-path/member.json") || {',
+        '  echo "gsd-path guard: member marker is unreadable; run members.py repair --repo <coordinator>" >&2',
+        "  exit 1",
+        "}",
+        f'chained="$(dirname "$0")/{name}{CHAINED_HOOK_SUFFIX}"',
+    ]
+    if name == "pre-push":
+        # Git gives pre-push its ref updates on stdin; both hooks need them.
+        lines += [
+            "input=$(cat)",
+            '[ -n "$input" ] && input="$input\n"',
+            f'printf %s "$input" | {guard} || exit 1',
+            'if [ -x "$chained" ]; then printf %s "$input" | exec "$chained" "$@"; fi',
+        ]
+    else:
+        lines += [f"{guard} || exit 1", 'if [ -x "$chained" ]; then exec "$chained" "$@"; fi']
+    return "\n".join(lines) + "\n"
+
+
+def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False) -> List[str]:
+    """Install git hooks that hold a member repo to its coordinator's guard.
+
+    Unmanaged hooks are kept as `<hook>.gsd-path-chained` and run after the
+    guard passes; the member's own single-repo Path hooks are replaced.
+    """
+    _validate_project_git_root(member)
+    # Imported here so other installer commands keep their small import closure.
+    try:
+        from . import members
+    except ImportError:
+        import members
+    try:
+        role = members.member_role(member)
+    except members.MembersError as error:
+        raise InstallerError(str(error)) from error
+    if role is None or not _same_path(Path(role["coordinator"]), coordinator):
+        raise InstallerError(f"{member} is not a member of {coordinator}; run members.py add first")
+    guard = coordinator / HOOKS_DIRECTORY / "git_guard.py"
+    if guard.is_symlink() or not _is_managed_guard_script(guard):
+        raise InstallerError(f"coordinator guard is not installed: {guard}")
+    hooks_dir = _resolve_git_hooks_path(member)
+    if hooks_dir is None:
+        raise InstallerError(f"cannot resolve the git hooks directory of {member}")
+    common = Path(subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=os.fspath(member), capture_output=True, text=True, check=True,
+    ).stdout.strip()).resolve()
+    resolved = hooks_dir.resolve()
+    worktree_output = subprocess.run(
+        ["git", "worktree", "list", "--porcelain", "-z"],
+        cwd=os.fspath(member), capture_output=True, check=True,
+    ).stdout
+    worktrees = [
+        Path(os.fsdecode(field[len(b"worktree "):])).resolve()
+        for field in worktree_output.split(b"\0") if field.startswith(b"worktree ")
+    ]
+    if not worktrees or (
+        any(resolved.is_relative_to(root) for root in worktrees)
+        and not resolved.is_relative_to(common)
+    ):
+        raise InstallerError(
+            f"git hooks path is inside the member worktree: {hooks_dir}; "
+            "point core.hooksPath outside the worktree or unset it"
+        )
+    interpreter = _required_python_runtime("--member-of")
+    plan = []
+    for name in GIT_HOOK_NAMES:
+        hook, chained = hooks_dir / name, hooks_dir / f"{name}{CHAINED_HOOK_SUFFIX}"
+        if hook.is_symlink() or chained.is_symlink():
+            raise InstallerError(f"refusing a symlinked git hook: {hook}")
+        if _lexists(hook) and not hook.is_file():
+            raise InstallerError(f"git hook is not a regular file: {hook}")
+        text = hook.read_text(encoding="utf-8", errors="replace") if hook.is_file() else None
+        chain = (
+            text is not None
+            and MEMBER_HOOK_MARKER not in text
+            and not _is_managed_git_hook_content(text)
+        )
+        if chain and _lexists(chained):
+            raise InstallerError(f"cannot chain {hook}: {chained} already exists")
+        plan.append((name, hook, chained, chain))
+    lines = []
+    for name, hook, chained, chain in plan:
+        note = " (keeps the existing hook as a chained hook)" if chain else ""
+        lines.append(f"member hook: {hook}{note}" + (" (dry run)" if dry_run else ""))
+    if dry_run:
+        return lines
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    staged = []
+    try:
+        for name, _, _, _ in plan:
+            temporary = hooks_dir / f".{name}.gsd-path-tmp"
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o755)
+            staged.append(temporary)
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                os.fchmod(output.fileno(), 0o755)
+                output.write(member_hook(interpreter, name))
+        for name, hook, chained, chain in plan:
+            if chain:
+                os.replace(hook, chained)
+            os.replace(hooks_dir / f".{name}.gsd-path-tmp", hook)
+    finally:
+        for temporary in staged:
+            temporary.unlink(missing_ok=True)
+    return lines
 
 
 def _detect_python_interpreter() -> Optional[str]:
@@ -2778,6 +2897,7 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--local", action="store_true")
     argument_parser.add_argument("--dry-run", action="store_true")
     argument_parser.add_argument("--project", type=Path)
+    argument_parser.add_argument("--member-of", type=Path)
     argument_parser.add_argument("--doctor", action="store_true")
     runtime_actions = argument_parser.add_mutually_exclusive_group()
     for action in ("restore", "upgrade", "migrate"):
@@ -2843,6 +2963,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"legacy runtime backup: {pin['backup']}")
             return 0
         except (InstallerError, OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+    if arguments.member_of is not None:
+        if project is None:
+            argument_parser.error("--member-of requires --project")
+        try:
+            for line in install_member_hooks(
+                absolute_path(arguments.member_of), project, arguments.dry_run
+            ):
+                print(line)
+            return 0
+        except (InstallerError, OSError, subprocess.CalledProcessError) as error:
             print(f"error: {error}", file=sys.stderr)
             return 1
     if arguments.doctor:
