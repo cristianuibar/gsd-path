@@ -2124,8 +2124,8 @@ def command_denial(command, working_directories, allow_destructive=True):
     try:
         tokens = shell_tokens(outer)
         if tokens in (
-            [interpreter, "-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"]
-            for interpreter in ("python3", "python")
+            [*interpreter.split(), "-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"]
+            for interpreter in ("python3", "python", "py -3")
         ):
             return None
         destructive = list(destructive_shell_invocations(tokens))

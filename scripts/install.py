@@ -358,11 +358,16 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
     try:
         for name, _, _, _ in plan:
             temporary = hooks_dir / f".{name}.gsd-path-tmp"
-            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o755)
+            # O_EXCL already refuses any existing name; O_NOFOLLOW (absent on
+            # Windows) adds defense in depth where it exists.
+            flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+            fd = os.open(temporary, flags, 0o755)
             staged.append(temporary)
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
-                os.fchmod(output.fileno(), 0o755)
-                output.write(member_hook(interpreter, name))
+            with os.fdopen(fd, "wb") as output:
+                if hasattr(os, "fchmod"):  # Windows before 3.13; Git for Windows needs no exec bit.
+                    os.fchmod(output.fileno(), 0o755)
+                output.write(member_hook(interpreter, name).encode("utf-8"))
         for name, hook, chained, chain in plan:
             if chain:
                 os.replace(hook, chained)
@@ -373,17 +378,23 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
     return lines
 
 
+# Every interpreter a managed hook may be pinned to; each is a command prefix.
+INTERPRETER_CANDIDATES = ("python3", "python", "py -3")
+
+
 def _detect_python_interpreter() -> Optional[str]:
-    """Probe for a runnable interpreter (python3, then python).
+    """Probe for a runnable interpreter (python3, then python, then py -3).
 
     Emitted hooks must never hard-code an interpreter that does not exist on
-    this machine (python3 is typically absent on Windows).
+    this machine (python3 is typically absent on Windows, and python.org
+    installs may put only the py launcher on PATH). The result is a command
+    prefix; split it before spawning.
     """
-    for candidate in ("python3", "python"):
+    for candidate in INTERPRETER_CANDIDATES:
         try:
             result = subprocess.run(
                 [
-                    candidate,
+                    *candidate.split(),
                     "-B",
                     "-c",
                     "import sys; raise SystemExit(sys.version_info < (3, 9))",
@@ -1755,7 +1766,7 @@ def _is_managed_hook_entry(entry) -> bool:
 def _is_guard_command(command: str) -> bool:
     normalized = command.replace("\\", "/")
     match = re.fullmatch(
-        r"(?:python3|python)\s+(?:\"([^\"\r\n]+)\"|'([^'\r\n]+)'|(\S+))",
+        r"(?:python3|python|py\s+-3)\s+(?:\"([^\"\r\n]+)\"|'([^'\r\n]+)'|(\S+))",
         normalized,
     )
     if match is None:
@@ -2247,7 +2258,7 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
     interpreter = _required_python_runtime("--doctor")
     try:
         result = subprocess.run(
-            [interpreter, "-B", str(validator), "validate", "--repo", str(project)],
+            [*interpreter.split(), "-B", str(validator), "validate", "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,
@@ -2288,7 +2299,7 @@ def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
     environment["GIT_OPTIONAL_LOCKS"] = "0"
     try:
         result = subprocess.run(
-            [interpreter, "-B", str(runtime), "status", "--repo", str(project)],
+            [*interpreter.split(), "-B", str(runtime), "status", "--repo", str(project)],
             cwd=project,
             capture_output=True,
             text=True,
@@ -2455,9 +2466,13 @@ def _valid_status_branch(value: object) -> Optional[re.Match[str]]:
 
 def _is_executable(path: Path) -> bool:
     try:
-        return bool(path.stat().st_mode & 0o111)
+        status = path.stat()
     except OSError:
         return False
+    if os.name == "nt":
+        # Windows has no exec bit; Git for Windows runs any regular hook file.
+        return path.is_file()
+    return bool(status.st_mode & 0o111)
 
 
 def _native_guard_contract(
@@ -2769,7 +2784,7 @@ def doctor(
             try:
                 parsed = json.loads(settings.read_text(encoding="utf-8"))
                 entries = parsed.get("hooks", {}).get(event)
-                variants = [entry(candidate) for candidate in ("python3", "python")]
+                variants = [entry(candidate) for candidate in INTERPRETER_CANDIDATES]
                 current = isinstance(entries, list) and any(
                     candidate in variants for candidate in entries
                 )
@@ -2815,7 +2830,7 @@ def doctor(
                             push("warn", f"hooks: {label} is not a managed GSD Path git hook")
                         elif not any(
                             hook_text == generator(candidate)
-                            for candidate in ("python3", "python")
+                            for candidate in INTERPRETER_CANDIDATES
                         ):
                             push("warn", f"hooks: {label} is stale — run --hooks-refresh-full")
                         elif not _is_executable(hook_path):
