@@ -433,6 +433,7 @@ final class ProjectRowView: MenuRowButton {
             label.cell?.wraps = true
             label.cell?.isScrollable = false
         }
+        detail.lineBreakMode = .byWordWrapping
         meter = PhaseMeterView(p.phaseMeter, blocked: p.projectState == "blocked")
         super.init()
         title = ""
