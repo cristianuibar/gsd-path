@@ -713,6 +713,16 @@ archive: null
         self.assertFalse(payload["reuse"])
         self.assertEqual(payload["entry"]["result"], "fail")
 
+    def test_verify_record_refuses_an_ignored_ledger(self) -> None:
+        (self.repo / ".gitignore").write_text("build/\n", encoding="utf-8")
+        commit = self.commit_all("product rule")
+        result, _ = self.cli(
+            "verify-record", "--command", "true", "--commit", commit, "--result", "pass"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(".gitignore:1:build/ excludes .project/build/verify-ledger.jsonl", result.stdout + result.stderr)
+        self.assertFalse((self.repo / ".project" / "build" / "verify-ledger.jsonl").exists())
+
     def test_verify_ledger_preserves_shell_semantics_and_ignores_legacy(self) -> None:
         commit = self.commit_all("seed")
         passed = "test 'a b' = 'a b'"

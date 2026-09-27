@@ -317,6 +317,53 @@ class IsolationTests(unittest.TestCase):
             self.assertIn("- src/app.py", body)
             self.assertEqual(git(repo, "rev-parse", "HEAD"), result["commit"])
 
+    def serial_land_with_gitignore(self, repo: Path, gitignore: str) -> dict:
+        task = TASK_FILE.replace("  - src/app.py\n", "  - src/app.py\n  - .gitignore\n")
+        self.write(repo, ".project/tasks/T001.md", task)
+        git(repo, "commit", "-q", "-am", "declare gitignore")
+        base = git(repo, "rev-parse", "HEAD")
+        isolation.isolate_task(repo, base, "T001", 1)
+        self.write(repo, "src/app.py", "print('done')\n")
+        self.write(repo, ".gitignore", gitignore)
+        if ".DS_Store" in gitignore:
+            self.write(repo, ".project/.DS_Store", "junk")
+        return isolation.land(
+            repo, repo, base, "T001", "add greeting", ".project/tasks/T001.md",
+            ["src/app.py", ".gitignore"],
+        )
+
+    def test_land_rejects_a_rule_that_ignores_project_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            with self.assertRaisesRegex(
+                isolation.IsolationError,
+                r"\.gitignore:1:build/ excludes \.project/build/verify-ledger\.jsonl",
+            ):
+                self.serial_land_with_gitignore(repo, "build/\n")
+            self.assertEqual(git(repo, "log", "-1", "--format=%s"), "declare gitignore")
+
+    def test_land_accepts_anchored_negated_and_junk_rules(self) -> None:
+        for gitignore in ("/build/\n", "*.jsonl\n!.project/build/*.jsonl\n", ".DS_Store\n"):
+            with self.subTest(gitignore=gitignore), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                self.init_bound_repo(repo)
+                result = self.serial_land_with_gitignore(repo, gitignore)
+                self.assertEqual(git(repo, "rev-parse", "HEAD"), result["commit"])
+
+    def test_land_accepts_a_task_that_anchors_a_committed_rule(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            self.init_bound_repo(repo)
+            self.write(repo, ".gitignore", "build/\n")
+            git(repo, "add", ".gitignore")
+            git(repo, "commit", "-q", "-m", "product rule")
+            result = self.serial_land_with_gitignore(repo, "/build/\n")
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), result["commit"])
+
     def test_serial_land_rejects_hook_staged_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"

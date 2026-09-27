@@ -749,6 +749,9 @@ def verify_record(repo: str, command: str, commit: str, result: str,
     if result not in VERIFY_RESULTS:
         raise BuildStateError("invalid-result", "--result must be pass or fail")
     normalized, commit = _ledger_key(repository, command, commit)
+    ignore_error = _common.project_ignore_error(repository)
+    if ignore_error:
+        raise BuildStateError("ignored-ledger", ignore_error)
     path = _ledger_path(repository)
     _ledger_entries(path)
     entry = {
