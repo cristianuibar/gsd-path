@@ -202,6 +202,10 @@ Details: [HOOKS.md](HOOKS.md)
 
 `AGENTS.md` and `WORKFLOW.md` are installed once with `--project`. A plain install
 **refuses** if they already exist; `--update --project PATH` keeps them unchanged.
+In a repo whose `AGENTS.md` came from another tool, move it aside (for example
+to `AGENTS.pre-path.md`), rerun the install, then merge its rules into the new
+`AGENTS.md`. The refusal prints the exact command. Keep the merged file under
+32 KiB: Codex reads only the first 32 KiB of `AGENTS.md`.
 
 To adopt upstream template changes:
 

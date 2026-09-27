@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -992,7 +993,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(f"would install {len(skill_names)} skills", output)
 
     def test_project_collision_fails_before_install_mutation(self):
-        project = self.root / "project"
+        project = self.root / "my project"
         project.mkdir()
         (project / "AGENTS.md").write_text("existing", encoding="utf-8")
         target = self.root / "claude" / "skills"
@@ -1010,6 +1011,75 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertFalse(target.exists())
         self.assertIn("already exists", error)
+        move = (
+            f"mv {shlex.quote(str(project / 'AGENTS.md'))} "
+            f"{shlex.quote(str(project / 'AGENTS.pre-path.md'))}"
+        )
+        self.assertIn(move, error)
+        self.assertIn("merge its rules into the new AGENTS.md", error)
+        self.assertIn("Codex reads only the first 32 KiB", error)
+
+        # The printed command is the way through for an untracked contract.
+        subprocess.run(move, shell=True, check=True)
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(target),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(0, status, error)
+        self.assertEqual(
+            "existing",
+            (project / "AGENTS.pre-path.md").read_text(encoding="utf-8"),
+        )
+
+    def test_claude_bridge_collision_names_its_own_move(self):
+        project = self.root / "project"
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "CLAUDE.md").write_text("mine", encoding="utf-8")
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn(
+            shlex.quote(str(project / ".claude" / "CLAUDE.pre-path.md")), error
+        )
+        self.assertIn("merge its rules into the new CLAUDE.md", error)
+        self.assertNotIn("32 KiB", error)
+
+    def test_project_runtime_collision_has_no_contract_move_hint(self):
+        project = self.root / "project"
+        (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
+        (
+            project / install.HOOKS_DIRECTORY / install.PROJECT_STATUS_LAUNCHER
+        ).write_text("foreign", encoding="utf-8")
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertIn("already exists", error)
+        self.assertNotIn("pre-path", error)
 
     def test_project_install_rejects_a_nested_git_directory(self):
         repository = self.root / "repository"
