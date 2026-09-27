@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1274,9 +1275,32 @@ def _project_result(
 
 
 def _existing_contract_error(destination: Path) -> "InstallerError":
-    return InstallerError(
+    message = (
         f"project contract already exists: {destination} — the installer never "
-        "overwrites project files. Run --update --project PATH to refresh managed "
+        "overwrites project files."
+    )
+    document = destination.name in ("AGENTS.md", "WORKFLOW.md") or (
+        destination.name == "CLAUDE.md" and destination.parent.name == ".claude"
+    )
+    if document:
+        aside = destination.with_name(f"{destination.stem}.pre-path{destination.suffix}")
+        if _lexists(aside):
+            message += (
+                f" First install: {aside} already exists; move the contract to an "
+                f"unused name, rerun, then merge its rules into the new {destination.name}."
+            )
+        else:
+            message += (
+                f" First install: move it aside with `mv {shlex.quote(str(destination))} "
+                f"{shlex.quote(str(aside))}`, rerun, then merge its rules into the new "
+                f"{destination.name}."
+            )
+        if destination.name == "AGENTS.md":
+            # Codex default project_doc_max_bytes; the rest is silently cut.
+            message += " Keep it under 32 KiB: Codex reads only the first 32 KiB."
+        message += " Already a GSD Path project:"
+    return InstallerError(
+        f"{message} Run --update --project PATH to refresh managed "
         "runtime files; merge template changes manually (see UPDATE.md)."
     )
 

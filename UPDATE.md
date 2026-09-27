@@ -200,8 +200,15 @@ Details: [HOOKS.md](HOOKS.md)
 
 ## Update project contracts
 
-`AGENTS.md` and `WORKFLOW.md` are installed once with `--project`. A plain install
-**refuses** if they already exist; `--update --project PATH` keeps them unchanged.
+`AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md` (with Claude) are installed
+once with `--project`. A plain install **refuses** if they already exist. When
+one of these documents blocks a first install, the refusal prints a command to
+move it to its `.pre-path.md` name. If that name is occupied, it instead asks
+you to choose an unused name. Rerun the install, then merge the old rules into
+the new file.
+Keep a merged `AGENTS.md` under 32 KiB: Codex reads only the first 32 KiB.
+For an already-installed project, `--update --project PATH` keeps these files
+unchanged.
 
 To adopt upstream template changes:
 
