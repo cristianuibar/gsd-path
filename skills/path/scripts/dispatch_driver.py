@@ -491,7 +491,8 @@ def recover_report(primary: Path, project_dir: str, receipt: Dict[str, object]) 
 
 def checkpoint_project(primary: Path, receipt: Dict[str, object], subject: str, body: str) -> Optional[str]:
     """Commit .project bookkeeping through the canonical checkpoint; None when nothing is dirty."""
-    if not any(path.startswith(".project/") for path in isolation.uncommitted_paths(primary)):
+    if not any(path.startswith(".project/") for path in isolation.uncommitted_paths(primary)) \
+            and not isolation.ignored_legacy_ledger(primary):
         return None
     result = isolation.checkpoint(primary, isolation.current_sha(primary), subject, body, [".project"])
     receipt["steps"].append({"script": "isolation.py checkpoint", "result": result})

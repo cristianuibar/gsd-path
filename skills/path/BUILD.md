@@ -100,6 +100,11 @@ rule; never invoke an explicit-only sibling skill yourself.
 checkpoint `.project/` records uses this helper. Record the exact full HEAD
 before the first metadata change in that checkpoint, then run:
 
+Before dispatch, also checkpoint a pre-existing `.project/build/verify-ledger.jsonl`
+when it is an ignored regular file absent from HEAD, even if Git reports no
+other pending paths. The `build:` checkpoint validates and force-adds only
+that ledger; a malformed ledger blocks the checkpoint.
+
 Explicit configuration edits in `.project/config.json` and
 `.project/model-policy.json` are expected bookkeeping. Include them in the next
 normal checkpoint before a clean dispatch base; they may remain pending while

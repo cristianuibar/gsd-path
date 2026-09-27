@@ -699,12 +699,30 @@ def committed_paths_since(repo: Path, base: str) -> Set[str]:
     )
 
 
-def _commit_pending(repo: Path, pending: Set[str], subject: str, body: str) -> str:
+def ignored_legacy_ledger(repo: Path) -> bool:
+    """True when a verify ledger absent from HEAD is hidden by an ignore rule.
+
+    Only milestones started before verify-record refused ignored ledgers reach
+    this state. A build checkpoint commits the file so a task that anchors the
+    rule does not expose it as a task change.
+    """
+    path = repo.joinpath(*PurePosixPath(VERIFY_LEDGER_PATH).parts)
+    if path.is_symlink() or not path.is_file():
+        return False
+    if run_git(repo, "cat-file", "-e", f"HEAD:{VERIFY_LEDGER_PATH}").returncode == 0:
+        return False
+    return run_git(repo, "check-ignore", "-q", "--no-index", "--", VERIFY_LEDGER_PATH).returncode == 0
+
+
+def _commit_pending(
+    repo: Path, pending: Set[str], subject: str, body: str, forced: Set[str] = frozenset()
+) -> str:
     reset = run_git(repo, "reset", "-q", "HEAD")
     if reset.returncode != 0:
         raise IsolationError("could not clear the index before commit")
     for path in sorted(pending):
-        added = run_git(repo, "add", "-A", "--", path)
+        mode = "-f" if path in forced else "-A"
+        added = run_git(repo, "add", mode, "--", path)
         if added.returncode != 0:
             raise IsolationError(f"could not stage {path}")
     staged = _split_paths(
@@ -3162,6 +3180,22 @@ def checkpoint(
             }
         raise IsolationError("primary HEAD differs from --expected-head")
     pending = uncommitted_paths(repo)
+    forced: Set[str] = set()
+    # Build only: an approval undo resets to a parent without the ledger and would drop it.
+    if (
+        subject.strip().startswith("build:")
+        and any(
+            VERIFY_LEDGER_PATH == path or VERIFY_LEDGER_PATH.startswith(path + "/")
+            for path in allowed
+        )
+        and ignored_legacy_ledger(repo)
+    ):
+        try:
+            _common.verify_ledger_entries(repo / VERIFY_LEDGER_PATH)
+        except ValueError as error:
+            raise IsolationError(str(error)) from error
+        forced.add(VERIFY_LEDGER_PATH)
+        pending.add(VERIFY_LEDGER_PATH)
     if not pending:
         raise IsolationError("no changes to checkpoint")
     unexpected = sorted(
@@ -3215,7 +3249,7 @@ def checkpoint(
                 + ", ".join(removed)
             )
     return {
-        "commit": _commit_pending(repo, pending, normalized_subject, body),
+        "commit": _commit_pending(repo, pending, normalized_subject, body, forced),
         "paths": sorted(pending),
         "status": "committed",
         "subject": normalized_subject,

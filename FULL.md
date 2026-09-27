@@ -442,7 +442,7 @@ layers. Every child brief names absolute input/output paths and bounded scope.
 | Skills missing after install | Restart host session; [UPDATE.md](UPDATE.md) |
 | Router blocked on branch | Check out `STATE.branch` or follow router instructions |
 | Phase says precondition missing | Run the producing phase it names |
-| Task landing or Verify reports ignored `.project/` state | Fix the matching product ignore rule through an owning task or patch wave (for example, anchor `build/` as `/build/`), then resume the pipeline. An ignored verify ledger cannot be recorded. |
+| Task landing or Verify reports ignored `.project/` state | Fix the matching product ignore rule through an owning task or patch wave (for example, anchor `build/` as `/build/`), then resume the pipeline. For the pre-existing ignored verify ledger exception, see the [build checkpoint](skills/gsd-path-build/SKILL.md). |
 | Pipeline on unrelated work | Explicit invocation only — [DOCS.md](DOCS.md#faq) |
 | Contradictory STATE / tasks | Re-invoke router; artifacts outrank chat |
 | Archive tamper blocked | Expected with hooks — [HOOKS.md](HOOKS.md) |
