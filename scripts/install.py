@@ -1375,7 +1375,9 @@ def _merged_agents(
             merged = parts[0] + block + parts[1]
         elif hashlib.sha256(raw).hexdigest() in RELEASED_AGENTS:
             merged = block  # One-time migration of an unedited whole-file install.
-        elif LEGACY_AGENTS_TITLE in text or LEGACY_AGENTS_MARKER in text:
+        elif LEGACY_AGENTS_TITLE in text or re.search(
+            rf"(?m)^{re.escape(LEGACY_AGENTS_MARKER)}\r?$", text
+        ):
             diff = "".join(
                 difflib.unified_diff(
                     template.splitlines(keepends=True),

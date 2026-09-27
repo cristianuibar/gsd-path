@@ -31,9 +31,9 @@ re-entry, gates, evidence. Phase and role detail moves into the skills that
 load on demand. Candidates: "Stay in role" (9.0 KB), "Files are the only
 memory" (5.2 KB), "New GitHub repositories" (1.9 KB), "Distribution layout"
 (1.2 KB). Implemented: the first three moved to the bundled
-`references/operating-rules.md` (every skill reads it before phase work);
-"Distribution layout" moved to the source repo's `CLAUDE.md`. The block fell
-from 26.0 KB to about 10.9 KB. No byte budget is set; only the 32 KiB merged
+`references/operating-rules.md` (every skill reads it before phase work).
+"Distribution layout" stays, because Codex loads only `AGENTS.md` for agents
+editing this source checkout. The block fell from 26.0 KB to about 12.1 KB. No byte budget is set; only the 32 KiB merged
 limit is enforced.
 Install and update refuse a merged `AGENTS.md` over 32 KiB. This is the one
 exception to brownfield installs without rename: silent truncation is worse

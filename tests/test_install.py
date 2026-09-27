@@ -1180,6 +1180,16 @@ class InstallerTests(unittest.TestCase):
             self.install_agents(project)
         self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
 
+    def test_project_treats_inline_legacy_marker_as_owner_text(self):
+        project = self.root / "inline-legacy-marker"
+        project.mkdir()
+        owner = f"Old Path files used `{install.LEGACY_AGENTS_MARKER}`.\n"
+        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+
+        self.install_agents(project)
+
+        self.assertTrue((project / "AGENTS.md").read_text(encoding="utf-8").endswith("\n" + owner))
+
     def test_update_refuses_agents_changed_during_install(self):
         project = self.root / "changing-agents"
         project.mkdir()
