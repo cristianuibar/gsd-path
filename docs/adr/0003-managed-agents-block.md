@@ -22,9 +22,9 @@ The owner owns everything outside the markers. `--project` inserts the block
 into a new or existing `AGENTS.md`. `--update --project` replaces only the
 block. Uninstall removes only the block. Doctor checks the block, not the
 whole file. A file with more than one block, or unmatched markers, is
-refused. The block goes first. The size check runs only at install and update;
-if the owner later grows the file past 32 KiB, Codex truncates owner text
-before Path rules.
+refused. The block goes first, so Codex truncates owner text added after it
+before Path rules. Owner text added above the block can push Path rules past
+the 32 KiB cutoff; the install/update size check cannot catch this between runs.
 
 The block holds only rules every turn needs: authority order, plain-prompt
 re-entry, gates, evidence. Phase and role detail moves into the skills that
@@ -52,4 +52,5 @@ refused with a diff and manual steps because Path cannot tell its text from
 owner edits. After migration, `--update` replaces only the block without a
 manual merge. Skills that name `AGENTS.md` sections must point at the new
 skill location when a section moves. The contract every host reads changes,
-so all 11 host release receipts must be rerun.
+so every release evaluation host must be rerun per the live-check scope in
+[TRUST-VALIDATION-SPEC.md](../trust-validation/TRUST-VALIDATION-SPEC.md).
