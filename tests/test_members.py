@@ -448,6 +448,20 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(retried.returncode, 0, retried.stderr)
         self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
 
+    def test_add_refuses_marker_directory_symlink_to_checkout(self) -> None:
+        member = self.make_member("web")
+        directory = self.marker_path(member).parent
+        directory.symlink_to(member, target_is_directory=True)
+        refused = self.add("web", member)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(str(directory), refused.stderr)
+        self.assertFalse((member / "member.json").exists())
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+        self.assertEqual(git(member, "status", "--porcelain", "--untracked-files=all"), "")
+        with self.assertRaises(members.MembersError) as caught:
+            members.member_role(member)
+        self.assertIn(str(directory), str(caught.exception))
+
     def test_live_coordinator_copy_cannot_take_over_member(self) -> None:
         member = self.joined()
         marker = self.marker_path(member)

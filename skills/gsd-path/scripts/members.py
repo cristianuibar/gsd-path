@@ -92,7 +92,10 @@ def _common_dir(checkout: Path) -> Path:
 
 
 def _marker_path(checkout: Path) -> Path:
-    return _common_dir(checkout) / "gsd-path" / "member.json"
+    directory = _common_dir(checkout) / "gsd-path"
+    if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+        raise MembersError(f"member marker directory must be real: {directory}")
+    return directory / "member.json"
 
 
 def _read_marker(path: Path) -> Optional[dict[str, str]]:
@@ -123,8 +126,9 @@ def _write_marker(checkout: Path, coordinator: Path, project: str, name: str) ->
 
 
 def _refuse_foreign_marker(checkout: Path, coordinator: Path, project: str, name: str) -> None:
+    path = _marker_path(checkout)
     try:
-        marker = _read_marker(_marker_path(checkout))
+        marker = _read_marker(path)
     except MembersError:
         return
     if marker is not None and (marker["project"], marker["name"]) != (project, name):
