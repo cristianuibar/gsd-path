@@ -596,7 +596,7 @@ function phaseMeter(p) {
 function boardRow(p) {
   const st=stateOf(p), {cur}=milestoneStack(p), sp=p.spend||{};
   const folder=p.project_root||p.root;
-  const location=`Project folder: ${folder}${folder!==p.root?' · Worktree: '+p.root:''}`;
+  const location=`Project folder: ${folder}${p.worktree_root?' · Worktree: '+p.worktree_root:''}`;
   const reasons=(p.attention||[]).map(a=>a.label).filter(Boolean).join(' · ');
   return `<tr class="prow ${st}" data-root="${esc(p.root)}"><td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.repository||p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.repository||p.project||p.root)}</span></button><div class="ppath">${esc(location)}</div></td>
     <td><div class="milestone-name"><span class="mono dim">${esc(cur.number)}</span> ${esc(cur.slug)}</div><div class="milestone-phase">${phaseMeter(p)}<span class="phlabel">${esc(p.phase||'No phase recorded')}</span></div></td>
@@ -729,7 +729,7 @@ function projectPage(p) {
                  ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
   return `<article class="project" data-root="${esc(p.root)}">
-    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.project_root&&p.project_root!==p.root?`<span class="mono">Worktree: ${esc(p.root)}</span>`:''}</div>
+    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}

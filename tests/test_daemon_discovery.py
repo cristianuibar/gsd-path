@@ -123,12 +123,12 @@ class WorktreeDedupTests(unittest.TestCase):
             capture_output=True,
         )
 
-    def make_repo_with_worktree(self) -> tuple:
+    def make_repo_with_worktree(self, nested: bool = False) -> tuple:
         main = self.parent / "repo"
         main.mkdir()
         self._git("init", cwd=main)
-        make_project(main)
-        self._git("add", ".project/STATE.md", cwd=main)
+        make_project(main / "app" if nested else main)
+        self._git("add", "-A", cwd=main)
         self._git("commit", "-m", "init", cwd=main)
         linked = self.parent / "repo-linked"
         self._git("worktree", "add", str(linked), cwd=main)
@@ -140,11 +140,33 @@ class WorktreeDedupTests(unittest.TestCase):
         main, linked = self.make_repo_with_worktree()
         data = probe_project(linked, enrich=False).to_dict()
         self.assertEqual(Path(data["project_root"]).resolve(), main.resolve())
+        self.assertEqual(Path(data["worktree_root"]).resolve(), linked.resolve())
         self.assertEqual(data.get("repository"), main.name)
         self.assertEqual(data["root"], str(linked))
         self.assertEqual(data["project"], "demo")
         self.assertEqual(ProjectStatus.from_dict(data).to_dict(), data)
-        self.assertEqual(Path(probe_project(main, enrich=False).to_dict()["project_root"]).resolve(), main.resolve())
+        main_data = probe_project(main, enrich=False).to_dict()
+        self.assertEqual(Path(main_data["project_root"]).resolve(), main.resolve())
+        self.assertIsNone(main_data["worktree_root"])
+
+    def test_nested_project_uses_project_folder_and_checkout_worktree(self):
+        from gsd_daemon.probe import probe_project
+        main, linked = self.make_repo_with_worktree(nested=True)
+        main_data = probe_project(main / "app", enrich=False).to_dict()
+        self.assertEqual(main_data["root"], str(main / "app"))
+        self.assertEqual(Path(main_data["project_root"]).resolve(), (main / "app").resolve())
+        self.assertIsNone(main_data["worktree_root"])
+        self.assertEqual(main_data["repository"], main.name)
+        linked_data = probe_project(linked / "app", enrich=False).to_dict()
+        self.assertEqual(linked_data["root"], str(linked / "app"))
+        self.assertEqual(Path(linked_data["project_root"]).resolve(), (main / "app").resolve())
+        self.assertEqual(Path(linked_data["worktree_root"]).resolve(), linked.resolve())
+        self.assertEqual(linked_data["repository"], main.name)
+        self._git("checkout", "--detach", cwd=linked)
+        detached_data = probe_project(linked / "app", enrich=False).to_dict()
+        self.assertEqual(Path(detached_data["project_root"]).resolve(), (main / "app").resolve())
+        self.assertEqual(Path(detached_data["worktree_root"]).resolve(), linked.resolve())
+        self.assertEqual(detached_data["git"]["branch"], "HEAD")
 
     def test_non_git_project_has_no_invented_repository(self):
         from gsd_daemon.probe import probe_project
@@ -152,6 +174,7 @@ class WorktreeDedupTests(unittest.TestCase):
         data = probe_project(root, enrich=False).to_dict()
         self.assertIsNone(data.get("repository"))
         self.assertEqual(data.get("project_root"), str(root))
+        self.assertIsNone(data["worktree_root"])
 
     def test_linked_worktree_deduped_to_main_checkout(self) -> None:
         main, linked = self.make_repo_with_worktree()

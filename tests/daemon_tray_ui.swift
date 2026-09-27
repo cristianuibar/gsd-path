@@ -40,8 +40,10 @@ struct TrayUITest {
         func require(_ condition: Bool, _ message: String) {
             if !condition { print("FAIL: \(message)"); exit(1) }
         }
+        let mainFolder = "\(NSHomeDirectory())/github/open-gsd/gsd-path/app"
+        let linkedCheckout = "\(NSHomeDirectory())/orca/workspaces/preview"
         let identity = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
-        {"root":"/Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline","project":"widget-counter","repository":"gsd-path","project_root":"/Users/operator/github/open-gsd/gsd-path","phase":"build","branch":"gsd-path/M001","tasks_done":1,"tasks_total":3,"current_wave":1,"phase_log":[{"phase":"build","date":"2026-09-16"}],"spend":{"milestones":{"M001":{"turns":523,"cost":62.13}}}}
+        {"root":"\(linkedCheckout)/app","project":"widget-counter","repository":"gsd-path","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","phase":"build","branch":"gsd-path/M001","tasks_done":1,"tasks_total":3,"current_wave":1,"phase_log":[{"phase":"build","date":"2026-09-16"}],"spend":{"milestones":{"M001":{"turns":523,"cost":62.13}}}}
         """.utf8))
         vc.show(status: StatusResponse(projects: [identity]))
         vc.view.layoutSubtreeIfNeeded()
@@ -49,13 +51,25 @@ struct TrayUITest {
         require(identityRow.detail.lineBreakMode == .byWordWrapping, "status values wrap between words")
         require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
         let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
-        require(identityRow.location.stringValue == "Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: M001", "actual project folder is visible above the worktree")
+        require(identityRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "actual project and worktree folders are visible with home abbreviated")
         require(!identityRow.location.isHidden, "actual project folder is always visible")
-        require(identityRow.toolTip?.contains("Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: /Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline") == true, "full paths remain in tooltip")
+        require(identityRow.toolTip?.contains("Project folder: \(mainFolder)\nWorktree: \(linkedCheckout)") == true, "full paths remain in tooltip")
         for label in identityLabels {
             require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
             require(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.frame.width, height: .greatestFiniteMagnitude)).height <= label.frame.height, "all lines fit in their label")
         }
+        let nestedMain = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(mainFolder)","project_root":"\(mainFolder)","repository":"gsd-path","project":"widget-counter"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [nestedMain]))
+        let nestedMainRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(nestedMainRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app", "nested main project has no worktree label")
+        let detached = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","repository":"gsd-path","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [detached]))
+        let detachedRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(detachedRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "detached worktree shows folder instead of HEAD")
         vc.show(status: status)
         require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
         require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")

@@ -39,6 +39,7 @@ class ProjectStatus:
     root: str
     project: Optional[str] = None
     project_root: Optional[str] = None
+    worktree_root: Optional[str] = None
     repository: Optional[str] = None
     milestone: Optional[str] = None
     phase: Optional[str] = None
@@ -80,6 +81,7 @@ class ProjectStatus:
             "root": self.root,
             "project": self.project,
             "project_root": self.project_root,
+            "worktree_root": self.worktree_root,
             "repository": self.repository,
             "milestone": self.milestone,
             "phase": self.phase,
@@ -124,6 +126,7 @@ class ProjectStatus:
             root=data.get("root"),
             project=data.get("project"),
             project_root=data.get("project_root"),
+            worktree_root=data.get("worktree_root"),
             repository=data.get("repository"),
             milestone=data.get("milestone"),
             phase=data.get("phase"),

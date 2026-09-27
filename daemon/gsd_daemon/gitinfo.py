@@ -38,6 +38,12 @@ def project_identity(root) -> dict:
     records = _git(root, "worktree", "list", "--porcelain", "-z") or ""
     first = records.split("\0\0", 1)[0].split("\0")
     main = next((field[len("worktree "):] for field in first if field.startswith("worktree ")), None)
-    if not main or "bare" in first:
-        return {"project_root": root, "repository": None}
-    return {"project_root": main, "repository": Path(main).name}
+    checkout = _git(root, "rev-parse", "--show-toplevel") if main and "bare" not in first else None
+    if not checkout:
+        return {"project_root": root, "repository": None, "worktree_root": None}
+    relative = Path(root).resolve().relative_to(Path(checkout).resolve())
+    return {
+        "project_root": str(Path(main) / relative),
+        "repository": Path(main).name,
+        "worktree_root": checkout if Path(checkout).resolve() != Path(main).resolve() else None,
+    }
