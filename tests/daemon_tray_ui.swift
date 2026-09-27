@@ -48,7 +48,9 @@ struct TrayUITest {
         let identityRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
         require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
         let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
-        require(identityLabels.contains { $0.stringValue == "Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: /Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline" }, "both folders are labeled")
+        require(identityRow.location.stringValue == "Worktree: M001", "worktree uses its short branch name")
+        require(!identityLabels.contains { $0.stringValue.contains("/Users/") }, "full paths stay out of visible rows")
+        require(identityRow.toolTip?.contains("Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: /Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline") == true, "full paths remain in tooltip")
         for label in identityLabels {
             require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
             require(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.frame.width, height: .greatestFiniteMagnitude)).height <= label.frame.height, "all lines fit in their label")
@@ -65,12 +67,13 @@ struct TrayUITest {
             "M004 · build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10 · $24.60 · 84 turns",
             "M001 shipped 2026-09-01 · 4 tasks",
         ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
+        require(rows.allSatisfy { $0.location.isHidden }, "main checkout rows need no worktree label")
         let meter: (ProjectRowView) -> String = { row in
             row.meter.segments.map { $0 == .done ? "d" : $0 == .now ? "n" : "-" }.joined()
         }
         require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
-        require(rows[2].toolTip == "M003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
-        require(rows[0].toolTip == "M002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
+        require(rows[2].toolTip == "Project folder: /sample/gsd\nM003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
+        require(rows[0].toolTip == "Project folder: /sample/atlas'&tab=usage\nM002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
         require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, Project folder: /sample/gsd, In build, M004 · build") == true, "row accessibility label")
         rows[2].hovered = true
         var nativeSelection = false
