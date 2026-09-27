@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -1897,6 +1898,66 @@ class IsolationTests(unittest.TestCase):
                 ).returncode,
                 0,
             )
+
+    def half_retired_task(self, repo: Path) -> tuple[str, str, Path, str]:
+        base = self.init_bound_repo(repo)
+        isolated = isolation.isolate_task(repo, base, "T001", 2)
+        worktree = Path(isolated["worktree"])
+        self.write(worktree, "src/app.py", "print('done')\n")
+        self.write(worktree, ".project/tasks/T001.md", TASK_FILE + "log\n")
+        landed = isolation.land(
+            repo, worktree, base, "T001", "add greeting", ".project/tasks/T001.md", ["src/app.py"]
+        )
+        # The checkout is gone but Git could not delete its registration.
+        shutil.rmtree(worktree)
+        return base, isolated["task_branch"], worktree, landed["commit"]
+
+    def registered_branch(self, repo: Path, worktree: Path) -> Optional[str]:
+        return isolation._registered_worktrees(repo).get(worktree.resolve())
+
+    def test_retire_recovers_a_half_retired_task_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            _, branch, worktree, landed = self.half_retired_task(repo)
+
+            result = isolation.retire(repo, None, branch, True, landed_commit=landed)
+
+            self.assertEqual(result["reason"], "branch-only")
+            self.assertIsNone(self.registered_branch(repo, worktree))
+            self.assertNotEqual(
+                subprocess.run(
+                    ("git", "-C", str(repo), "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"),
+                    check=False,
+                ).returncode,
+                0,
+            )
+
+    def test_retire_keeps_a_half_retired_registration_when_proof_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            _, branch, worktree, _ = self.half_retired_task(repo)
+
+            # The task is not failed or blocked, so the task-file proof rejects the branch.
+            with self.assertRaisesRegex(isolation.IsolationError, "failed or blocked"):
+                isolation.retire(repo, None, branch, True, task_file=".project/tasks/T001.md")
+
+            self.assertEqual(self.registered_branch(repo, worktree), f"refs/heads/{branch}")
+            git(repo, "rev-parse", "--verify", branch)
+
+    def test_retire_refuses_a_locked_half_retired_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            repo.mkdir()
+            _, branch, worktree, landed = self.half_retired_task(repo)
+            git(repo, "worktree", "lock", str(worktree))
+
+            with self.assertRaisesRegex(isolation.IsolationError, "locked"):
+                isolation.retire(repo, None, branch, True, landed_commit=landed)
+
+            self.assertEqual(self.registered_branch(repo, worktree), f"refs/heads/{branch}")
+            git(repo, "rev-parse", "--verify", branch)
 
     def test_retire_refuses_a_foreign_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
