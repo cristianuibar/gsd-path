@@ -176,6 +176,26 @@ class WorktreeDedupTests(unittest.TestCase):
         self.assertEqual(data.get("project_root"), str(root))
         self.assertIsNone(data["worktree_root"])
 
+    def test_bare_backed_linked_project_has_no_main_checkout(self):
+        from gsd_daemon.gitinfo import project_identity
+        seed = self.parent / "seed"
+        seed.mkdir()
+        self._git("init", cwd=seed)
+        project = seed / "app"
+        project.mkdir()
+        (project / "README.md").write_text("project\n")
+        self._git("add", "-A", cwd=seed)
+        self._git("commit", "-m", "init", cwd=seed)
+        bare = self.parent / "repository.git"
+        self._git("clone", "--bare", str(seed), str(bare), cwd=self.parent)
+        linked = self.parent / "preview"
+        self._git("worktree", "add", "--detach", str(linked), cwd=bare)
+        identity = project_identity(linked / "app")
+        self.assertEqual(identity["project_root"], str(linked / "app"))
+        self.assertIsNotNone(identity["worktree_root"])
+        self.assertEqual(Path(identity["worktree_root"]).resolve(), linked.resolve())
+        self.assertEqual(identity["repository"], bare.name)
+
     def test_linked_worktree_deduped_to_main_checkout(self) -> None:
         main, linked = self.make_repo_with_worktree()
         self.assertTrue((main / ".git").is_dir())

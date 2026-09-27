@@ -70,6 +70,14 @@ struct TrayUITest {
         vc.show(status: StatusResponse(projects: [detached]))
         let detachedRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
         require(detachedRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "detached worktree shows folder instead of HEAD")
+        let bareBacked = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(linkedCheckout)/app","worktree_root":"\(linkedCheckout)","repository":"repository.git","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [bareBacked]))
+        let bareRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(bareRow.name.stringValue == "repository.git", "bare repository identity stays visible")
+        require(bareRow.location.stringValue == "Project folder: ~/orca/workspaces/preview/app\nWorktree: ~/orca/workspaces/preview", "bare-backed worktree shows tracked project and checkout folders")
+        require(bareRow.toolTip?.contains("Project folder: \(linkedCheckout)/app\nWorktree: \(linkedCheckout)") == true, "bare-backed full paths remain in tooltip")
         vc.show(status: status)
         require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
         require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
