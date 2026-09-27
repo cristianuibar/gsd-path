@@ -78,7 +78,7 @@ def _workspace(primary: Path, pin: bool) -> Path:
 
 def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> Path:
     primary = primary.resolve()
-    if kind not in {"task", "verify", "integrate"} or not name or Path(name).name != name or name in {".", ".."}:
+    if kind not in {"task", "verify", "integrate", "bound"} or not name or Path(name).name != name or name in {".", ".."}:
         raise ValueError("invalid managed worktree kind or name")
     legacy = (primary.parent / f".{primary.name}-gsd-path-integrate-{name}"
               if kind == "integrate" else primary.parent / f"{primary.name}.gsd-path" / kind / name)
