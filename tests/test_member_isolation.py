@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -98,9 +99,35 @@ class MemberIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "members.py repair"):
             isolation.member_bound_checkout(self.coordinator, "web")
 
+    def test_bound_checkout_explains_how_to_repair_malformed_members(self) -> None:
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        path.write_text(path.read_text(encoding="utf-8") + "unexpected line\n", encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "MEMBERS.md.*members.py repair --repo"):
+            isolation.member_bound_checkout(self.coordinator, "web")
+
+    def test_bound_checkout_explains_how_to_repair_an_unreadable_marker(self) -> None:
+        common = git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+        (Path(common) / "gsd-path" / "member.json").write_text("invalid json\n", encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "member marker is unreadable.*members.py repair --repo") as caught:
+            isolation.member_bound_checkout(self.coordinator, "web")
+        self.assertIn(str(self.coordinator), str(caught.exception))
+
     def test_bound_checkout_refuses_a_team_checkout_of_the_bound_branch(self) -> None:
         git(self.member, "worktree", "add", "-q", str(self.root / "team-copy"), BOUND)
         with self.assertRaises(isolation.IsolationError):
+            isolation.member_bound_checkout(self.coordinator, "web")
+
+    def test_bound_checkout_refuses_a_missing_registered_checkout(self) -> None:
+        bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
+        shutil.rmtree(bound)
+        with self.assertRaisesRegex(isolation.IsolationError, "bound checkout.*missing or invalid"):
+            isolation.member_bound_checkout(self.coordinator, "web")
+        self.assertFalse(bound.exists())
+
+    def test_bound_checkout_refuses_an_invalid_registered_checkout(self) -> None:
+        bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
+        (bound / ".git").write_text("invalid gitfile\n", encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "bound checkout.*missing or invalid"):
             isolation.member_bound_checkout(self.coordinator, "web")
 
     def test_member_task_isolates_in_a_member_sidecar_at_the_bound_tip(self) -> None:
@@ -153,6 +180,16 @@ class MemberIsolationTests(unittest.TestCase):
             with self.assertRaisesRegex(isolation.IsolationError, "cannot delete task ref"):
                 isolation.retire_member_task(self.coordinator, "web", "T001")
         self.assertFalse(Path(result["worktree"]).exists())
+        self.assertNotEqual(git(self.member, "branch", "--list", "gsd-path-task/acme-T001").stdout, "")
+
+    def test_retire_refuses_a_sidecar_on_another_branch(self) -> None:
+        result = isolation.isolate_member_task(self.coordinator, "web", "T001")
+        sidecar = Path(result["worktree"])
+        git(sidecar, "switch", "-q", "-c", "other")
+        with self.assertRaisesRegex(isolation.IsolationError, "another branch"):
+            isolation.retire_member_task(self.coordinator, "web", "T001")
+        self.assertTrue(sidecar.exists())
+        self.assertEqual(git(sidecar, "branch", "--show-current").stdout.strip(), "other")
         self.assertNotEqual(git(self.member, "branch", "--list", "gsd-path-task/acme-T001").stdout, "")
 
 

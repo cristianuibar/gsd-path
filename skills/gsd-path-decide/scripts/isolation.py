@@ -599,7 +599,7 @@ def _member_context(coordinator: Path, member: str) -> Tuple[Path, str, Dict[str
         checkout = Path(listed[member]["checkout"]).resolve()
         role = members.member_role(checkout)
     except members.MembersError as error:
-        raise IsolationError(str(error)) from error
+        raise IsolationError(f"{error}; {repair}") from error
     if role is None or role["coordinator"] != coordinator or role["name"] != member:
         raise IsolationError(f"member marker for {member} is missing or stale; {repair}")
     return checkout, str(role["project"]), entry
@@ -613,6 +613,14 @@ def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
     holders = [path for path, ref in _registered_worktrees(checkout).items() if ref == f"refs/heads/{branch}"]
     if holders and holders != [destination.resolve()]:
         raise IsolationError(f"{branch} is checked out outside Path's workspace: {holders[0]}")
+    if holders:
+        root = run_git(destination, "rev-parse", "--show-toplevel")
+        common = run_git(destination, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        head = run_git(destination, "symbolic-ref", "-q", "HEAD")
+        if (root.returncode != 0 or Path(root.stdout.strip()).resolve() != destination.resolve()
+                or common.returncode != 0 or Path(common.stdout.strip()).resolve() != common_git_dir(checkout)
+                or head.returncode != 0 or head.stdout.strip() != f"refs/heads/{branch}"):
+            raise IsolationError(f"bound checkout is missing or invalid: {destination}")
     if not holders:
         if os.path.lexists(destination):
             raise IsolationError(f"worktree path already exists: {destination}")
@@ -662,7 +670,10 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
     ).returncode != 0:
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
-    if destination.resolve() in _registered_worktrees(checkout):
+    registered = _registered_worktrees(checkout)
+    if destination.resolve() in registered:
+        if registered[destination.resolve()] != ref:
+            raise IsolationError(f"member task sidecar is on another branch: {destination}")
         removed = run_git(checkout, "worktree", "remove", str(destination))
         if removed.returncode != 0:
             raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
