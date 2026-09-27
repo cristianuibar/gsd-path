@@ -3,14 +3,14 @@
 Status: accepted. Tracked in #160.
 
 `AGENTS.md` is a shared file. Repo owners, Codex, Cursor and gsd-core write
-it. Path now installs its whole 26 KB contract as `AGENTS.md`, once, and
-never updates it. This causes three defects:
+it. Before this decision, Path installed its whole 26 KB contract as
+`AGENTS.md` once and never updated it. That caused three defects:
 
-- A brownfield repo with its own `AGENTS.md` is refused (#147).
-- `--update` keeps `AGENTS.md`, so every template change is a manual merge
+- A brownfield repo with its own `AGENTS.md` was refused (#147).
+- `--update` kept `AGENTS.md`, so every template change required a manual merge
   (UPDATE.md "Update project contracts").
 - Codex reads only the first 32 KiB of project docs (`project_doc_max_bytes`
-  default 32768). Path alone uses about 80% of that budget.
+  default 32768). Path alone used about 80% of that budget.
 
 **Decision:** Path owns one marked region of `AGENTS.md`:
 
@@ -20,11 +20,11 @@ never updates it. This causes three defects:
 
 The owner owns everything outside the markers. `--project` inserts the block
 into a new or existing `AGENTS.md`. `--update --project` replaces only the
-block. Uninstall removes only the block. Doctor checks the block, not the
-whole file. A file with more than one block, or unmatched markers, is
+block. Uninstall removes only the block. Doctor checks the block and the
+total file size. A file with more than one block, or unmatched markers, is
 refused. The block goes first, so Codex truncates owner text added after it
 before Path rules. Owner text added above the block can push Path rules past
-the 32 KiB cutoff; the install/update size check cannot catch this between runs.
+the 32 KiB cutoff; doctor checks the total file size after owner edits.
 
 The block holds only rules every turn needs: authority order, plain-prompt
 re-entry, gates, evidence. Phase and role detail moves into the skills that
