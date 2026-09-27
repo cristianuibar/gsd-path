@@ -135,7 +135,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .prow { cursor: pointer; }
   .prow:hover td { background: var(--hover); }
   .pname { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; font-weight: 600; cursor: pointer; }
-  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: min(48vw, 640px); overflow: hidden; text-overflow: ellipsis; }
+  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: min(48vw, 640px); white-space: normal; overflow-wrap: anywhere; }
   .msl { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; }
   .msl .mono { color: var(--dim); margin-right: 4px; }
   .route { display: inline-flex; gap: 3px; vertical-align: middle; }

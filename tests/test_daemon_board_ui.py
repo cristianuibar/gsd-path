@@ -89,6 +89,7 @@ class BoardUITests(unittest.TestCase):
         self.orca("wait", "--page", self.page, "--selector", ".pname")
         self.assertIn("gsd-path", self.js("document.querySelector('.pname').textContent"))
         self.assertIn("/projects/gsd-path", self.js("document.querySelector('.ppath').textContent"))
+        self.assertEqual(self.js("(() => {const p=document.querySelector('.ppath'); return p.scrollWidth<=p.clientWidth && p.scrollHeight<=p.clientHeight;})()"), "true", "Full project and worktree paths must fit without clipping")
         self.js("document.querySelector('.pname').click()")
         self.assertIn("gsd-path", self.js("document.querySelector('.phead h1').textContent"))
         self.assertEqual(self.js("document.querySelector('.switcher').selectedOptions[0].textContent"), "gsd-path")
