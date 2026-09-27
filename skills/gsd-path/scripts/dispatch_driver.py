@@ -395,6 +395,12 @@ def state_from_task(primary: Path, task_id: str) -> Dict[str, object]:
     else:
         raise DriverStop(f"task {task_id} has no task file")
     if fields.get("status") != "in-progress" or not fields.get("base"):
+        # A parallel activation lives only in its isolate; the primary copy stays pending.
+        isolate = isolation.sidecar_root(primary, "task", task_id).resolve()
+        if isolation.authorized_task_worktree(isolate, isolation.require_bound(primary)):
+            fields, _ = isolation.task_frontmatter(
+                (isolate / task_path.relative_to(primary)).read_text(encoding="utf-8"))
+    if fields.get("status") != "in-progress" or not fields.get("base"):
         raise DriverStop(f"task {task_id} is not an in-progress task with a recorded base")
     def value(key: str) -> Optional[str]:
         raw = fields.get(key)

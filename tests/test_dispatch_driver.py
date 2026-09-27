@@ -2,6 +2,7 @@ import argparse
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -485,6 +486,58 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.subjects(root)[0], "T001: Demo task T001")
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
         self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text())
+
+    def test_finish_lands_natively_dispatched_parallel_tasks_from_their_isolates(self) -> None:
+        root = self.root
+        head = self.fixture(root)
+        for task_id, task_file in (("T001", ".project/tasks/T001-demo.md"), ("T002", ".project/tasks/T002-demo.md")):
+            prepared = subprocess.run(
+                [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
+                 "--repo", str(root), "--expected-head", head, "--task-id", task_id, "--round-size", "2"],
+                check=True, capture_output=True, text=True)
+            isolate = json.loads(prepared.stdout)["steps"][0]["result"]
+            worktree = Path(isolate["worktree"])
+            subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"),
+                            "activate-task", "--repo", str(worktree), "--base", head, "--task-id", task_id,
+                            "--agent", f"build_{task_id.lower()}", "--task-file", task_file,
+                            "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
+            declared = re.search(r"^files:\n  - (.+)$", (worktree / task_file).read_text(), re.M).group(1)
+            (worktree / declared).parent.mkdir(parents=True, exist_ok=True)
+            (worktree / declared).write_text("print('hello')\n")
+        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text())
+        first = self.driver(root, "finish", "--task-id", "T001")
+        second = self.driver(root, "finish", "--task-id", "T002")
+        self.assertEqual(first["status"], "landed", first)
+        self.assertEqual(second["status"], "landed", second)
+        self.assertEqual([first["landed"][0]["mode"], second["landed"][0]["mode"]], ["parallel", "parallel"])
+        # T002 lands on T001's commit, so its verified tree is not the landed tree: no ledger entry.
+        self.assertEqual([first["landed"][0]["ledger"], second["landed"][0]["ledger"]], [True, False])
+        self.assertEqual(self.subjects(root)[:2], ["T002: Demo task T002", "T001: Demo task T001"])
+        self.assertEqual(self.branches(root), ["gsd-path/M001"])
+
+    def test_finish_refuses_a_deactivated_parallel_isolate(self) -> None:
+        root = self.root
+        head = self.fixture(root)
+        prepared = subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
+             "--repo", str(root), "--expected-head", head, "--task-id", "T001", "--round-size", "2"],
+            check=True, capture_output=True, text=True)
+        isolate = json.loads(prepared.stdout)["steps"][0]["result"]
+        worktree = Path(isolate["worktree"])
+        isolation_cli = [sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py")]
+        subprocess.run([*isolation_cli, "activate-task", "--repo", str(worktree), "--base", head,
+                        "--task-id", "T001", "--agent", "build_t001", "--task-file", ".project/tasks/T001-demo.md",
+                        "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
+        (worktree / "src").mkdir()
+        (worktree / "src/app.py").write_text("print('hello')\n")
+        subprocess.run([*isolation_cli, "deactivate-task", "--repo", str(worktree), "--task-id", "T001",
+                        "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt, {"reason": "task T001 is not an in-progress task with a recorded base",
+                                   "status": "blocked"})
+        self.assertEqual(self.head(root), head)
+        self.assertTrue(worktree.is_dir())
+        self.assertNotIn("orchestrator Verify", (worktree / ".project/tasks/T001-demo.md").read_text())
 
     def test_resume_after_in_flight_does_not_cross_the_wave_boundary(self) -> None:
         root = self.root
