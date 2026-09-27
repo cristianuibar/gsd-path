@@ -297,8 +297,8 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
     members.append(
         {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration}
     )
-    _common.atomic_write(root / ".project" / MEMBERS_FILE, render(members))
     _write_marker(resolved, root, state.project, name)
+    _common.atomic_write(root / ".project" / MEMBERS_FILE, render(members))
     return members
 
 

@@ -430,6 +430,24 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(added.returncode, 0, added.stderr)
         self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
 
+    def test_add_marker_write_failure_leaves_members_unchanged_for_retry(self) -> None:
+        member = self.make_member("web")
+        marker = self.marker_path(member)
+        directory = marker.parent
+        directory.mkdir(parents=True)
+        original_mode = stat.S_IMODE(directory.stat().st_mode)
+        directory.chmod(0o555)
+        try:
+            failed = self.add("web", member)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+            self.assertFalse(marker.exists())
+        finally:
+            directory.chmod(original_mode)
+        retried = self.add("web", member)
+        self.assertEqual(retried.returncode, 0, retried.stderr)
+        self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
+
     def test_live_coordinator_copy_cannot_take_over_member(self) -> None:
         member = self.joined()
         marker = self.marker_path(member)
