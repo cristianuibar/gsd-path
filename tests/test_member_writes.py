@@ -103,6 +103,30 @@ class MemberWriteTests(unittest.TestCase):
         (self.coordinator / ".project" / "MEMBERS.md").unlink()
         self.assert_denied(self.member / "app.py", "members.py repair", phase="build")
 
+    def test_moved_coordinator_refuses_stale_member_marker(self) -> None:
+        moved = self.root / "acme-moved"
+        self.coordinator.rename(moved)
+        self.coordinator = moved
+        for phase in ("plan", "build"):
+            self.assert_denied(self.member / "app.py", "members.py repair", phase=phase)
+
+    def test_coordinator_symlink_refuses_stale_member_marker(self) -> None:
+        (self.coordinator / ".project" / "MEMBERS.md").unlink()
+        link = self.coordinator / "member-app.py"
+        link.symlink_to(self.member / "app.py")
+        self.assert_denied(link, "members.py repair", phase="build")
+
+    def test_member_git_inspection_failure_refuses_write(self) -> None:
+        real_run = subprocess.run
+
+        def failing_inspection(command, *args, **kwargs):
+            if "--git-common-dir" in command and command[0] == "git":
+                return subprocess.CompletedProcess(command, 128, "", "fatal: broken git metadata")
+            return real_run(command, *args, **kwargs)
+
+        with mock.patch.object(guard_hook.subprocess, "run", side_effect=failing_inspection):
+            self.assert_denied(self.member / "app.py", "members.py repair")
+
 
 if __name__ == "__main__":
     unittest.main()

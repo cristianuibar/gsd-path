@@ -805,14 +805,28 @@ def member_target_kind(candidate, repo):
         env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
     )
     lines = found.stdout.splitlines()
-    if found.returncode != 0 or len(lines) != 2:
-        return None
+    if found.returncode != 0:
+        if found.stderr.strip().startswith("fatal: not a git repository"):
+            return None
+        raise RuntimeError(found.stderr.strip() or "Git inspection failed")
+    if len(lines) != 2:
+        raise RuntimeError("Git inspection returned an unexpected result")
     toplevel, common = Path(lines[0]), Path(lines[1])
     if not os.path.lexists(common / "gsd-path" / "member.json"):
         return None
     import members  # the guard's runtime directory; only paths in a member need it
     coordinator = members.marker_coordinator(toplevel)
-    if coordinator is None or coordinator.resolve() != repo.resolve():
+    if coordinator is None:
+        return None
+    if coordinator.resolve() != repo.resolve():
+        if any(
+            members._common_dir(Path(member["checkout"])) == common.resolve()
+            for member in members.read_members(repo)
+        ):
+            raise members.MembersError(
+                "member marker names an old coordinator; "
+                "run members.py repair --repo <coordinator>"
+            )
         return None
     members.member_role(toplevel)
     return "product"
@@ -827,17 +841,23 @@ def target_kind(path, working_directories, repo, control_roots=None):
         _canonical_control_alias(lexical, repo, control_roots),
         _canonical_control_alias(resolved, repo, control_roots),
     )
-    kinds = {
+    resolved_kind = path_kind(resolved, repo, control_roots)
+    kinds = {resolved_kind} | {
         path_kind(candidate, repo, control_roots)
-        for candidate in (lexical, resolved, *aliases)
+        for candidate in (lexical, *aliases)
     }
+    if resolved_kind == "external" and "protected" not in kinds:
+        try:
+            member_kind = member_target_kind(resolved, repo)
+        except Exception as error:
+            deny(
+                f"member write refused: {error}; "
+                "run members.py repair --repo <coordinator>"
+            )
+        if member_kind:
+            kinds.add(member_kind)
     for kind in ("protected", "product", "artifact", "external"):
         if kind in kinds:
-            if kind == "external":
-                try:
-                    return member_target_kind(resolved, repo) or kind
-                except Exception as error:
-                    deny(f"member write refused: {error}")
             return kind
     return "external"
 
