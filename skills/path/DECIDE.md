@@ -24,7 +24,11 @@ checking. Legal entry is `research/done` or `decide/active|blocked`. On
 `research/done`, enter with `pipeline_state.py transition`, expected
 phase/status `research/done`, exact branch and archive values, event `decision
 synthesis started`, and set phase/status `decide/active` (plus the same
-lookahead project dir); never edit STATE directly. `decide/done` or any later phase blocks rather
+lookahead project dir). Resume `decide/blocked` through the same helper with
+the complete current state as expected, `--set-phase decide --set-status
+active`, event `decision synthesis resumed`, and the same lookahead project
+dir when supplied. Require the returned track state to be `decide/active`;
+never edit STATE directly. `decide/done` or any later phase blocks rather
 than replacing decisions beneath an existing plan. When an active router
 supplies the lookahead track root `.project/next/`, evaluate these
 preconditions against the track instead; see Lookahead mode. Require
