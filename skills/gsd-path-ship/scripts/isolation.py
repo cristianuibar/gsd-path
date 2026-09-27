@@ -644,6 +644,40 @@ PROJECT_ENTRIES = frozenset({
 })
 
 
+def prune_host_scratch(project: Path, archive: Optional[Path] = None) -> list:
+    """Remove file-free `.claude` dirs a host left under .project.
+
+    Claude Code's Bash sandbox creates `<cwd>/.claude/.cc-writes` as an atomic-write staging dir each
+    time it initializes, and adds `**/.claude/.cc-writes/` to the global gitignore. Git cannot ship
+    empty dirs, so removal loses nothing. A `.claude` that holds any file or symlink is kept, and the
+    caller's allowlist still refuses it. Archives stay untouched except `archive`, the current
+    uncommitted one.
+    """
+    roots = [path for path in project.iterdir() if path.name != "archive"]
+    if archive is not None:
+        roots.append(archive)
+    hosts = []
+    for root in roots:
+        if root.is_symlink() or not root.is_dir():
+            continue
+        if root.name == ".claude":
+            hosts.append(root)
+        for directory, names, _ in os.walk(root):
+            hosts.extend(Path(directory, name) for name in names if name == ".claude")
+    removed = []
+    for host in hosts:
+        if host.is_symlink() or not host.is_dir():
+            continue  # a symlink, or already removed with an outer `.claude`
+        tree = list(os.walk(host, topdown=False))
+        if any(files or any(Path(directory, name).is_symlink() for name in names)
+               for directory, names, files in tree):
+            continue
+        for directory, _, _ in tree:
+            os.rmdir(directory)
+        removed.append(host.relative_to(project).as_posix())
+    return removed
+
+
 def uncommitted_paths(repo: Path) -> Set[str]:
     tracked = git_output(
         repo, "diff", "--no-renames", "--name-only", "--relative", "HEAD"

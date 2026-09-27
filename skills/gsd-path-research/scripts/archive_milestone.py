@@ -27,6 +27,7 @@ from typing import Iterator, NamedTuple, Optional, Sequence
 try:
     from isolation import (
         IsolationError,
+        prune_host_scratch,
         checkpoint as isolation_checkpoint,
         verify_landed_task_files,
     )
@@ -54,6 +55,7 @@ try:
 except ImportError:  # pragma: no cover - package import used by tests
     from scripts.isolation import (
         IsolationError,
+        prune_host_scratch,
         checkpoint as isolation_checkpoint,
         verify_landed_task_files,
     )
@@ -1001,6 +1003,7 @@ def prepare(repo: Path, slug: str) -> dict:
     project = repo.resolve()
     active_root = require_project_layout(project)
     with discussion_lock(active_root):
+        prune_host_scratch(active_root)
         return prepare_locked(project, active_root, slug)
 
 
@@ -1848,6 +1851,12 @@ def prepared_transaction(
 
 
 def preflight(repo: Path) -> dict:
+    project = repo.resolve()
+    active_root = require_project_layout(project)
+    configured = strict_state(project)[0].archive
+    current = (archive_from_state(project, configured)
+               if configured and not archive_is_committed(project, configured) else None)
+    prune_host_scratch(active_root, current)
     project, _, state, configured, archive, _, reviewed_head = prepared_transaction(
         repo,
         ("ship", "shipped"),

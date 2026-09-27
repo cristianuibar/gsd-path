@@ -147,6 +147,7 @@ def _require_ship_inputs(repo, expected_head):
     contracts._require_state(repo, "ship", "active", ".project")
     if _git(repo, "rev-parse", "HEAD") != expected_head:
         raise contracts.HandoffError("primary HEAD changed")
+    isolation.prune_host_scratch(repo / ".project")
     unexpected = sorted(path.name for path in (repo / ".project").iterdir()
                         if path.name not in isolation.PROJECT_ENTRIES)
     if unexpected:

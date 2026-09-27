@@ -65,6 +65,28 @@ class IsolationTests(unittest.TestCase):
             check=False,
         )
 
+    def test_prune_host_scratch_removes_only_file_free_claude_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary) / ".project"
+            for relative in (".claude/.cc-writes", "research/.claude/.cc-writes", "research/sub/.claude",
+                             "archive/001-old/research/.claude/.cc-writes",
+                             "archive/002-now/research/.claude/.cc-writes"):
+                (project / relative).mkdir(parents=True)
+            self.write(project, "plan/.claude/.cc-writes/kept.txt", "x")
+            (project / "discuss").mkdir()
+            (project / "discuss" / ".claude").symlink_to(project / "research", target_is_directory=True)
+
+            removed = isolation.prune_host_scratch(project, project / "archive" / "002-now")
+
+            self.assertEqual(sorted(removed), [".claude", "archive/002-now/research/.claude",
+                                               "research/.claude", "research/sub/.claude"])
+            self.assertFalse((project / ".claude").exists())
+            self.assertTrue((project / "research").is_dir())
+            self.assertTrue((project / "plan/.claude/.cc-writes/kept.txt").is_file())
+            self.assertTrue((project / "discuss/.claude").is_symlink())
+            self.assertTrue((project / "archive/001-old/research/.claude/.cc-writes").is_dir())
+            self.assertFalse((project / "archive/002-now/research/.claude").exists())
+
     def test_serial_isolate_uses_bound_branch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
