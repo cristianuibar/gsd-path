@@ -195,6 +195,64 @@ class MemberLandingTests(unittest.TestCase):
     def test_crash_before_the_record_writes_the_record_only(self) -> None:
         self.crash_then_recover("_write_member_record")
 
+    def test_crash_after_record_commit_reuses_proven_record(self) -> None:
+        self.edit()
+        with mock.patch.object(Path, "unlink", side_effect=RuntimeError("crash")):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        record = git(self.coordinator, "rev-parse", "HEAD")
+        result = isolation.recover_member_landing(self.coordinator, "T001")
+        self.assertEqual(result["commit"], record)
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), record)
+        self.assert_landed_once(result)
+
+    def test_recovery_blocks_moved_tip_after_landing_was_recorded(self) -> None:
+        self.edit()
+        with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
+            with self.assertRaises(RuntimeError):
+                self.land()
+        (self.bound / "other.py").write_text("other\n", encoding="utf-8")
+        git(self.bound, "add", "other.py")
+        git(self.bound, "commit", "-q", "--no-verify", "-m", "other landing")
+        moved = self.bound_tip()
+        with self.assertRaisesRegex(isolation.IsolationError, "moved"):
+            isolation.recover_member_landing(self.coordinator, "T001")
+        self.assertEqual(self.bound_tip(), moved)
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        self.assertTrue(self.journal().exists())
+
+    def test_landing_and_recovery_reject_changed_immutable_task_contract(self) -> None:
+        self.edit()
+        task = self.coordinator / TASK_FILE
+        task.write_text(TASK.replace("repo: web", "repo: sdk"), encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "contract differs"):
+            self.land()
+        self.assertEqual(self.bound_tip(), self.member_base)
+        task.write_text(TASK, encoding="utf-8")
+        with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
+            with self.assertRaises(RuntimeError):
+                self.land()
+        landing = self.bound_tip()
+        task.write_text(TASK.replace("repo: web", "repo: sdk"), encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "contract differs"):
+            isolation.recover_member_landing(self.coordinator, "T001")
+        self.assertEqual(self.bound_tip(), landing)
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        self.assertTrue(self.journal().exists())
+
+    def test_recovery_refuses_staged_coordinator_file_before_record(self) -> None:
+        self.edit()
+        with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
+            with self.assertRaises(RuntimeError):
+                self.land()
+        state = self.coordinator / ".project" / "STATE.md"
+        state.write_text(STATE + "extra\n", encoding="utf-8")
+        git(self.coordinator, "add", ".project/STATE.md")
+        with self.assertRaisesRegex(isolation.IsolationError, "coordinator worktree is dirty"):
+            isolation.recover_member_landing(self.coordinator, "T001")
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), self.base)
+        self.assertTrue(self.journal().exists())
+
     def test_recovery_blocks_when_someone_else_moved_the_member_branch(self) -> None:
         self.edit()
         with mock.patch.object(isolation, "_pick_member_landing", side_effect=RuntimeError("crash")):

@@ -722,6 +722,13 @@ def _member_contract(coordinator: Path, base: str, task_file: str, member: str) 
     fields, error = task_frontmatter(shown.stdout)
     if error or fields is None:
         raise IsolationError(error or f"unreadable task contract: {task_file}")
+    current, _ = _read_task_text(coordinator / task_file)
+    current_fields, current_error = task_frontmatter(current)
+    if current_error or current_fields is None:
+        raise IsolationError(current_error or f"unreadable current task: {task_file}")
+    immutable = ("id", "title", "repo", "files", "deps", "wave")
+    if any(current_fields.get(key) != fields.get(key) for key in immutable):
+        raise IsolationError(f"current task contract differs from {base}: {task_file}")
     if fields.get("repo") != member:
         raise IsolationError(f"{task_file} is not a task for member {member}")
     files = fields.get("files")
@@ -815,7 +822,27 @@ def _write_member_record(coordinator: Path, journal: Dict[str, object]) -> str:
     return current_sha(coordinator)
 
 
+def _existing_member_record(coordinator: Path, journal: Dict[str, object]) -> Optional[str]:
+    task_file = str(journal["task_file"])
+    body = (f"Task: {task_file}\nBase: {journal['base']}\n"
+            f"Member: {journal['member']} {journal['landing']} {journal['member_base']}")
+    for sha, subject, found_body in _first_parent_records(coordinator, "HEAD"):
+        if subject != journal["subject"] or found_body != body:
+            continue
+        parent, error = _single_parent(coordinator, sha)
+        if error or parent is None:
+            continue
+        changed = set(git_output(coordinator, "diff-tree", "--no-commit-id", "--name-only", "-r",
+                                 "--no-renames", parent, sha).splitlines())
+        if changed == {task_file}:
+            return sha
+    return None
+
+
 def _finish_member_landing(coordinator: Path, path: Path, journal: Dict[str, object]) -> Dict[str, object]:
+    dirty = sorted(uncommitted_paths(coordinator) - {str(journal["task_file"])})
+    if dirty:
+        raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
     record = _write_member_record(coordinator, journal)
     path.unlink()
     return {"commit": record, "landing": journal["landing"], "member": journal["member"],
@@ -829,6 +856,8 @@ def land_member(
 
     A journal in the coordinator Git directory is written before the member
     branch moves, so recover_member_landing never lands the same work twice.
+    A conflict keeps the source commit on its task sidecar for retry; the bound
+    member branch and coordinator stay unchanged.
     """
     coordinator = require_directory(coordinator, "coordinator")
     require_bound(coordinator)
@@ -879,6 +908,18 @@ def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]
     member = str(journal["member"])
     bound = Path(member_bound_checkout(coordinator, member)["checkout"])
     _, allowed = _member_contract(coordinator, str(journal["base"]), str(journal["task_file"]), member)
+    if journal.get("landing"):
+        record = _existing_member_record(coordinator, journal)
+        if record:
+            path.unlink()
+            return {"commit": record, "landing": journal["landing"], "member": member,
+                    "mode": "member", "source_commit": journal["source"], "state": "landed"}
+        if current_sha(bound) != journal["landing"]:
+            raise IsolationError("the member bound branch moved after the landing journal was written")
+        _require_first_parent_commit(bound, current_sha(bound), str(journal["landing"]))
+        error = _prove_member_landing(bound, journal, str(journal["landing"]), allowed)
+        if error:
+            raise IsolationError(f"member landing proof failed: {error}")
     if not journal.get("landing"):
         tip = current_sha(bound)
         if tip == journal["expected_parent"]:
