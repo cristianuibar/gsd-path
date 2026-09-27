@@ -3,7 +3,7 @@
 The state helper now validates research artifacts before writing research/done
 or advancing from research to decide. A rejected handoff leaves STATE.md bytes
 unchanged, including its log. This applies to both the active and lookahead tracks.
-The standalone research gate retains its research/active requirement.
+The transition into research/done still requires research/active.
 
 Implementation: `scripts/pipeline_state.py` calls the shared artifact validator
 in `scripts/check_handoffs.py` while holding the state lock, after expected-state
@@ -15,7 +15,7 @@ docs-audit bundles that already carry the state helper. Generated copies were
 synced and checked: 184 resources, no sync warnings. The CLI regression exercises
 the canonical helper and every bundled copy, testing invalid and valid evidence
 on both transitions and both tracks. Simplification review retained a single
-artifact validator and the existing standalone state gate.
+artifact validator and the existing state transition gate.
 
 ## Executable proof
 
