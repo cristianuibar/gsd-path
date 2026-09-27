@@ -359,7 +359,9 @@ document with a body is brownfield and routes to inspect. A title-only README,
 GSD Path skill bundles: a `gsd-path*` or `ogsd*` bundle is verified under a
 supported installer skill root or when it contains `SKILL.md`; a similarly
 named source directory still counts normally. Those scaffold-only trees stay
-greenfield and route to define. Other `.project/` content without STATE.md is
+greenfield and route to define. An ignored, untracked regular `.DS_Store`
+directly in `.project/` does not block setup, even if it appears while
+STATE.md is being created. Other `.project/` content without STATE.md is
 orphaned and blocks for recovery. An owned state, including the new-GitHub
 bootstrap state, routes by STATE.md after classification without running the
 initializer. After a milestone ships, the next one inspects again.
