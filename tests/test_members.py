@@ -461,6 +461,16 @@ class MemberTests(unittest.TestCase):
         with self.assertRaises(members.MembersError) as caught:
             members.member_role(member)
         self.assertIn(str(directory), str(caught.exception))
+        (self.coordinator / ".project" / "MEMBERS.md").write_text(
+            members.render([{"name": "web", "checkout": str(member),
+                             "remote": "https://github.com/acme/web.git",
+                             "integration": "default"}]),
+            encoding="utf-8",
+        )
+        validation = self.run_members("validate")
+        self.assertNotEqual(validation.returncode, 0)
+        self.assertIn(str(directory), validation.stderr)
+        self.assertIn(f"members.py repair --repo {self.coordinator}", validation.stderr)
 
     def test_live_coordinator_copy_cannot_take_over_member(self) -> None:
         member = self.joined()

@@ -314,8 +314,8 @@ def validate_members(repo: Path) -> list[dict[str, str]]:
         check_member(root, state.project, checkout, member["remote"])
         try:
             role = member_role(checkout)
-        except MembersError:
-            role = None
+        except MembersError as error:
+            raise MembersError(f"{error}; run members.py repair --repo {root}") from error
         if role != {"coordinator": root, "project": state.project, "name": member["name"]}:
             raise MembersError(
                 f"member marker for {member['name']} is missing or stale; "
