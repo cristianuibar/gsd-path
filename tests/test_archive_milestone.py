@@ -2005,6 +2005,76 @@ refuted
                 self.assertNotEqual(preflight.returncode, 0)
                 self.assertIn("older archive", preflight.stderr)
 
+    def test_ignored_ds_store_in_milestone_dirs_does_not_block_ship(self) -> None:
+        for directory in ("intent", "research", "plan", "tasks", "review", "discuss", "archive"):
+            with self.subTest(directory=directory), tempfile.TemporaryDirectory() as temporary_directory:
+                repo = Path(temporary_directory)
+                self.make_repo(repo)
+                if directory == "discuss":
+                    self.write_discussion(repo / ".project" / "discuss")
+                (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n")
+                (repo / ".project" / directory).mkdir(exist_ok=True)
+                (repo / ".project" / directory / ".DS_Store").write_text("finder\n")
+
+                archive = self.prepare_archive(repo)
+                rendered = self.render_manifest(repo)
+                self.assertEqual(rendered.returncode, 0, rendered.stderr)
+                self.assertNotIn(".DS_Store", (archive / "MANIFEST.md").read_text())
+                preflight = self.preflight(repo)
+                self.assertEqual(preflight.returncode, 0, preflight.stderr)
+                self.mark_shipped(repo)
+                self.git(repo, "add", ".project")
+                ship = self.commit_ship(repo, archive)
+                self.assertEqual(ship.returncode, 0, ship.stderr)
+                validate = self.run_command(
+                    sys.executable, str(ARCHIVE_SCRIPT), "validate", "--repo", str(repo), cwd=PROJECT_ROOT
+                )
+                self.assertEqual(validate.returncode, 0, validate.stderr)
+
+    def test_tracked_ds_store_moved_into_archive_is_listed_and_must_be_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n")
+            original = repo / ".project" / "intent" / ".DS_Store"
+            original.write_text("tracked Finder data\n")
+            self.assertEqual(self.git(repo, "add", "-f", str(original)).returncode, 0)
+
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            archived = archive / "intent" / ".DS_Store"
+            self.assertTrue(archived.is_file())
+            self.assertIn("- intent/.DS_Store", (archive / "MANIFEST.md").read_text())
+            unstaged = self.preflight(repo)
+            self.assertNotEqual(unstaged.returncode, 0)
+            self.assertIn("ignored current archive paths", unstaged.stderr)
+            self.assertEqual(self.git(repo, "add", "-f", str(archived)).returncode, 0)
+            staged = self.preflight(repo)
+            self.assertEqual(staged.returncode, 0, staged.stderr)
+
+    def test_is_ignored_junk_requires_an_ignored_untracked_junk_name(self) -> None:
+        from scripts import _common
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            outside = Path(temporary_directory) / "outside"
+            outside.mkdir()
+            (outside / ".DS_Store").write_text("x")
+            self.assertFalse(_common.is_ignored_junk(outside / ".DS_Store"))  # not a repository
+
+            repo = Path(temporary_directory) / "repo"
+            repo.mkdir()
+            self.git(repo, "init", "-q")
+            junk = repo / ".DS_Store"
+            junk.write_text("x")
+            self.assertFalse(_common.is_ignored_junk(junk))  # not ignored
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\nnotes.md\n")
+            self.assertTrue(_common.is_ignored_junk(junk))
+            (repo / "notes.md").write_text("x")
+            self.assertFalse(_common.is_ignored_junk(repo / "notes.md"))  # ignored, but not junk
+            self.git(repo, "add", "-f", ".DS_Store")
+            self.assertFalse(_common.is_ignored_junk(junk))  # tracked copies ship
+
     def test_preflight_rejects_ignored_files_in_the_current_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

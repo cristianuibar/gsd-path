@@ -812,6 +812,23 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["state"]["phase"], "inspect")
 
+    def test_validate_skips_ignored_ds_store_in_lookahead(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            run_git(repo, "init", "-q")
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            next_root = repo / ".project" / "next"
+            (next_root / "intent").mkdir(parents=True)
+            (next_root / "STATE.md").write_text(
+                state_text(phase="inspect", status="active"),
+                encoding="utf-8",
+            )
+            (next_root / "intent" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+
+            result = pipeline_state.validate_state(repo, ".project/next")
+
+            self.assertEqual(result["state"]["phase"], "inspect")
+
     def test_route_keeps_approved_lookahead_unbound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -1896,6 +1913,21 @@ class PipelineStateTests(unittest.TestCase):
                 "approval artifacts drifted",
             ):
                 state_checkpoint.resume_checkpoint(repo)
+
+    def test_resume_approval_ignores_ignored_ds_store_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            with mock.patch.object(
+                state_checkpoint,
+                "isolation_checkpoint",
+                side_effect=pipeline_state.IsolationError("simulated interruption"),
+            ):
+                with self.assertRaises(pipeline_state.PipelineStateError):
+                    state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+            (repo / ".project" / "plan" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+
+            state_checkpoint.resume_checkpoint(repo)
 
     def test_resume_approval_after_commit_before_journal_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

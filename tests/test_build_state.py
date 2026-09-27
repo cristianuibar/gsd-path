@@ -452,6 +452,17 @@ archive: null
         self.assertEqual(payload["error"]["code"], "invalid-task-file")
         self.assertIn("notes.md", payload["error"]["message"])
 
+    def test_ready_skips_an_ignored_ds_store_beside_canonical_tasks(self) -> None:
+        self.write_plan(((("T001", "One", (), ("one.py",)),),))
+        self.write_task("T001", task_text("T001", "One", 1, (), ("one.py",)))
+        self.commit_all("plan")
+        (self.repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+        (self.repo / ".project" / "tasks" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+
+        result, payload = self.cli("ready")
+
+        self.assertEqual(result.returncode, 0, payload)
+
     def test_ready_rejects_duplicate_task_ids(self) -> None:
         self.write_plan(((("T001", "One", (), ("one.py",)),),))
         content = task_text("T001", "One", 1, (), ("one.py",))

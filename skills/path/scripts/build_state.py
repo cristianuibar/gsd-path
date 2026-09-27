@@ -289,6 +289,8 @@ def _load_tasks(
         raise BuildStateError("missing-input", f"task directory is missing or unsafe: {tasks_dir}")
     task_paths: Dict[str, Path] = {}
     for path in sorted(tasks_dir.iterdir()):
+        if _common.is_ignored_junk(path):
+            continue
         match = TASK_FILE_RE.fullmatch(path.name)
         if match is None or not path.is_file() or path.is_symlink():
             raise BuildStateError(

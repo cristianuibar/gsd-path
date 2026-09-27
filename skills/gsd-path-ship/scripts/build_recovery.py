@@ -90,6 +90,8 @@ def settled_tasks(repo: Path) -> dict[str, tuple[str, dict]]:
         raise state.PipelineStateError("build recovery requires real task artifacts")
     tasks = {}
     for path in sorted(directory.iterdir()):
+        if state._common.is_ignored_junk(path):
+            continue
         if not re.fullmatch(r"T[0-9]{3}-[a-z0-9][a-z0-9-]*\.md", path.name):
             raise state.PipelineStateError(f"invalid recovery task path: {path.name}")
         text = state._read_real_file(path, path.name)
@@ -165,7 +167,8 @@ def validate_review_backup(repo: Path, recovery: dict, directory: Path) -> None:
         if path:
             expected[str(Path(path).relative_to(".project/review"))] = checkpoint_runtime()._git_text_at(repo, recovery["base"], path)
     actual = {str(path.relative_to(directory)): path.read_text(encoding="utf-8")
-              for path in directory.rglob("*") if path.is_file()} if directory.exists() else {}
+              for path in directory.rglob("*")
+              if path.is_file() and not state._common.is_ignored_junk(path)} if directory.exists() else {}
     if actual != expected:
         raise state.PipelineStateError("review backup differs from the recovery base")
 

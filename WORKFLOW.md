@@ -462,8 +462,8 @@ REPOSITORY.md, LESSONS.md, and the program artifacts (CHARTER.md,
 ROADMAP.md, top-level SYNTHESIS.md) remain active project metadata; a program
 ship also marks the milestone's roadmap entry `Status: shipped` with its
 archive pointer inside the ship commit. MANIFEST.md is
-written by same-directory temporary file plus atomic rename and lists actual
-archive contents, ship date, final verdicts, wave/task/cycle counts, and
+written by same-directory temporary file plus atomic rename and lists
+shippable archive files, ship date, final verdicts, wave/task/cycle counts, and
 carried-forward items. A precommit helper gate validates canonical files, the
 active-root allowlist, metadata, success rows, counts, and exact contents before
 STATE may become shipped.
@@ -480,8 +480,11 @@ active `.project/` tree. Archive preflight also removes them from the current
 uncommitted archive. At the `.project/` top level, ship input and active-root
 checks skip non-pipeline entries only when Git neither tracks nor would add
 them (for example, an ignored, untracked `.DS_Store`). Tracked entries still
-block, and pipeline-owned active paths block even when ignored. Nested entries
-and the current archive keep their existing checks; committed archives remain
+block, and pipeline-owned active paths block even when ignored. Strict checks
+under `.project/` and the current archive skip a regular `.DS_Store` only when
+Git ignores it and does not track it; the manifest omits that file. A tracked
+or non-ignored `.DS_Store` receives normal checks and is listed if archived.
+Other ignored archive files still block shipment, and committed archives remain
 untouched.
 
 One exception: a DOCS-AUDIT.md with pending `planned: no` rulings is copied

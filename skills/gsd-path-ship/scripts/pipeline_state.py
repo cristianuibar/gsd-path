@@ -793,6 +793,8 @@ def _selected_initial_branch(project: Path, state: PipelineState) -> str:
         if archive.is_symlink() or not archive.is_dir():
             raise PipelineStateError(f"archive root must be a real directory: {archive}")
         for child in archive.iterdir():
+            if _common.is_ignored_junk(child):
+                continue
             match = re.fullmatch(r"(\d{3,})-[a-z0-9][a-z0-9-]*", child.name)
             if (
                 child.is_symlink()
@@ -2079,6 +2081,8 @@ def _validate_next_layout(next_root: Path, state: PipelineState) -> None:
             continue
         if not path.is_file():
             raise PipelineStateError(f"lookahead has unsafe artifact: {path}")
+        if _common.is_ignored_junk(path):
+            continue
         artifact = relative.as_posix()
         required_phase = LOOKAHEAD_FIXED_ARTIFACTS.get(artifact)
         if required_phase is None and LOOKAHEAD_EVIDENCE_RE.fullmatch(artifact):

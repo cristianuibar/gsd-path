@@ -66,6 +66,11 @@ def _sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _is_junk_file(path: Path) -> bool:
+    # Drift digests skip OS junk by name: Finder rewrites it whatever its ignore status.
+    return path.name in pipeline_state._common.OS_JUNK_NAMES and path.is_file() and not path.is_symlink()
+
+
 def _tree_digest(path: Path, excluded: Sequence[str] = ()) -> str:
     if path.is_symlink() or not path.is_dir():
         raise PipelineStateError(f"promotion path must be a real directory: {path}")
@@ -74,7 +79,7 @@ def _tree_digest(path: Path, excluded: Sequence[str] = ()) -> str:
         if child.is_symlink():
             raise PipelineStateError(f"promotion path contains a symlink: {child}")
         relative = child.relative_to(path).as_posix()
-        if PurePosixPath(relative).parts[0] in excluded:
+        if PurePosixPath(relative).parts[0] in excluded or _is_junk_file(child):
             continue
         if child.is_dir():
             digest.update(f"d\0{relative}\0".encode())
@@ -87,15 +92,15 @@ def _tree_digest(path: Path, excluded: Sequence[str] = ()) -> str:
 
 
 def _checkpoint_artifact_digest(project: Path, mutable_paths: set[str]) -> str:
-    """Hash every approval artifact except the helper-owned metadata files."""
+    """Hash approval artifacts except helper-owned metadata and OS junk."""
     digest = hashlib.sha256()
     for child in sorted(project.rglob("*")):
         if child.is_symlink():
             raise PipelineStateError(f"checkpoint path contains a symlink: {child}")
         relative = child.relative_to(project).as_posix()
-        # Unsupported entries (OS junk) are refused by the checkpoint itself; leaving them
-        # out lets a refused approval resume after the owner removes them.
-        if relative in mutable_paths or relative.split("/", 1)[0] not in PROJECT_ENTRIES:
+        # Finder can rewrite OS junk during approval; it must not cause artifact drift.
+        if (relative in mutable_paths or relative.split("/", 1)[0] not in PROJECT_ENTRIES
+                or _is_junk_file(child)):
             continue
         if child.is_dir():
             digest.update(f"d\0{relative}\0".encode())
