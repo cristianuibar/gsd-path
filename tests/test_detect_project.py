@@ -411,6 +411,29 @@ class DetectProjectTests(unittest.TestCase):
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
 
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_ignored_ds_store_in_project_dir_does_not_orphan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            self.git(repo, "init", "-q")
+            (repo / ".project").mkdir()
+            (repo / ".project" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+            self.assertEqual(self.classify(repo)["verdict"], "orphan")  # not ignored yet
+
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            self.assertEqual(self.classify(repo)["verdict"], "greenfield")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
+                 "--template", str(ROOT / "skills/gsd-path/templates/state.md")],
+                cwd=repo, capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(result.stdout)["wrote_state"])
+            self.assertTrue((repo / ".project" / "STATE.md").is_file())
+
     def test_symlinked_project_directory_is_orphan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
