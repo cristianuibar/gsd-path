@@ -636,7 +636,7 @@ def _split_paths(block: str) -> Set[str]:
     return {line.strip() for line in block.splitlines() if line.strip()}
 
 
-# Top-level .project entries the pipeline owns; ship verification rejects anything else.
+# Top-level .project entries the pipeline owns; ship checks filter other entries by Git visibility.
 PROJECT_ENTRIES = frozenset({
     "STATE.md", "LESSONS.md", "REPOSITORY.md", "MEMBERS.md", "CHARTER.md", "ROADMAP.md",
     "SYNTHESIS.md",
@@ -650,8 +650,8 @@ def prune_host_scratch(project: Path, archive: Optional[Path] = None) -> list:
     Claude Code's Bash sandbox creates `<cwd>/.claude/.cc-writes` as an atomic-write staging dir each
     time it initializes, and adds `**/.claude/.cc-writes/` to the global gitignore. Git cannot ship
     empty dirs, so removal loses nothing. A `.claude` that holds any file or symlink is kept, and the
-    caller's allowlist still refuses it. Archives stay untouched except `archive`, the current
-    uncommitted one.
+    caller checks retained entries against Git visibility at the .project top level. Archives stay
+    untouched except `archive`, the current uncommitted one.
     """
     roots = [path for path in project.iterdir() if path.name != "archive"]
     if archive is not None:
