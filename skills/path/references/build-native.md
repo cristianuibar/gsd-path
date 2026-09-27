@@ -82,9 +82,12 @@ dispatch contract and perform steps 1–5 by hand.
    - `recovered`: the task is landed (`land` already stamped `status: done`
      and `base`). Retire a still-present task worktree with `isolation.py
      retire` only when the report shows it present, clean, and on the task
-     branch. If only `task_branch` remains, finish its proven interrupted
-     retirement with `retire --branch <task_branch> --force --landed-commit
-     <commit>`; both absent is valid.
+     branch. If the checkout directory is absent and `task_branch` remains,
+     finish its proven interrupted retirement with `retire --branch
+     <task_branch> --force --landed-commit <commit>`. This also clears a stale
+     registration at that task's sidecar path after the landing proof passes;
+     a locked registration fails without deleting the branch. Both absent is
+     valid.
    - `resume`: continue from the returned `base`, `task_branch`, and worktree
      (the primary itself when no task branch exists); when the report shows
      the worktree absent, return the task to `pending` only when ownership is
