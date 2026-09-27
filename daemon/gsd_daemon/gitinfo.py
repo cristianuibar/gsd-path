@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from typing import Optional
 
 
@@ -30,3 +31,13 @@ def git_branch_head_dirty(root) -> dict:
         "head": head or None,
         "dirty": bool(porcelain) if porcelain is not None else None,
     }
+
+
+def project_identity(root) -> dict:
+    root = str(root)
+    records = _git(root, "worktree", "list", "--porcelain", "-z") or ""
+    first = records.split("\0\0", 1)[0].split("\0")
+    main = next((field[len("worktree "):] for field in first if field.startswith("worktree ")), None)
+    if not main or "bare" in first:
+        return {"project_root": root, "repository": None}
+    return {"project_root": main, "repository": Path(main).name}

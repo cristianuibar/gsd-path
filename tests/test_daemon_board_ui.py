@@ -74,6 +74,28 @@ def sample_projects():
 
 @unittest.skipUnless(os.environ.get("GSD_UI_TEST"), "requires Orca embedded browser")
 class BoardUITests(unittest.TestCase):
+    def test_worktree_project_identity_is_visible(self):
+        project = ProjectStatus.from_dict({"root": "/worktrees/program/repo", "project": "repo",
+            "project_root": "/projects/gsd-path", "repository": "gsd-path"})
+        watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
+        watcher.poll_once.return_value = []
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.watcher_stop.set)
+        self.page = self.orca("tab", "create", "--url", f"http://127.0.0.1:{server.server_address[1]}")["browserPageId"]
+        tab = next(t for t in self.orca("tab", "list")["tabs"] if t["browserPageId"] == self.page)
+        self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
+        self.orca("wait", "--page", self.page, "--selector", ".pname")
+        self.assertIn("gsd-path", self.js("document.querySelector('.pname').textContent"))
+        self.assertIn("/projects/gsd-path", self.js("document.querySelector('.ppath').textContent"))
+        self.js("document.querySelector('.pname').click()")
+        self.assertIn("gsd-path", self.js("document.querySelector('.phead h1').textContent"))
+        self.assertEqual(self.js("document.querySelector('.switcher').selectedOptions[0].textContent"), "gsd-path")
+        text = self.js("document.querySelector('.project').textContent")
+        self.assertIn("Project folder: /projects/gsd-path", text)
+        self.assertIn("Worktree: /worktrees/program/repo", text)
+
     def test_runtime_handoff_is_visible_and_escaped(self):
         project = ProjectStatus.from_dict({"root": "/handoff", "project": "Handoff check",
             "phase": "plan", "status": "done", "handoff": {
