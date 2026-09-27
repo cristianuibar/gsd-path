@@ -293,7 +293,18 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
         cwd=os.fspath(member), capture_output=True, text=True, check=True,
     ).stdout.strip()).resolve()
     resolved = hooks_dir.resolve()
-    if member.resolve() in (resolved, *resolved.parents) and common not in (resolved, *resolved.parents):
+    worktree_output = subprocess.run(
+        ["git", "worktree", "list", "--porcelain", "-z"],
+        cwd=os.fspath(member), capture_output=True, check=True,
+    ).stdout
+    worktrees = [
+        Path(os.fsdecode(field[len(b"worktree "):])).resolve()
+        for field in worktree_output.split(b"\0") if field.startswith(b"worktree ")
+    ]
+    if not worktrees or (
+        any(resolved.is_relative_to(root) for root in worktrees)
+        and not resolved.is_relative_to(common)
+    ):
         raise InstallerError(
             f"git hooks path is inside the member worktree: {hooks_dir}; "
             "point core.hooksPath outside the worktree or unset it"
@@ -319,15 +330,25 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
     for name, hook, chained, chain in plan:
         note = " (keeps the existing hook as a chained hook)" if chain else ""
         lines.append(f"member hook: {hook}{note}" + (" (dry run)" if dry_run else ""))
-        if dry_run:
-            continue
-        hooks_dir.mkdir(parents=True, exist_ok=True)
-        if chain:
-            os.replace(hook, chained)
-        temporary = hooks_dir / f".{name}.gsd-path-tmp"
-        temporary.write_text(member_hook(interpreter, name), encoding="utf-8")
-        temporary.chmod(0o755)
-        os.replace(temporary, hook)
+    if dry_run:
+        return lines
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    staged = []
+    try:
+        for name, _, _, _ in plan:
+            temporary = hooks_dir / f".{name}.gsd-path-tmp"
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o755)
+            staged.append(temporary)
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                os.fchmod(output.fileno(), 0o755)
+                output.write(member_hook(interpreter, name))
+        for name, hook, chained, chain in plan:
+            if chain:
+                os.replace(hook, chained)
+            os.replace(hooks_dir / f".{name}.gsd-path-tmp", hook)
+    finally:
+        for temporary in staged:
+            temporary.unlink(missing_ok=True)
     return lines
 
 

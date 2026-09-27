@@ -83,10 +83,10 @@ class MemberInstallTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def install(self, coordinator=None):
+    def install(self, coordinator=None, member=None):
         return subprocess.run(
             [sys.executable, str(INSTALL), "--member-of", str(coordinator or self.coordinator),
-             "--project", str(self.member)],
+             "--project", str(member or self.member)],
             text=True, capture_output=True, check=False,
         )
 
@@ -205,6 +205,39 @@ class MemberInstallTests(unittest.TestCase):
         self.assertIn("inside the member worktree", self.install().stderr)
         self.assertEqual(sorted(path.name for path in self.hooks.iterdir()), ["pre-commit"])
         self.assertEqual((self.hooks / "pre-commit").read_text(encoding="utf-8"), "#!/bin/sh\nexit 0\n")
+
+    def test_existing_temporary_symlink_refuses_without_changing_hooks(self) -> None:
+        self.join()
+        executable(self.hooks / "pre-commit", "#!/bin/sh\nexit 0\n")
+        target = self.member / "app.py"
+        original = target.read_bytes()
+        (self.hooks / ".pre-commit.gsd-path-tmp").symlink_to(target)
+
+        result = self.install()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual((self.hooks / "pre-commit").read_text(encoding="utf-8"), "#!/bin/sh\nexit 0\n")
+        self.assertFalse((self.hooks / "pre-commit.gsd-path-chained").exists())
+        self.assertEqual(sorted(path.name for path in self.hooks.iterdir()),
+                         [".pre-commit.gsd-path-tmp", "pre-commit"])
+
+    def test_linked_worktree_refuses_hooks_inside_primary_checkout(self) -> None:
+        self.join()
+        linked = self.root / "web-linked"
+        git(self.member, "worktree", "add", "-q", "-b", "linked", str(linked))
+        primary_hooks = self.member / ".hooks"
+        primary_hooks.mkdir()
+        executable(primary_hooks / "pre-commit", "#!/bin/sh\nexit 0\n")
+        git(self.member, "config", "core.hooksPath", str(primary_hooks))
+
+        result = self.install(member=linked)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inside the member worktree", result.stderr)
+        self.assertEqual(sorted(path.name for path in primary_hooks.iterdir()), ["pre-commit"])
+        self.assertEqual((primary_hooks / "pre-commit").read_text(encoding="utf-8"),
+                         "#!/bin/sh\nexit 0\n")
 
 
 if __name__ == "__main__":
