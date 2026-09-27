@@ -3,7 +3,8 @@ name: gsd-path-forensics
 description: Use only when the user explicitly invokes $gsd-path-forensics. Read-only diagnosis of a stuck GSD Path pipeline. Runs existing helpers and names the exact retry command; never mutates state, git, or artifacts.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Forensics
 

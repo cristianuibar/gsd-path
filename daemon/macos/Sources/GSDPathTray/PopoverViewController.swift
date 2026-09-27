@@ -421,12 +421,11 @@ final class ProjectRowView: MenuRowButton {
         name = makeLabel(p.displayProject, size: 13, weight: .semibold)
         detail = makeLabel(p.trayDetail, size: 11.5, color: NSColor.secondaryLabelColor)
         let folder = p.project_root ?? p.root ?? "Unknown"
-        let paths = "Project folder: \(folder)" + (p.root != nil && p.root != folder ? "\nWorktree: \(p.root!)" : "")
-        let worktree = p.root.flatMap { $0 != folder ? $0 : nil }
-        let shortName = (p.git?.branch ?? p.branch)?.split(separator: "/").last.map(String.init)
-            ?? worktree.map { URL(fileURLWithPath: $0).lastPathComponent }
+        let worktree = p.worktree_root
+        let paths = "Project folder: \(folder)" + (worktree.map { "\nWorktree: \($0)" } ?? "")
         let visibleFolder = (folder as NSString).abbreviatingWithTildeInPath
-        location = makeLabel("Project folder: \(visibleFolder)" + (worktree != nil ? shortName.map { "\nWorktree: \($0)" } ?? "" : ""), size: 10.5, color: NSColor.secondaryLabelColor)
+        let visibleWorktree = worktree.map { ($0 as NSString).abbreviatingWithTildeInPath }
+        location = makeLabel("Project folder: \(visibleFolder)" + (visibleWorktree.map { "\nWorktree: \($0)" } ?? ""), size: 10.5, color: NSColor.secondaryLabelColor)
         for label in [name, location, detail] {
             label.maximumNumberOfLines = 0
             label.lineBreakMode = .byCharWrapping

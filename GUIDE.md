@@ -11,7 +11,7 @@ DOCS.md     hub — install, use, understand, update, FAQ
 └── README.md   reference tables, handoff contract, repo layout
 
 WORKFLOW.md   agent SOP (copied into your project with --project)
-AGENTS.md     operating rules (copied into your project)
+AGENTS.md     operating rules (marked block in your project; see UPDATE.md)
 ```
 
 | Doc | Read when |

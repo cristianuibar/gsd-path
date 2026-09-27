@@ -78,6 +78,7 @@ struct ProjectStatus: Codable {
     var project: String?
     var repository: String?
     var project_root: String?
+    var worktree_root: String?
     var milestone: String?
     var phase: String?
     var status: String?

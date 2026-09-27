@@ -3,7 +3,8 @@ name: gsd-path-migrate
 description: Preserve GSD Core project context and unfinished work for intake through GSD Path gates, and review coexistence on Claude Code and Codex. Use only when the user explicitly invokes $gsd-path-migrate.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # Migrate Core to Path
 

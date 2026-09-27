@@ -99,9 +99,8 @@ Use host flags such as `--claude --codex` instead of `--all` to select hosts.
 For project-local skills, run from your project directory and add `--local`
 to install and update commands. `--project PATH` selects where contracts are
 written; it does not change the directory used by `--local`. If the repo
-already has an `AGENTS.md` from another tool, the install refuses; see
-[first-install contract steps](UPDATE.md#update-project-contracts) before
-retrying. Run
+already has an `AGENTS.md`, the install adds a marked GSD Path block and keeps
+your text; see [project contracts](UPDATE.md#update-project-contracts). Run
 `npx @opengsd/gsd-path@latest --help` for all options. After installing, invoke
 `$path` in Codex or `/path` on slash-command hosts to start the pipeline.
 See [Install (summary)](#install-summary) for the host list and source-checkout commands.
@@ -167,8 +166,8 @@ daemon configuration.
 
 ![Project dashboard showing the history viewer link, milestone progress, expandable evidence, and usage with sample data](docs/images/dashboard-project.png)
 
-*Dashboard screenshots captured from the current source on September 19, 2026,
-using the repository's sample projects.*
+*Dashboard screenshots captured on September 19, 2026, using the repository's
+sample projects; the current project folder layout may differ.*
 
 Open **History & files** to browse project files and archived milestones,
 preview Markdown, or read a file at a selected Git commit. Relative document
@@ -195,8 +194,8 @@ menu-bar icon to open the dashboard directly.
 
 <img src="docs/images/macos-menu-bar.png" alt="OpenGSD Path native macOS panel with sample projects and its bottom toolbar" width="400">
 
-*Screenshots show the current UI with sample project data. The native panel is
-captured in its preview window.*
+*The native panel screenshot uses sample project data and was captured in its
+preview window; the current folder layout may differ.*
 
 ### Install the monitor
 

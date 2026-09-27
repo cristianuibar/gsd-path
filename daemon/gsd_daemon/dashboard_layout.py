@@ -57,7 +57,7 @@ LAYOUT_CSS = r'''
 LAYOUT_JS = r'''
 function boardPage(projects) {
   const q=CState.q.trim().toLowerCase();
-  const shown=projects.filter(p=>(CState.filter==='all'||stateOf(p)===CState.filter)&&[p.project,p.root,p.milestone].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const shown=projects.filter(p=>(CState.filter==='all'||stateOf(p)===CState.filter)&&[p.repository,p.project,p.root,p.milestone].filter(Boolean).join(' ').toLowerCase().includes(q));
   const labels=[['all','All'],['active','In progress'],['blocked','Blocked'],['shipped','Shipped'],['unverified','Unverified']];
   const filters=labels.map(([key,label])=>`<button data-filter="${key}" aria-pressed="${CState.filter===key}">${label}<span>${key==='all'?projects.length:projects.filter(p=>stateOf(p)===key).length}</span></button>`).join('');
   const empty=ONLINE===null?'Loading projects…':!ONLINE&&!projects.length?'Cannot load projects. Check the daemon connection.':!projects.length?'No projects yet. Add a watched folder to get started.':'No projects match this filter.';

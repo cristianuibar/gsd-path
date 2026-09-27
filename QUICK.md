@@ -22,7 +22,7 @@ Cursor, Zed, Kiro, Kimi Code.
 
 ```text
 [ ] 1. Install skills (step 1)
-[ ] 2. Install project rules in your repo (step 2) — skip if repo already has AGENTS.md
+[ ] 2. Install project rules in your repo (step 2) — an existing AGENTS.md keeps its text
 [ ] 3. Restart agent session
 [ ] 4. Open repo in agent; invoke router (step 3)
 [ ] 5. Approve gates as they appear (step 4)

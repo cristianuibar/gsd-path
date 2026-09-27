@@ -74,9 +74,10 @@ def sample_projects():
 
 @unittest.skipUnless(os.environ.get("GSD_UI_TEST"), "requires Orca embedded browser")
 class BoardUITests(unittest.TestCase):
-    def test_worktree_project_identity_is_visible(self):
-        project = ProjectStatus.from_dict({"root": "/worktrees/program/repo", "project": "repo",
-            "project_root": "/projects/gsd-path", "repository": "gsd-path"})
+    def test_nested_linked_project_folder_identity_is_visible(self):
+        project = ProjectStatus.from_dict({"root": "/worktrees/program/repo/app", "project": "Widget",
+            "project_root": "/projects/gsd-path/app", "worktree_root": "/worktrees/program/repo",
+            "repository": "gsd-path"})
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
         watcher.poll_once.return_value = []
         server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
@@ -88,14 +89,80 @@ class BoardUITests(unittest.TestCase):
         self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
         self.orca("wait", "--page", self.page, "--selector", ".pname")
         self.assertIn("gsd-path", self.js("document.querySelector('.pname').textContent"))
-        self.assertIn("/projects/gsd-path", self.js("document.querySelector('.ppath').textContent"))
+        self.assertEqual(self.js("document.querySelector('.ppath').textContent"),
+                         "Project folder: /projects/gsd-path/app · Worktree: /worktrees/program/repo")
         self.assertEqual(self.js("(() => {const p=document.querySelector('.ppath'); return p.scrollWidth<=p.clientWidth && p.scrollHeight<=p.clientHeight;})()"), "true", "Full project and worktree paths must fit without clipping")
+        self.js("(()=>{const q=document.querySelector('[data-search]');q.value='gsd-path';q.dispatchEvent(new Event('input',{bubbles:true}))})()")
+        self.assertEqual(self.js("document.querySelectorAll('.prow').length"), "1")
+        self.assertEqual(self.js("document.querySelector('.prow .pname span:last-child').textContent"), "gsd-path")
         self.js("document.querySelector('.pname').click()")
+        self.assertEqual(self.js("location.hash"), "#project=%2Fworktrees%2Fprogram%2Frepo%2Fapp")
         self.assertIn("gsd-path", self.js("document.querySelector('.phead h1').textContent"))
         self.assertEqual(self.js("document.querySelector('.switcher').selectedOptions[0].textContent"), "gsd-path")
         text = self.js("document.querySelector('.project').textContent")
-        self.assertIn("Project folder: /projects/gsd-path", text)
+        self.assertIn("Project folder: /projects/gsd-path/app", text)
         self.assertIn("Worktree: /worktrees/program/repo", text)
+        self.assertNotIn("Worktree: /worktrees/program/repo/app", text)
+
+    def test_nested_main_project_folder_has_no_worktree(self):
+        project = ProjectStatus.from_dict({"root": "/projects/gsd-path/app", "project": "Widget",
+            "project_root": "/projects/gsd-path/app", "repository": "gsd-path"})
+        watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
+        watcher.poll_once.return_value = []
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.watcher_stop.set)
+        self.page = self.orca("tab", "create", "--url", f"http://127.0.0.1:{server.server_address[1]}")["browserPageId"]
+        tab = next(t for t in self.orca("tab", "list")["tabs"] if t["browserPageId"] == self.page)
+        self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
+        self.orca("wait", "--page", self.page, "--selector", ".pname")
+        self.assertEqual(self.js("document.querySelector('.ppath').textContent"),
+                         "Project folder: /projects/gsd-path/app")
+        self.js("document.querySelector('.pname').click()")
+        text = self.js("document.querySelector('.project').textContent")
+        self.assertIn("Project folder: /projects/gsd-path/app", text)
+        self.assertNotIn("Worktree:", text)
+
+    def test_bare_backed_worktree_shows_tracked_project_and_checkout(self):
+        from gsd_daemon.gitinfo import project_identity
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        seed = base / "seed"
+        (seed / "app").mkdir(parents=True)
+        (seed / "app" / "README.md").write_text("project\n")
+        def git(cwd, *args):
+            subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", *args],
+                           cwd=cwd, check=True, capture_output=True)
+        git(seed, "init")
+        git(seed, "add", "-A")
+        git(seed, "commit", "-m", "init")
+        bare = base / "repository.git"
+        git(base, "clone", "--bare", str(seed), str(bare))
+        linked = base / "preview"
+        git(bare, "worktree", "add", "--detach", str(linked))
+        tracked = linked / "app"
+        project = ProjectStatus(root=str(tracked), project="Widget", **project_identity(tracked))
+        watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={project.root: project})
+        watcher.poll_once.return_value = []
+        server, _ = serve_in_thread(watcher, port=0, plugin=Mock())
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.watcher_stop.set)
+        self.page = self.orca("tab", "create", "--url", f"http://127.0.0.1:{server.server_address[1]}")["browserPageId"]
+        tab = next(t for t in self.orca("tab", "list")["tabs"] if t["browserPageId"] == self.page)
+        self.addCleanup(self.orca, "tab", "close", "--index", str(tab["index"]))
+        self.orca("wait", "--page", self.page, "--selector", ".pname")
+        self.assertEqual(self.js("document.querySelector('.pname').textContent"), bare.name)
+        self.assertEqual(self.js("document.querySelector('.ppath').textContent"),
+                         f"Project folder: {tracked} · Worktree: {linked.resolve()}")
+        self.js("document.querySelector('.pname').click()")
+        self.assertEqual(self.js("new URLSearchParams(location.hash.slice(1)).get('project')"), str(tracked))
+        self.assertEqual(self.js("document.querySelector('.phead h1').textContent.trim()"), bare.name)
+        text = self.js("document.querySelector('.project').textContent")
+        self.assertIn(f"Project folder: {tracked}", text)
+        self.assertIn(f"Worktree: {linked.resolve()}", text)
 
     def test_runtime_handoff_is_visible_and_escaped(self):
         project = ProjectStatus.from_dict({"root": "/handoff", "project": "Handoff check",

@@ -35,6 +35,7 @@ export const PROJECT_RUNTIME_SCRIPTS = [
   "state_promote.py",
   "discussion_validate.py",
   "integration.py",
+  "members.py",
 ];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";

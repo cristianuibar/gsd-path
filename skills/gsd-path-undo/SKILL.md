@@ -3,7 +3,8 @@ name: gsd-path-undo
 description: Use only when the user explicitly invokes $gsd-path-undo. Preview and apply helper-owned undo of an unpublished checkpoint, last task landing, uncommitted ship archive, or untracked lookahead track. Never invent git reset, revert, or force-push.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Undo
 

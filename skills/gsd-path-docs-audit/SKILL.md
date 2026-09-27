@@ -3,7 +3,8 @@ name: gsd-path-docs-audit
 description: Verify Markdown claims against the actual code, commands, and GSD Path artifacts. Use only when the user explicitly invokes $gsd-path-docs-audit or an active $gsd-path router explicitly routes to this phase.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Docs Audit
 
