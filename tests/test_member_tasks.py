@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import build_state, check_handoffs, check_task_briefs
+from scripts import build_state, check_handoffs, check_task_briefs, pipeline_state, state_checkpoint
 from tests.test_build_state import BRANCH, plan_text, run_git, task_text
-from tests.test_task_briefs import CONTRACT, TASK_TEMPLATE
+from tests.test_task_briefs import CONTRACT, PLAN_WAVE, TASK_TEMPLATE
 
 ROOT = Path(__file__).resolve().parents[1]
 MEMBERS = ROOT / "scripts" / "members.py"
@@ -99,6 +99,31 @@ class MemberTaskBriefTests(unittest.TestCase):
                                        verify="test -f src/app.py"))
         self.assertIn("path missing at the layer base: src/app.py", self.problems())
         check_task_briefs.validate_task_briefs(self.coordinator, self.head, landed_bases={"T001": old})
+
+    def test_plan_approval_resolves_landed_base_in_member(self) -> None:
+        old = git(self.member, "rev-parse", "HEAD")
+        self.assertNotEqual(subprocess.run(
+            ["git", "cat-file", "-e", f"{old}^{{commit}}"], cwd=self.coordinator,
+            capture_output=True, check=False,
+        ).returncode, 0)
+        git(self.member, "rm", "-q", "src/app.py")
+        git(self.member, "commit", "-q", "-m", "drop app")
+        git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
+        (self.coordinator / ".project" / "plan").mkdir()
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_text(
+            PLAN_WAVE.format(title="demo"), encoding="utf-8")
+        task = member_task("T001", "src/new.py", "Follow `src/app.py`.",
+                           verify="test -f src/app.py")
+        task = task.replace("status: pending", "status: done").replace(
+            "agent: null", "agent: coder").replace("base: null", f"base: {old}")
+        self.write("T001", task)
+
+        state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+
+        self.write("T001", task.replace(f"base: {old}", f"base: {'0' * 40}"))
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError,
+                                    "landed task has invalid historical base"):
+            state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
 
     def test_repo_must_name_a_member(self) -> None:
         self.write("T001", member_task("T001", "src/app.py", "Edit `src/app.py`.", repo="sdk"))
