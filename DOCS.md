@@ -157,6 +157,9 @@ state or bypasses a gate.
 
 ### Gates (what you approve)
 
+These are the usual checkpoints. For the opt-in quick-lane grant, see
+[pre-approval in the README](README.md#start-your-first-project).
+
 | Phase | You do |
 | --- | --- |
 | Define | Answer gaps or review milestone derivation; approve intent playback |

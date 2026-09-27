@@ -116,6 +116,12 @@ contain newer changes.
 4. Resume later from the same folder with the router. Use `$path status`
    (Codex) or `/path status` to inspect progress without advancing.
 
+For an unattended quick-lane run, invoke `$gsd-path --pre-approve intent,plan`
+in Codex or `/gsd-path --pre-approve intent,plan` on slash-command hosts before
+milestone intent approval. This grants those two gates for one milestone when
+their checks pass. Required answers, failed checks, and other approval gates
+still pause for you. Shipping always needs manual approval.
+
 For a missing skill or an install problem, run:
 
 ```bash

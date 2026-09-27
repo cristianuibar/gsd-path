@@ -129,8 +129,9 @@ _Avoid_: task landing, ship commit, approval alone
 
 **Pre-approval**:
 An owner's grant, given at invocation and recorded in the STATE.md Log, that
-lets one quick-lane milestone pass its intent and plan gates without asking
-when their checks pass. Each gate uses it once; ship is never pre-approved.
+lets one quick-lane milestone pass its selected intent or plan gates without
+asking when their checks pass. A failed approval can retry; ship is never
+pre-approved.
 _Avoid_: auto-approve, skipping a gate
 
 **Lookahead promotion**:

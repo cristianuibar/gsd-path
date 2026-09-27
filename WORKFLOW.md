@@ -75,11 +75,11 @@ cancellation is a blocked result, not a skipped result.
 
 Non-interactive phases auto-advance when their artifacts pass their gates.
 User approval remains required at define, roadmap, plan, final-review patch
-selection, and final shipping checkpoints. Decide auto-advances after its evidence gate
-unless a `NEEDS-USER` decision remains. On the quick lane, a router invoked
-with `--pre-approve intent,plan` records that grant in STATE.md and passes
-those two gates without asking when `workflow_run.py preauthorize` confirms
-their checks; ship and every other gate still ask.
+selection, and final shipping checkpoints. Decide auto-advances after its
+evidence gate unless a `NEEDS-USER` decision remains. The opt-in quick-lane
+grant for selected intent or plan gates is described in the
+[router contract](skills/gsd-path/SKILL.md#pre-approval); all other gates
+still ask.
 
 Every user-facing checkpoint follows one handoff shape: **Outcome** states what
 was produced or learned, **Review** links the primary canonical artifact by its

@@ -31,8 +31,10 @@ writes a fixed artifact under `.project/`; the next phase reads only from disk.
 You can close your session at any point and a fresh session resumes exactly
 where you left off.
 
-You are the gate: nothing advances past intent, plan approval, or final review
-without your approval.
+You approve intent, plan, and final shipping. For an unattended quick-lane run,
+you can grant intent and plan approval when invoking the router; see
+[pre-approval in the README](README.md#start-your-first-project). Final shipping
+still needs your approval.
 
 ### The pipeline
 
