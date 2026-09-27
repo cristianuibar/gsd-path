@@ -2838,7 +2838,7 @@ def install(
                     results.append(
                         "codex-legacy: backed up "
                         f"{len(legacy_transaction.moved)} entries to "
-                        f"{legacy_transaction.backup}"
+                        f"{legacy_transaction.backup}{LOCAL_EDITS_NOTE}"
                     )
             for index, plan in enumerate(deployments):
                 transaction = TargetTransaction(plan.root)

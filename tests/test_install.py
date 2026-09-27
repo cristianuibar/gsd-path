@@ -923,6 +923,16 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((legacy / "unrelated").is_dir())
         self.assertNotIn("gsd-path", {entry.name for entry in legacy.iterdir()})
         self.assertIn("codex-legacy: backed up 1 entries", output)
+        legacy_backup_line = next(
+            line
+            for line in output.splitlines()
+            if line.startswith("codex-legacy: backed up 1 entries")
+        )
+        self.assertIn(
+            "local edits inside these skills are not carried forward "
+            "(see UPDATE.md#local-additions)",
+            legacy_backup_line,
+        )
 
     def test_dry_run_makes_no_destination_changes(self):
         target = self.root / "dry" / "skills"

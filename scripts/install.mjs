@@ -1486,7 +1486,7 @@ export async function install(sourceRoot, plans, options = {}) {
         if (legacyTransaction.backup !== null) {
           results.push(
             `codex-legacy: backed up ${legacyTransaction.moved.length} entries to ` +
-              `${legacyTransaction.backup}`
+              `${legacyTransaction.backup}${LOCAL_EDITS_NOTE}`
           );
         }
       }

@@ -612,6 +612,10 @@ test("codex migrates legacy root and preserves unrelated entries", async () => {
   assert.ok(fs.statSync(path.join(legacy, "unrelated")).isDirectory());
   assert.ok(!fs.readdirSync(legacy).includes("gsd-path"));
   assert.match(results.join("\n"), /codex-legacy: backed up 1 entries/);
+  assert.match(
+    results.find((line) => line.startsWith("codex-legacy: backed up 1 entries")),
+    /local edits inside these skills are not carried forward \(see UPDATE\.md#local-additions\)/
+  );
 });
 
 test("migrateLegacy false skips the legacy root entirely", async () => {
