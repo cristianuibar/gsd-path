@@ -1233,3 +1233,15 @@ test("project runtime version install update refresh", () => {
   cli("--runtime-upgrade");
   assert.equal(installed(), "10.1.0");
 });
+
+test("--member-of delegates member hook install to install.py", () => {
+  const member = path.join(root, "member");
+  fs.mkdirSync(member);
+  spawnSync("git", ["init", "-q", "-b", "main"], { cwd: member });
+  const result = spawnSync(process.execPath, [
+    path.join(REPO_ROOT, "scripts/install.mjs"), "--member-of", path.join(root, "coordinator"),
+    "--project", member, "--no-color",
+  ], { encoding: "utf8", env });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stderr, /is not a member of/);
+});
