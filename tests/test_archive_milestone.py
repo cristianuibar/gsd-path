@@ -982,7 +982,7 @@ refuted
 
                 calls = []
                 locking = types.ModuleType("msvcrt")
-                locking.LK_LOCK = 1
+                locking.LK_NBLCK = 1
                 locking.LK_UNLCK = 2
                 locking.locking = lambda descriptor, mode, size: calls.append(mode)
                 sys.modules["fcntl"] = None

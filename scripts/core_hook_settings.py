@@ -60,7 +60,8 @@ def plan(args):
         "after": base64.b64encode(after).decode(),
     }
     # Settings may contain secrets; the review/rollback copy is owner-only.
-    with open(args.receipt, "x", encoding="utf-8", opener=lambda path, flags: os.open(path, flags, 0o600)) as handle:
+    with open(args.receipt, "x", encoding="utf-8", newline="\n",
+              opener=lambda path, flags: os.open(path, flags, 0o600)) as handle:
         json.dump(receipt, handle, indent=2)
         handle.write("\n")
     return {"status": "planned", "receipt": str(args.receipt.absolute())}

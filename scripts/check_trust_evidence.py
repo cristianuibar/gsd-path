@@ -350,7 +350,7 @@ def _validate_shipped_state(
         root = Path(temporary)
         state_path = root / path
         state_path.parent.mkdir(parents=True)
-        state_path.write_text(content, encoding="utf-8")
+        state_path.write_bytes(content.encode("utf-8"))
         result = subprocess.run(
             [
                 sys.executable,

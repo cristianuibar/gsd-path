@@ -27,6 +27,17 @@ def _hold_lock(path: str, ready, release) -> None:
         release.wait(30)
 
 
+def _hold_directory_mutex(path: str, ready, release, crash: bool) -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import _common as common
+
+    with common.directory_mutex(Path(path)):
+        ready.set()
+        release.wait(30)
+        if crash:
+            os._exit(1)
+
+
 class AtomicWriteTests(unittest.TestCase):
     def test_writes_lf_bytes_exactly(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -112,6 +123,55 @@ class ExclusiveLockTests(unittest.TestCase):
                 self.assertTrue(path.exists())
             with _common.exclusive_lock(path):
                 pass
+
+
+@windows_only
+class DirectoryMutexTests(unittest.TestCase):
+    def hold(self, directory: Path, crash: bool = False):
+        context = multiprocessing.get_context("spawn")
+        ready, release = context.Event(), context.Event()
+        holder = context.Process(target=_hold_directory_mutex,
+                                 args=(str(directory), ready, release, crash))
+        holder.start()
+        self.assertTrue(ready.wait(30))
+        return holder, release
+
+    def test_second_process_is_refused_while_held(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            holder, release = self.hold(Path(directory))
+            try:
+                with self.assertRaises(BlockingIOError):
+                    with _common.directory_mutex(Path(directory), blocking=False):
+                        pass
+                with self.assertRaises(TimeoutError):
+                    with _common.directory_mutex(Path(directory), timeout=0.3):
+                        pass
+            finally:
+                release.set()
+                holder.join(30)
+            with _common.directory_mutex(Path(directory), blocking=False):
+                pass
+
+    def test_crashed_holder_releases_the_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            holder, release = self.hold(Path(directory), crash=True)
+            release.set()
+            holder.join(30)
+            with _common.directory_mutex(Path(directory), timeout=5):
+                pass
+
+    def test_distinct_directories_do_not_contend(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first, second = Path(directory) / "a", Path(directory) / "b"
+            first.mkdir()
+            second.mkdir()
+            holder, release = self.hold(first)
+            try:
+                with _common.directory_mutex(second, blocking=False):
+                    pass
+            finally:
+                release.set()
+                holder.join(30)
 
 
 class ProcessAliveTests(unittest.TestCase):

@@ -113,9 +113,7 @@ else:
         )
         from scripts import _common
 
-if sys.platform == "win32":
-    import msvcrt
-else:
+if sys.platform != "win32":
     import fcntl
 
 
@@ -396,19 +394,8 @@ def discussion_lock(active_root: Path) -> Iterator[None]:
         lock_path = Path(lock_value)
         if not lock_path.is_absolute():
             lock_path = active_root.parent / lock_path
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("a+b") as handle:
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            try:
-                yield
-            finally:
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        with _common.exclusive_lock(lock_path):
+            yield
         return
 
     descriptor = os.open(active_root, os.O_RDONLY)

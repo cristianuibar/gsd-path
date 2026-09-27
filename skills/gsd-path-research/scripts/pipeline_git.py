@@ -449,19 +449,16 @@ def _write_bind_next_journal(path: Path, value: dict[str, object]) -> None:
         raise PipelineGitError(f"bind-next journal temporary path exists: {temporary}")
     descriptor: Optional[int] = None
     try:
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        descriptor = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _common.O_BINARY, 0o600
+        )
+        with os.fdopen(descriptor, "wb") as handle:
             descriptor = None
-            json.dump(value, handle, indent=2, sort_keys=True)
-            handle.write("\n")
+            handle.write((json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8"))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        _common.replace(temporary, path)
+        _common.fsync_directory(path.parent)
     finally:
         if descriptor is not None:
             os.close(descriptor)

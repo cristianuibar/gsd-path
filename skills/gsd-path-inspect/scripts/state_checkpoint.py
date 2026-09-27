@@ -341,11 +341,7 @@ def _converge_checkpoint_file(path: Path, before: str, after: str, label: str) -
 
 def _unlink_checkpoint_journal(path: Path) -> None:
     path.unlink()
-    descriptor = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    pipeline_state._common.fsync_directory(path.parent)
 
 
 def _resume_checkpoint_locked(

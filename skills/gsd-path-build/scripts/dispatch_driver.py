@@ -343,7 +343,7 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
                   "child_timeout": options.child_timeout, "outcome": None,
                   "dispatched_at": now(), "origin": "question" if state.get("answered") else "dispatch"})
     state_path = attempt_dir / "state.json"
-    (attempt_dir / "brief.md").write_text(brief(state), encoding="utf-8")
+    (attempt_dir / "brief.md").write_bytes(brief(state).encode("utf-8"))
     save_state(state_path, state)
     wrapper = subprocess.Popen(
         [sys.executable, "-B", str(Path(__file__).resolve()), "_child", "--state", str(state_path)],

@@ -470,7 +470,7 @@ def merge_artifacts(
         lines.append(artifact["text"].rstrip())
         lines.append("")
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    output.write_bytes(("\n".join(lines).rstrip() + "\n").encode("utf-8"))
     return {
         "output": str(output.resolve()),
         "families": families,

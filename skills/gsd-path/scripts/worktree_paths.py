@@ -68,7 +68,7 @@ def _workspace(primary: Path, pin: bool) -> Path:
         receipt.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(dir=receipt.parent)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 json.dump({"primary": str(primary), "root": str(workspace)}, handle)
             try:
                 os.link(temporary, receipt)

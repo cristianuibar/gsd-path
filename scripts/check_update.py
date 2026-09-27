@@ -37,8 +37,8 @@ def is_newer(latest, installed):
 def _write_cache(now, latest):
     try:
         CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(
-            json.dumps({"checked_at": now, "latest": latest}), encoding="utf-8"
+        CACHE_PATH.write_bytes(
+            json.dumps({"checked_at": now, "latest": latest}).encode("utf-8")
         )
     except OSError:
         pass
