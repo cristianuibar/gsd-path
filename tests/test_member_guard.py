@@ -115,6 +115,27 @@ class MemberGuardTests(unittest.TestCase):
         self.assertNotEqual(pushed.returncode, 0)
         self.assertIn("members.py repair", pushed.stderr)
 
+    def test_join_requires_origin_main_baseline(self) -> None:
+        git(self.member, "update-ref", "-d", "refs/remotes/origin/main")
+        result = subprocess.run(
+            [sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
+             "--name", "web", "--checkout", str(self.member)],
+            text=True, capture_output=True, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refs/remotes/origin/main", result.stderr)
+        self.assertIn("git fetch origin", result.stderr)
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+
+    def test_pre_push_blocks_when_origin_main_baseline_disappears(self) -> None:
+        self.join()
+        self.member_commit("gsd-path/acme-M001")
+        git(self.member, "update-ref", "-d", "refs/remotes/origin/main")
+        result = self.push(f"refs/heads/main {self.base} refs/heads/main {NULL}")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refs/remotes/origin/main", result.stderr)
+        self.assertIn("git fetch origin", result.stderr)
+
     def test_member_path_refs_publish_only_when_authorized(self) -> None:
         self.join()
         work = self.member_commit("gsd-path/acme-M001")

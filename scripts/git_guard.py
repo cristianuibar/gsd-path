@@ -541,10 +541,8 @@ def member_pre_push_violations(lines, role):
     """Member mode: the member's own STATE is ignored; coordinator refs need authorization."""
     checkout, project = repo_root(), role["project"]
     reserved = members.member_ref_prefixes(project)
-    exclude = ["--not", "refs/remotes/origin/main"] if subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main"],
-        capture_output=True, text=True,
-    ).returncode == 0 else []
+    members.require_origin_main(checkout)
+    exclude = ["--not", "refs/remotes/origin/main"]
     member_work = None
     found = []
     for _, local_sha, remote_ref, remote_sha in _push_updates(lines):

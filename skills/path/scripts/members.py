@@ -254,6 +254,7 @@ def check_member(
     default = _common.run_git(checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     if default.returncode != 0 or default.stdout.strip() != "origin/main":
         raise MembersError(f"member remote default must be main: {checkout}")
+    require_origin_main(checkout)
     member_state = checkout / ".project" / "STATE.md"
     if member_state.exists() or member_state.is_symlink():
         if member_state.is_symlink() or not member_state.is_file():
@@ -272,6 +273,14 @@ def check_member(
     if colliding:
         raise MembersError("member refs collide with coordinator names: " + ", ".join(colliding))
     return remote
+
+
+def require_origin_main(checkout: Path) -> None:
+    baseline = _common.run_git(
+        checkout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"
+    )
+    if baseline.returncode != 0:
+        raise MembersError("member requires refs/remotes/origin/main; run git fetch origin")
 
 
 def member_ref_prefixes(project: str) -> tuple[str, ...]:
