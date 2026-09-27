@@ -626,6 +626,44 @@ class DispatchDriverTests(unittest.TestCase):
         run_git(root, "checkout", "--", ".")
         run_git(root, "clean", "-fdq", "--", "src")
 
+    def activate_native_serial(self, root: Path) -> str:
+        head = self.head(root)
+        subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
+                        "--repo", str(root), "--expected-head", head, "--task-id", "T001", "--round-size", "1"],
+                       check=True, capture_output=True)
+        subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"), "activate-task",
+                        "--repo", str(root), "--base", head, "--task-id", "T001", "--agent", "build_t001",
+                        "--task-file", ".project/tasks/T001-demo.md"], check=True, capture_output=True)
+        (root / "src").mkdir(exist_ok=True)
+        (root / "src/app.py").write_text("print('hello')\n")
+        return head
+
+    def test_finish_lands_a_native_retry_after_a_blocked_driver_attempt(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="badverify")["status"], "blocked")
+        self.reset_after_failed_serial_attempt(root)
+        # The documented retry checkpoints the block bookkeeping, so the retry has a new base.
+        dispatch_driver.append_log(root / ".project/tasks/T001-demo.md",
+                                   "- 2026-09-27 — orchestrator: rejected attempt 1, Verify failed")
+        run_git(root, "commit", "-am", "build: record T001 block")
+        self.activate_native_serial(root)
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt["status"], "landed", receipt)
+        self.assertEqual(self.subjects(root)[0], "T001: Demo task T001")
+        self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text())
+
+    def test_finish_refuses_a_blocked_record_at_the_same_base(self) -> None:
+        root = self.root
+        head = self.fixture(root, deps_t002="[T001]")
+        self.assertEqual(self.round(root, "--wait", "60", mode="badverify")["status"], "blocked")
+        self.reset_after_failed_serial_attempt(root)
+        self.assertEqual(self.activate_native_serial(root), head)
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt, {"reason": "task T001 dispatch record is blocked; use round",
+                                   "status": "blocked"})
+        self.assertEqual(self.head(root), head)
+
     def test_attempt_limit_per_milestone_stops_for_a_person(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")

@@ -1988,6 +1988,17 @@ def main(argv=None) -> int:
             current.recover()
             records = [state for state in latest_states(current.root)
                        if state["task_id"] == arguments.task_id]
+            native = None
+            if records and records[0].get("outcome") is not None:
+                # A settled driver record at an older base is superseded by a native retry.
+                try:
+                    native = state_from_task(primary, arguments.task_id)
+                except DriverStop:
+                    pass
+                if native and native["base"] != records[0].get("base"):
+                    records = []
+                else:
+                    native = None
             if arguments.task_id in current.proven:
                 commit = current.proven[arguments.task_id]
                 if records and records[0].get("outcome") is None:
@@ -2004,7 +2015,7 @@ def main(argv=None) -> int:
                 current.classify(record)
             else:  # a coder dispatched by hand: derive the isolate from the task frontmatter
                 current.receipt["landed"].append(
-                    finish_task(primary, state_from_task(primary, arguments.task_id)))
+                    finish_task(primary, native or state_from_task(primary, arguments.task_id)))
             result = {**current.receipt, "status": "landed" if current.receipt["landed"] else "blocked"}
         elif arguments.action == "answer":
             result = answer(primary, arguments.task_id, arguments.answer)
