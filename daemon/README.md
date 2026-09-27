@@ -140,8 +140,8 @@ cost. The project page also shows the runtime handoff described under
   Refresh (requests a project scan and reloads status), the last update time,
   and the Settings menu (Path settings, Plugin, Watched folders, Appearance).
 - **Project controls**: Board / Milestones view switcher; All / In progress /
-  Blocked / Shipped / Unverified filters with counts; and search by project
-  name, path, or milestone.
+  Blocked / Shipped / Unverified filters with counts; and search by repository
+  name, project name, discovered project path, or milestone.
 - **Watched folders**: Add folder opens a picker; click a folder or `..` to
   navigate, then select the current folder. Stop watching opens a confirmation
   dialog; Cancel or clicking outside it leaves the folder watched. Adding or
@@ -149,13 +149,16 @@ cost. The project page also shows the runtime handoff described under
   dashboards receive the current watched folders on their next status poll.
 - **Board**: one table row per project, blocked first, then in progress and
   Unverified, then shipped. Columns: Project, Current milestone, Status, Tasks,
-  and Usage. These include the project path, phase progress, state and health
-  reason, last activity, cost, and turns.
+  and Usage. The Project column names the Git repository when available and
+  shows the project folder and any linked worktree folder on a wrapping line.
+  Other columns include phase progress, state and health reason, last activity,
+  cost, and turns.
 - **Milestones**: each project shows Shipped, Current / latest, and Planned
   milestone columns, with explicit messages when earlier or later records are
   absent.
 - **Project page** (click a row, or the tray's `#project=<root>` deep link): the
-  toolbar becomes Back and a project switcher. The page shows a facts strip
+  toolbar becomes Back and a project switcher. Its heading shows the project
+  folder and any linked worktree folder separately. The page shows a facts strip
   (state, health with its reason, milestone, branch, head, integration mode,
   updated, cost, turns) and the charter vision. The left column holds the phase
   track with entry dates; the current milestone with goal, intent, task
@@ -318,7 +321,11 @@ Top level: `schema` (`gsd-path-daemon/status/v1`), `generated_at`,
 VERSION-stamp probes plus the update-check cache, never a git fetch; see
 "Plugin lifecycle"). Each project object carries (keys are stable and additive):
 
-- Identity/state: `root`, `project`, `milestone`, `phase`, `status`,
+- Identity/state: `root` (discovered project path), `project` (project state name),
+  `repository` (Git repository folder name when available), `project_root`
+  (corresponding path under the main checkout, or the discovered project path
+  for bare-backed worktrees and non-Git projects), `worktree_root` (linked
+  checkout folder, or null for a main checkout), `milestone`, `phase`, `status`,
   `branch`, `archive`, `integration`, `status_source`, `state_mtime`,
   `last_activity_iso`.
 - Progress: `tasks` (`[{id, title, wave, status, files}]`), `tasks_done`,

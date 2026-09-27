@@ -44,11 +44,13 @@ toolbar. The dropdown is a status board in native macOS colors
 hover): the last update time, then projects under In progress (blocked
 first) and Shipped.
 
-Each row is one button (click to open the project page) with the project name,
-an 8-segment phase meter (red when blocked) and one detail line: milestone,
-phase, wave, task progress, criteria met, the date the phase started and the
-current milestone's cost and turns; shipped rows show the ship date and task
-count from the archive manifest. The tooltip carries the milestone stack
+Each row is one button (click to open the project page) with the Git repository
+name when available and an 8-segment phase meter (red when blocked). It shows
+the project folder and any linked worktree folder on separate, wrapping lines;
+home paths use `~` in the row, while the tooltip retains full paths. Status,
+task and criteria progress, and current milestone usage appear on separate
+lines. Shipped rows show the ship date and task count from the archive
+manifest. The tooltip also carries the milestone stack
 (`M001 ✓  M002 ●  M003 ○`), the current goal and the health reason. Rows carry
 no commands or actions. The fixed footer, outside the scrolling project list,
 holds the daemon lifecycle row and an icon toolbar: open dashboard, plugin
