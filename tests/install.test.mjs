@@ -73,12 +73,6 @@ function makeSource(base) {
       `# ${name}\n${installer.GUARD_MARKER}\n`
     );
   }
-  for (const name of installer.PROJECT_RUNTIME_SCRIPTS) {
-    fs.writeFileSync(
-      path.join(src, "scripts", name),
-      `# ${name}\n${installer.PROJECT_RUNTIME_MARKER}\n`
-    );
-  }
   fs.copyFileSync(
     path.join(REPO_ROOT, "scripts", installer.PROJECT_STATUS_LAUNCHER),
     path.join(src, "scripts", installer.PROJECT_STATUS_LAUNCHER)
@@ -1225,6 +1219,16 @@ test("project runtime version install update refresh", () => {
   const stamp = path.join(project, ".gsd-path/runtime.json");
   const installed = () => JSON.parse(fs.readFileSync(stamp, "utf8")).version;
   assert.equal(installed(), "9.9.9");
+  // The Node CLI installs the Python-owned runtime file list, so nothing can drift.
+  const missing = spawnSync("python3", ["-c",
+    "import json, sys; from pathlib import Path; import runtime_store, status_runtime; "
+    + "pin = json.loads((Path(sys.argv[1]) / '.gsd-path/runtime.json').read_text()); "
+    + "home = status_runtime.runtime_home() / pin['digest']; "
+    + "print(json.dumps([n for n in runtime_store.RUNTIME_FILES if not (home / n).is_file()]))",
+    project,
+  ], { cwd: path.join(REPO_ROOT, "scripts"), encoding: "utf8" });
+  assert.equal(missing.status, 0, missing.stderr);
+  assert.deepEqual(JSON.parse(missing.stdout), []);
   version("10.0.0");
   cli("--claude", "--update", "--dry-run");
   assert.equal(installed(), "9.9.9");

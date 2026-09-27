@@ -114,30 +114,23 @@ class WorktreePlacementTests(unittest.TestCase):
         integration.remove_registered_worktree(self.repo, branch, legacy)
         self.assertFalse(legacy.exists())
 
-    def test_python_and_javascript_runtime_packages_create_managed_sidecars(self):
+    def test_runtime_package_creates_managed_sidecars(self):
         source = Path(__file__).resolve().parents[1]
-        javascript = subprocess.run(
-            ["node", "--input-type=module", "-e",
-             "import {PROJECT_RUNTIME_SCRIPTS} from './scripts/install.mjs'; console.log(JSON.stringify(PROJECT_RUNTIME_SCRIPTS))"],
-            cwd=source, text=True, capture_output=True, check=True,
-        )
         manifest = json.loads((source / "scripts/skill-resources.json").read_text())
-        for host, names in (("python", install.PROJECT_RUNTIME_SCRIPTS), ("javascript", json.loads(javascript.stdout))):
-            with self.subTest(host=host):
-                runtime = self.root / host
-                runtime.mkdir()
-                for name in names:
-                    if f"scripts/{name}" in manifest["package_files"]:
-                        shutil.copy2(source / "scripts" / name, runtime / name)
-                result = subprocess.run(
-                    [sys.executable, "-B", str(runtime / "isolation.py"), "isolate-verify",
-                     "--repo", str(self.repo), "--base", self.base, "--name", host],
-                    cwd=runtime, text=True, capture_output=True,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                worktree = Path(json.loads(result.stdout)["worktree"])
-                self.assertTrue(worktree.is_relative_to(self.managed))
-                self.assertEqual(test_isolation.git(worktree, "rev-parse", "HEAD"), self.base)
+        runtime = self.root / "runtime"
+        runtime.mkdir()
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            if f"scripts/{name}" in manifest["package_files"]:
+                shutil.copy2(source / "scripts" / name, runtime / name)
+        result = subprocess.run(
+            [sys.executable, "-B", str(runtime / "isolation.py"), "isolate-verify",
+             "--repo", str(self.repo), "--base", self.base, "--name", "runtime"],
+            cwd=runtime, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        worktree = Path(json.loads(result.stdout)["worktree"])
+        self.assertTrue(worktree.is_relative_to(self.managed))
+        self.assertEqual(test_isolation.git(worktree, "rev-parse", "HEAD"), self.base)
 
 
 if __name__ == "__main__":

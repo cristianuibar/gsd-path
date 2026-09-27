@@ -14,29 +14,6 @@ export const CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n";
 export const HOOKS_DIRECTORY = ".gsd-path";
 export const GUARD_SCRIPTS = ["guard_hook.py", "git_guard.py"];
 export const GUARD_MARKER = "gsd-path guard";
-export const PROJECT_RUNTIME_SCRIPTS = [
-  "pipeline_state.py",
-  "roadmap.py",
-  "check_handoffs.py",
-  "check_task_briefs.py",
-  "isolation.py",
-  "discussion_records.py",
-  "pipeline_git.py",
-  "promote_lookahead.py",
-  "detect_project.py",
-  "pipeline_diagnose.py",
-  "pipeline_undo.py",
-  "archive_milestone.py",
-  "review_panel.py",
-  "_common.py",
-  "worktree_paths.py",
-  "build_recovery.py",
-  "state_checkpoint.py",
-  "state_promote.py",
-  "discussion_validate.py",
-  "integration.py",
-  "members.py",
-];
 export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";
 export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
