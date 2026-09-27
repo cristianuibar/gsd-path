@@ -333,16 +333,17 @@ class IsolationTests(unittest.TestCase):
         )
 
     def test_land_rejects_a_rule_that_ignores_project_state(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary) / "repo"
-            repo.mkdir()
-            self.init_bound_repo(repo)
-            with self.assertRaisesRegex(
-                isolation.IsolationError,
-                r"\.gitignore:1:build/ excludes \.project/build/verify-ledger\.jsonl",
-            ):
-                self.serial_land_with_gitignore(repo, "build/\n")
-            self.assertEqual(git(repo, "log", "-1", "--format=%s"), "declare gitignore")
+        for rule, expected in (
+            ("build/", r"\.gitignore:1:build/ excludes \.project/build/verify-ledger\.jsonl"),
+            ("ROADMAP.md", r"\.gitignore:1:ROADMAP\.md excludes \.project/ROADMAP\.md"),
+        ):
+            with self.subTest(rule=rule), tempfile.TemporaryDirectory() as temporary:
+                repo = Path(temporary) / "repo"
+                repo.mkdir()
+                self.init_bound_repo(repo)
+                with self.assertRaisesRegex(isolation.IsolationError, expected):
+                    self.serial_land_with_gitignore(repo, f"{rule}\n")
+                self.assertEqual(git(repo, "log", "-1", "--format=%s"), "declare gitignore")
 
     def test_land_accepts_anchored_negated_and_junk_rules(self) -> None:
         for gitignore in ("/build/\n", "*.jsonl\n!.project/build/*.jsonl\n", ".DS_Store\n"):

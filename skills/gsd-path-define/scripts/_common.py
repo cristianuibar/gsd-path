@@ -37,11 +37,22 @@ VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL
 # `build/` would otherwise drop them silently from every commit.
 PROJECT_PROBE_PATHS = (
     ".project/STATE.md",
+    ".project/LESSONS.md",
+    ".project/REPOSITORY.md",
+    ".project/MEMBERS.md",
+    ".project/CHARTER.md",
+    ".project/ROADMAP.md",
+    ".project/SYNTHESIS.md",
     VERIFY_LEDGER_PATH,
     ".project/build/evidence.json",
     ".project/archive/001-probe/build/evidence.json",
-    *(f".project/{name}/probe.md"
-      for name in ("intent", "research", "plan", "tasks", "review", "discuss", "next")),
+    ".project/intent/probe.md",
+    ".project/research/probe.md",
+    ".project/plan/probe.md",
+    ".project/tasks/probe.md",
+    ".project/review/probe.md",
+    ".project/discuss/probe.md",
+    ".project/next/probe.md",
 )
 
 
