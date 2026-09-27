@@ -40,6 +40,20 @@ struct TrayUITest {
         func require(_ condition: Bool, _ message: String) {
             if !condition { print("FAIL: \(message)"); exit(1) }
         }
+        let identity = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"/Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline","project":"widget-counter","repository":"gsd-path","project_root":"/Users/operator/github/open-gsd/gsd-path","phase":"build","branch":"gsd-path/M001","tasks_done":1,"tasks_total":3,"current_wave":1,"phase_log":[{"phase":"build","date":"2026-09-16"}],"spend":{"milestones":{"M001":{"turns":523,"cost":62.13}}}}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [identity]))
+        vc.view.layoutSubtreeIfNeeded()
+        let identityRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
+        let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
+        require(identityLabels.contains { $0.stringValue == "Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: /Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline" }, "both folders are labeled")
+        for label in identityLabels {
+            require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
+            require(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.frame.width, height: .greatestFiniteMagnitude)).height <= label.frame.height, "all lines fit in their label")
+        }
+        vc.show(status: status)
         require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
         require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
         let rows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
@@ -57,7 +71,7 @@ struct TrayUITest {
         require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
         require(rows[2].toolTip == "M003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
         require(rows[0].toolTip == "M002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
-        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, In build, M004 · build") == true, "row accessibility label")
+        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, Project folder: /sample/gsd, In build, M004 · build") == true, "row accessibility label")
         rows[2].hovered = true
         var nativeSelection = false
         rows[2].effectiveAppearance.performAsCurrentDrawingAppearance {

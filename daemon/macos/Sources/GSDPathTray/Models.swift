@@ -76,6 +76,8 @@ struct ProjectStatus: Codable {
     var workflow: WorkflowStatus?
     var root: String?
     var project: String?
+    var repository: String?
+    var project_root: String?
     var milestone: String?
     var phase: String?
     var status: String?
@@ -149,7 +151,7 @@ enum Health {
 let canonicalPhases = ["inspect", "define", "research", "decide", "roadmap", "plan", "build", "ship"]
 
 extension ProjectStatus {
-    var displayProject: String { project ?? "?" }
+    var displayProject: String { repository ?? project ?? "?" }
     var displayPhase: String { phase ?? "?" }
     var displayStatus: String { status ?? "?" }
     var isShipped: Bool { projectState == "shipped" }

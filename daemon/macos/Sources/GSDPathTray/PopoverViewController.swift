@@ -405,13 +405,14 @@ private func inset(_ view: NSView, top: CGFloat = 0) -> NSStackView {
     return box
 }
 
-// MARK: - Project row: name, phase meter and one detail line
+// MARK: - Project row: identity, folders and status
 
 final class ProjectRowView: MenuRowButton {
     let project: ProjectStatus
     let meter: PhaseMeterView
     let name: NSTextField
     let detail: NSTextField
+    let location: NSTextField
     private let dashboardURL: URL
 
     init(project p: ProjectStatus, dashboardURL: URL) {
@@ -419,6 +420,15 @@ final class ProjectRowView: MenuRowButton {
         self.dashboardURL = dashboardURL
         name = makeLabel(p.displayProject, size: 13, weight: .semibold)
         detail = makeLabel(p.trayDetail, size: 11.5, color: NSColor.secondaryLabelColor)
+        let folder = p.project_root ?? p.root ?? "Unknown"
+        let paths = "Project folder: \(folder)" + (p.root != nil && p.root != folder ? "\nWorktree: \(p.root!)" : "")
+        location = makeLabel(paths, size: 10.5, color: NSColor.secondaryLabelColor)
+        for label in [name, location, detail] {
+            label.maximumNumberOfLines = 0
+            label.lineBreakMode = .byCharWrapping
+            label.cell?.wraps = true
+            label.cell?.isScrollable = false
+        }
         meter = PhaseMeterView(p.phaseMeter, blocked: p.projectState == "blocked")
         super.init()
         title = ""
@@ -430,10 +440,10 @@ final class ProjectRowView: MenuRowButton {
         let top = NSStackView(views: [name, meter])
         top.spacing = 12
         top.distribution = .fill
-        let column = NSStackView(views: [top, detail])
+        let column = NSStackView(views: [top, location, detail])
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 1
+        column.spacing = 4
         column.edgeInsets = NSEdgeInsets(top: 5, left: 9, bottom: 5, right: 9)
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
@@ -443,11 +453,12 @@ final class ProjectRowView: MenuRowButton {
             column.trailingAnchor.constraint(equalTo: trailingAnchor),
             column.bottomAnchor.constraint(equalTo: bottomAnchor),
             top.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -18),
-            detail.widthAnchor.constraint(lessThanOrEqualTo: column.widthAnchor, constant: -18),
+            location.widthAnchor.constraint(equalTo: top.widthAnchor),
+            detail.widthAnchor.constraint(equalTo: top.widthAnchor),
         ])
         let health = p.attentionItems.compactMap(\.label).joined(separator: " · ")
         toolTip = [p.stackText, p.goalText, health.isEmpty ? nil : health].compactMap { $0 }.joined(separator: "\n")
-        setAccessibilityLabel("\(p.displayProject), \(p.stateLabel), \(p.trayDetail)")
+        setAccessibilityLabel("\(p.displayProject), \(paths), \(p.stateLabel), \(p.trayDetail)")
     }
 
     // The whole row is one control: labels never swallow the click.
@@ -456,6 +467,7 @@ final class ProjectRowView: MenuRowButton {
     override func hoverChanged() {
         super.hoverChanged()
         name.textColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.labelColor
+        location.textColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.secondaryLabelColor
         detail.textColor = hovered ? NSColor.alternateSelectedControlTextColor : NSColor.secondaryLabelColor
         meter.highlighted = hovered
     }
