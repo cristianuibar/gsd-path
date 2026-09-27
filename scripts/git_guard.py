@@ -21,6 +21,7 @@ try:
     from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
     from pipeline_git import is_ship_subject, task_commit_body
     from pipeline_state import _completion_status
+    import members
 except ImportError as error:  # pragma: no cover - broken install
     print(
         f"gsd-path guard: pipeline runtime is missing ({error}); commit blocked; "
@@ -56,6 +57,10 @@ LANDING_HINT = (
 PRODUCT_HINT = (
     f"while this worktree carries unfinished milestone state, {LANDING_HINT}; "
     "findings during ship reopen through the patch plan"
+)
+MEMBER_PUSH_HINT = (
+    "a member publishes its coordinator's Path refs, or work from them, only with "
+    "a coordinator authorization for that exact ref and object"
 )
 PUBLICATION_HINT = (
     "unshipped milestone work reaches a remote only as its ship commit "
@@ -514,13 +519,7 @@ def ship_commit_at(sha, bound):
     )
 
 
-def pre_push_violations(lines):
-    """Refuse ref updates that publish unshipped milestone work.
-
-    A bound-named ref moves only to, or away from, its strict ship commit. Any
-    other ref may not carry a commit whose STATE.md still owes a ship commit.
-    """
-    found = []
+def _push_updates(lines):
     for line in lines:
         parts = line.split()
         if len(parts) != 4:
@@ -528,6 +527,60 @@ def pre_push_violations(lines):
         local_ref, local_sha, remote_ref, remote_sha = parts
         if any(re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None for sha in (local_sha, remote_sha)):
             raise ValueError(f"unexpected pre-push SHA: {line!r}")
+        yield local_ref, local_sha, remote_ref, remote_sha
+
+
+def _commits(*arguments):
+    listed = subprocess.run(
+        ["git", "rev-list", *arguments], capture_output=True, text=True, check=True
+    )
+    return set(listed.stdout.split())
+
+
+def member_pre_push_violations(lines, role):
+    """Member mode: the member's own STATE is ignored; coordinator refs need authorization."""
+    checkout, project = repo_root(), role["project"]
+    reserved = members.member_ref_prefixes(project)
+    members.require_origin_main(checkout)
+    exclude = ["--not", "refs/remotes/origin/main"]
+    member_work = None
+    found = []
+    for _, local_sha, remote_ref, remote_sha in _push_updates(lines):
+        if local_sha == NULL_SHA:
+            if remote_ref.startswith(reserved) and not members.authorized(
+                checkout, project, "delete", remote_ref, remote_sha
+            ):
+                found.append(f"{remote_ref} deletion is not authorized by {project}; {MEMBER_PUSH_HINT}")
+            continue
+        if members.authorized(checkout, project, "push", remote_ref, local_sha):
+            continue
+        if remote_ref.startswith(reserved):
+            found.append(
+                f"{remote_ref} <- {local_sha[:12]} is not authorized by {project}; {MEMBER_PUSH_HINT}"
+            )
+            continue
+        if member_work is None:
+            bound = [ref for ref in subprocess.run(
+                ["git", "for-each-ref", "--format=%(refname)", "refs/heads/gsd-path/"],
+                capture_output=True, text=True, check=True,
+            ).stdout.split() if ref.startswith(f"refs/heads/gsd-path/{project}-")]
+            member_work = _commits(*bound, *exclude) if bound else set()
+        if member_work & _commits(local_sha, *exclude):
+            found.append(
+                f"{remote_ref} <- {local_sha[:12]} carries unpublished {project} member work; "
+                f"{MEMBER_PUSH_HINT}"
+            )
+    return found
+
+
+def pre_push_violations(lines):
+    """Refuse ref updates that publish unshipped milestone work.
+
+    A bound-named ref moves only to, or away from, its strict ship commit. Any
+    other ref may not carry a commit whose STATE.md still owes a ship commit.
+    """
+    found = []
+    for local_ref, local_sha, remote_ref, remote_sha in _push_updates(lines):
         names = [ref.removeprefix("refs/heads/") for ref in (local_ref, remote_ref)]
         bounds = {name for name in names if BOUND_BRANCH.fullmatch(name)}
         if bounds:
@@ -713,13 +766,17 @@ def main(argv):
         return report([reason] if reason else [], "mutation")
     if len(argv) > 1 and argv[1] == "pre-push":
         try:
-            found = pre_push_violations(sys.stdin.read().splitlines())
+            lines = sys.stdin.read().splitlines()
+            role = members.member_role(repo_root())
+            found = member_pre_push_violations(lines, role) if role else pre_push_violations(lines)
         except Exception as error:
             print(f"gsd-path guard: inspection failed; push blocked ({error})", file=sys.stderr)
             return 1
         return report(found, "push")
     try:
-        reason = closed_milestone_reason()
+        # A member follows its coordinator, so its own STATE does not gate commits.
+        member = members.member_role(repo_root()) is not None
+        reason = None if member else closed_milestone_reason()
         if reason:
             return report([reason], "commit")
         entries = staged_entries()
@@ -740,7 +797,7 @@ def main(argv):
         )
         if abandon is not None:
             current_archive = abandon[0]
-        landing = product_commit_violations(entries, subject, body)
+        landing = [] if member else product_commit_violations(entries, subject, body)
     except Exception as error:
         print(
             f"gsd-path guard: inspection failed; commit blocked ({error}); "

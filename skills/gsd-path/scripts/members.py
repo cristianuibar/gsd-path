@@ -39,17 +39,11 @@ GITHUB_REMOTE_RE = re.compile(
 )
 # Member-side Path refs carry the coordinator name, so they cannot collide with
 # a member's own Path history.
-MEMBER_REF_FORMATS = (
-    "refs/heads/gsd-path/{}-",
-    "refs/heads/gsd-path-task/{}-",
-    "refs/heads/gsd-path-verify/{}-",
-    "refs/heads/gsd-path-integrate/{}-",
-    "refs/remotes/origin/gsd-path/{}-",
-    "refs/remotes/origin/gsd-path-task/{}-",
-    "refs/remotes/origin/gsd-path-verify/{}-",
-    "refs/remotes/origin/gsd-path-integrate/{}-",
-    "refs/tags/milestone/{}-",
-)
+MEMBER_BRANCH_FORMATS = ("gsd-path/{}-", "gsd-path-task/{}-", "gsd-path-verify/{}-", "gsd-path-integrate/{}-")
+MEMBER_TAG_FORMAT = "refs/tags/milestone/{}-"
+# The coordinator records one authorization per (ref, object) before it
+# publishes a member Path ref; member pre-push accepts only a matching one.
+AUTHORIZATION_PREFIX = "refs/gsd-path/authorizations/"
 HEADER = (
     "# Members\n\n"
     "<!-- Written by members.py add. One section per member repository, in\n"
@@ -260,6 +254,7 @@ def check_member(
     default = _common.run_git(checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     if default.returncode != 0 or default.stdout.strip() != "origin/main":
         raise MembersError(f"member remote default must be main: {checkout}")
+    require_origin_main(checkout)
     member_state = checkout / ".project" / "STATE.md"
     if member_state.exists() or member_state.is_symlink():
         if member_state.is_symlink() or not member_state.is_file():
@@ -270,12 +265,59 @@ def check_member(
             raise MembersError(f"member STATE.md is unreadable: {error}") from error
         if state.milestone is not None and (state.phase, state.status) != ("shipped", "done"):
             raise MembersError(f"member has an active milestone: {state.milestone}")
-    prefixes = tuple(pattern.format(coordinator_name) for pattern in MEMBER_REF_FORMATS)
+    prefixes = member_ref_prefixes(coordinator_name) + tuple(
+        "refs/remotes/origin/" + branch.format(coordinator_name) for branch in MEMBER_BRANCH_FORMATS
+    )
     refs = _git(checkout, "for-each-ref", "--format=%(refname)").splitlines()
     colliding = [ref for ref in refs if ref.startswith(prefixes)]
     if colliding:
         raise MembersError("member refs collide with coordinator names: " + ", ".join(colliding))
     return remote
+
+
+def require_origin_main(checkout: Path) -> None:
+    baseline = _common.run_git(
+        checkout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"
+    )
+    if baseline.returncode != 0:
+        raise MembersError("member requires refs/remotes/origin/main; run git fetch origin")
+
+
+def member_ref_prefixes(project: str) -> tuple[str, ...]:
+    """Ref prefixes a member repo reserves for the coordinator named `project`."""
+    return tuple(
+        "refs/heads/" + branch.format(project) for branch in MEMBER_BRANCH_FORMATS
+    ) + (MEMBER_TAG_FORMAT.format(project),)
+
+
+def _authorization_ref(project: str, kind: str, ref: str) -> str:
+    if not NAME_RE.fullmatch(project) or not ref.startswith(("refs/heads/", "refs/tags/")):
+        raise MembersError(f"cannot authorize {ref} for {project}")
+    return f"{AUTHORIZATION_PREFIX}{project}/{kind}/{ref}"
+
+
+def _authorize(checkout: Path, project: str, kind: str, ref: str, sha: str) -> None:
+    authorization = _authorization_ref(project, kind, ref)
+    _git(checkout, "update-ref", authorization, sha)
+
+
+def authorize_push(checkout: Path, project: str, ref: str, sha: str) -> None:
+    """Authorize `ref` at exactly `sha` until cleared (a commit or tag object)."""
+    _authorize(checkout, project, "push", ref, sha)
+
+
+def authorize_delete(checkout: Path, project: str, ref: str, expected_remote_sha: str) -> None:
+    """Allow deleting remote `ref` only while it still points at `expected_remote_sha`."""
+    _authorize(checkout, project, "delete", ref, expected_remote_sha)
+
+
+def authorized(checkout: Path, project: str, kind: str, ref: str, sha: str) -> bool:
+    if not ref.startswith(("refs/heads/", "refs/tags/")):
+        return False
+    result = _common.run_git(
+        checkout, "rev-parse", "--verify", "--quiet", _authorization_ref(project, kind, ref)
+    )
+    return result.returncode == 0 and result.stdout.strip() == sha
 
 
 def render(members: Sequence[dict[str, str]]) -> str:
