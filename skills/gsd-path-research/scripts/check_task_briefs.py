@@ -12,10 +12,13 @@ sys.dont_write_bytecode = True
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-try:
-    import _common
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts import _common
+if __package__:
+    from . import _common
+else:
+    try:
+        import _common
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import _common
 
 
 DEFAULT_TASKS_DIR = ".project/tasks"
@@ -189,10 +192,13 @@ def _member_bases(root: Path):
 
     def locate(name: str) -> Optional[Tuple[Path, str]]:
         if name not in cache:
-            try:
-                import members
-            except ImportError:  # pragma: no cover - package import used by tests
-                from scripts import members
+            if __package__:
+                from . import members
+            else:
+                try:
+                    import members
+                except ImportError:  # pragma: no cover - package import used by tests
+                    from scripts import members
             try:
                 listed = {member["name"]: Path(member["checkout"]) for member in members.read_members(root)}
                 checkout = listed.get(name)

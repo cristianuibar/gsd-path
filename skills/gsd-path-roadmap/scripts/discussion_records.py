@@ -16,14 +16,20 @@ from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
 def _load_pipeline_modules():
-    try:
-        import archive_milestone
-        import pipeline_state
-        import _common
+    if __package__:
+        from . import archive_milestone
+        from . import pipeline_state
+        from . import _common
         return _common, archive_milestone, pipeline_state
-    except ModuleNotFoundError as error:
-        if error.name not in {"archive_milestone", "pipeline_state", "_common"}:
-            raise
+    else:
+        try:
+            import archive_milestone
+            import pipeline_state
+            import _common
+            return _common, archive_milestone, pipeline_state
+        except ModuleNotFoundError as error:
+            if error.name not in {"archive_milestone", "pipeline_state", "_common"}:
+                raise
     try:
         from scripts import archive_milestone, pipeline_state, _common
         return _common, archive_milestone, pipeline_state

@@ -27,25 +27,35 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Iterator, Mapping, Optional, Sequence
 
-try:
-    from isolation import (
+if __package__:
+    from .isolation import (
         IsolationError,
         authorized_task_worktree,
         checkpoint as isolation_checkpoint,
         collect_artifact_recoveries,
     )
-    import _common
-    import roadmap
-except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-    if error.name not in {"isolation", "_common", "roadmap"}:
-        raise
-    from scripts.isolation import (
-        IsolationError,
-        authorized_task_worktree,
-        checkpoint as isolation_checkpoint,
-        collect_artifact_recoveries,
-    )
-    from scripts import _common, roadmap
+    from . import _common
+    from . import roadmap
+else:
+    try:
+        from isolation import (
+            IsolationError,
+            authorized_task_worktree,
+            checkpoint as isolation_checkpoint,
+            collect_artifact_recoveries,
+        )
+        import _common
+        import roadmap
+    except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+        if error.name not in {"isolation", "_common", "roadmap"}:
+            raise
+        from scripts.isolation import (
+            IsolationError,
+            authorized_task_worktree,
+            checkpoint as isolation_checkpoint,
+            collect_artifact_recoveries,
+        )
+        from scripts import _common, roadmap
 
 try:  # pragma: no cover - exercised only on Windows
     import fcntl
@@ -565,12 +575,15 @@ def _pending_answers(repo: Path) -> tuple[list[dict[str, str]], Optional[str]]:
     if not answers.exists() and not answers.is_symlink():
         return [], None
     try:
-        try:
-            from discussion_records import DiscussionError, pending_records
-        except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-            if error.name != "discussion_records":
-                raise
-            from scripts.discussion_records import DiscussionError, pending_records
+        if __package__:
+            from .discussion_records import DiscussionError, pending_records
+        else:
+            try:
+                from discussion_records import DiscussionError, pending_records
+            except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+                if error.name != "discussion_records":
+                    raise
+                from scripts.discussion_records import DiscussionError, pending_records
     except ModuleNotFoundError as error:
         if error.name not in {"scripts", "scripts.discussion_records"}:
             raise
@@ -1681,10 +1694,13 @@ def transition_state(
         if state.phase in {"research", "decide"} and (
             after.phase != state.phase or after.status == "done"
         ):
-            try:
-                import check_handoffs
-            except ImportError:  # pragma: no cover - package imports used by tests
-                from scripts import check_handoffs
+            if __package__:
+                from . import check_handoffs
+            else:
+                try:
+                    import check_handoffs
+                except ImportError:  # pragma: no cover - package imports used by tests
+                    from scripts import check_handoffs
             validator = {
                 "research": check_handoffs.validate_research_artifacts,
                 "decide": check_handoffs.validate_decide_artifacts,

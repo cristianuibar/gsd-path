@@ -23,10 +23,13 @@ sys.dont_write_bytecode = True
 from pathlib import Path
 from typing import Optional, Sequence
 
-try:
-    import _common
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts import _common
+if __package__:
+    from . import _common
+else:
+    try:
+        import _common
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import _common
 
 
 ARCHIVE_NAME_RE = re.compile(r"^(\d{3,})-([a-z0-9][a-z0-9-]*)$")
@@ -473,10 +476,13 @@ def _initial_binding_snapshot(repo: Path) -> Optional[tuple]:
         return None
     if dirty != "?? .project/STATE.md\0":
         raise PipelineGitError("primary worktree is not clean")
-    try:
-        import pipeline_state
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts import pipeline_state
+    if __package__:
+        from . import pipeline_state
+    else:
+        try:
+            import pipeline_state
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts import pipeline_state
 
     project = repo / ".project"
     path = project / "STATE.md"

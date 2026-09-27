@@ -14,12 +14,16 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Optional, Sequence
 
-try:
-    from pipeline_state import PipelineState
-    import _common
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.pipeline_state import PipelineState
-    from scripts import _common
+if __package__:
+    from .pipeline_state import PipelineState
+    from . import _common
+else:
+    try:
+        from pipeline_state import PipelineState
+        import _common
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.pipeline_state import PipelineState
+        from scripts import _common
 
 
 atomic_replace = _common.atomic_replace
@@ -490,10 +494,13 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
     if not archive_milestone.is_real_file(intent):
         raise ArchiveError("archived intent must be a real INTENT.md file")
     text = HTML_COMMENT_PATTERN.sub("", intent.read_text(encoding="utf-8"))
-    try:
-        import check_handoffs
-    except ImportError:
-        from scripts import check_handoffs
+    if __package__:
+        from . import check_handoffs
+    else:
+        try:
+            import check_handoffs
+        except ImportError:
+            from scripts import check_handoffs
     try:
         criteria = check_handoffs._success_criteria(text)
     except check_handoffs.HandoffError as error:
@@ -502,10 +509,13 @@ def archived_intent_criteria(archive: Path) -> dict[int, str]:
 
 
 def parse_final_review(archive: Path) -> tuple:
-    try:
-        import check_handoffs
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts import check_handoffs
+    if __package__:
+        from . import check_handoffs
+    else:
+        try:
+            import check_handoffs
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts import check_handoffs
 
     final = archive / "review" / "FINAL.md"
     if not archive_milestone.is_real_file(final):
@@ -655,10 +665,13 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
 
 
 def meaningful_review_evidence(lines: Sequence[str], marker: str, task_text: str = "") -> bool:
-    try:
-        from check_handoffs import task_review_observation
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts.check_handoffs import task_review_observation
+    if __package__:
+        from .check_handoffs import task_review_observation
+    else:
+        try:
+            from check_handoffs import task_review_observation
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts.check_handoffs import task_review_observation
 
     prefix = f"- {marker} "
     evidence = []

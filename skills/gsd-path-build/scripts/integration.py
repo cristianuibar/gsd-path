@@ -12,8 +12,8 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
-try:
-    from pipeline_git import (
+if __package__:
+    from .pipeline_git import (
         bound_branch_name,
         default_branch_name,
         integrate_commit_body,
@@ -23,25 +23,41 @@ try:
         milestone_number,
         ship_subject,
     )
-    from pipeline_state import PipelineState
-    from isolation import publication_base
-    import _common
-    import worktree_paths
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.pipeline_git import (
-        bound_branch_name,
-        default_branch_name,
-        integrate_commit_body,
-        integrate_subject,
-        is_bound_branch,
-        milestone_id,
-        milestone_number,
-        ship_subject,
-    )
-    from scripts.pipeline_state import PipelineState
-    from scripts.isolation import publication_base
-    from scripts import _common
-    from scripts import worktree_paths
+    from .pipeline_state import PipelineState
+    from .isolation import publication_base
+    from . import _common
+    from . import worktree_paths
+else:
+    try:
+        from pipeline_git import (
+            bound_branch_name,
+            default_branch_name,
+            integrate_commit_body,
+            integrate_subject,
+            is_bound_branch,
+            milestone_id,
+            milestone_number,
+            ship_subject,
+        )
+        from pipeline_state import PipelineState
+        from isolation import publication_base
+        import _common
+        import worktree_paths
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.pipeline_git import (
+            bound_branch_name,
+            default_branch_name,
+            integrate_commit_body,
+            integrate_subject,
+            is_bound_branch,
+            milestone_id,
+            milestone_number,
+            ship_subject,
+        )
+        from scripts.pipeline_state import PipelineState
+        from scripts.isolation import publication_base
+        from scripts import _common
+        from scripts import worktree_paths
 
 
 if __package__:

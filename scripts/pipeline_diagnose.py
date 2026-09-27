@@ -20,14 +20,14 @@ from typing import Callable, Optional, Sequence
 
 
 def _load_diagnose_modules():
-    try:
-        import archive_milestone
-        import detect_project
-        import discussion_records
-        import integration
-        import isolation
-        import pipeline_git
-        import pipeline_state
+    if __package__:
+        from . import archive_milestone
+        from . import detect_project
+        from . import discussion_records
+        from . import integration
+        from . import isolation
+        from . import pipeline_git
+        from . import pipeline_state
         return (
             archive_milestone,
             detect_project,
@@ -37,17 +37,35 @@ def _load_diagnose_modules():
             pipeline_git,
             pipeline_state,
         )
-    except ModuleNotFoundError as error:
-        if error.name not in {
-            "archive_milestone",
-            "detect_project",
-            "discussion_records",
-            "integration",
-            "isolation",
-            "pipeline_git",
-            "pipeline_state",
-        }:
-            raise
+    else:
+        try:
+            import archive_milestone
+            import detect_project
+            import discussion_records
+            import integration
+            import isolation
+            import pipeline_git
+            import pipeline_state
+            return (
+                archive_milestone,
+                detect_project,
+                discussion_records,
+                integration,
+                isolation,
+                pipeline_git,
+                pipeline_state,
+            )
+        except ModuleNotFoundError as error:
+            if error.name not in {
+                "archive_milestone",
+                "detect_project",
+                "discussion_records",
+                "integration",
+                "isolation",
+                "pipeline_git",
+                "pipeline_state",
+            }:
+                raise
     try:
         from scripts import (
             archive_milestone,
@@ -117,20 +135,23 @@ PipelineStateError = pipeline_state.PipelineStateError
 status_state = pipeline_state.status_state
 validate_state = pipeline_state.validate_state
 
-try:
-    import pipeline_undo
-except ModuleNotFoundError as error:
-    if error.name != "pipeline_undo":
-        raise
+if __package__:
+    from . import pipeline_undo
+else:
     try:
-        from scripts import pipeline_undo
-    except ModuleNotFoundError as error:
-        if error.name not in {"scripts", "scripts.pipeline_undo"}:
-            raise
-        shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
-        if str(shared) not in sys.path:
-            sys.path.insert(0, str(shared))
         import pipeline_undo
+    except ModuleNotFoundError as error:
+        if error.name != "pipeline_undo":
+            raise
+        try:
+            from scripts import pipeline_undo
+        except ModuleNotFoundError as error:
+            if error.name not in {"scripts", "scripts.pipeline_undo"}:
+                raise
+            shared = Path(__file__).resolve().parents[2] / "gsd-path" / "scripts"
+            if str(shared) not in sys.path:
+                sys.path.insert(0, str(shared))
+            import pipeline_undo
 
 UndoError = pipeline_undo.UndoError
 undo_preview = pipeline_undo.preview

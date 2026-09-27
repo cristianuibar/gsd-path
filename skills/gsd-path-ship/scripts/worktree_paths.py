@@ -13,10 +13,13 @@ import os
 import tempfile
 from pathlib import Path
 
-try:
-    import _common
-except ImportError:
-    from scripts import _common
+if __package__:
+    from . import _common
+else:
+    try:
+        import _common
+    except ImportError:
+        from scripts import _common
 
 
 def _git(primary: Path, *args: str) -> str:

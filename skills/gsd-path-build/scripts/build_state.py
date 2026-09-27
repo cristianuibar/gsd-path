@@ -14,28 +14,40 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-try:
-    from check_task_briefs import _frontmatter, _sections
-    from isolation import (
+if __package__:
+    from .check_task_briefs import _frontmatter, _sections
+    from .isolation import (
         VERIFY_LEDGER_PATH,
         IsolationError,
         recover as recover_isolation,
         verify_landed_task_files,
     )
-    from pipeline_git import task_commit_subject
-    from pipeline_state import PipelineStateError, load_state
-    import _common
-except ImportError:  # pragma: no cover - package imports used by tests
-    from scripts.check_task_briefs import _frontmatter, _sections
-    from scripts.isolation import (
-        VERIFY_LEDGER_PATH,
-        IsolationError,
-        recover as recover_isolation,
-        verify_landed_task_files,
-    )
-    from scripts.pipeline_git import task_commit_subject
-    from scripts.pipeline_state import PipelineStateError, load_state
-    from scripts import _common
+    from .pipeline_git import task_commit_subject
+    from .pipeline_state import PipelineStateError, load_state
+    from . import _common
+else:
+    try:
+        from check_task_briefs import _frontmatter, _sections
+        from isolation import (
+            VERIFY_LEDGER_PATH,
+            IsolationError,
+            recover as recover_isolation,
+            verify_landed_task_files,
+        )
+        from pipeline_git import task_commit_subject
+        from pipeline_state import PipelineStateError, load_state
+        import _common
+    except ImportError:  # pragma: no cover - package imports used by tests
+        from scripts.check_task_briefs import _frontmatter, _sections
+        from scripts.isolation import (
+            VERIFY_LEDGER_PATH,
+            IsolationError,
+            recover as recover_isolation,
+            verify_landed_task_files,
+        )
+        from scripts.pipeline_git import task_commit_subject
+        from scripts.pipeline_state import PipelineStateError, load_state
+        from scripts import _common
 
 
 DEFAULT_PROJECT_DIR = ".project"

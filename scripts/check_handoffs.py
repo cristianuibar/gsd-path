@@ -13,12 +13,16 @@ sys.dont_write_bytecode = True
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-try:
-    from pipeline_state import PipelineStateError, load_state
-    import _common
-except ImportError:  # pragma: no cover - package imports used by tests
-    from scripts.pipeline_state import PipelineStateError, load_state
-    from scripts import _common
+if __package__:
+    from .pipeline_state import PipelineStateError, load_state
+    from . import _common
+else:
+    try:
+        from pipeline_state import PipelineStateError, load_state
+        import _common
+    except ImportError:  # pragma: no cover - package imports used by tests
+        from scripts.pipeline_state import PipelineStateError, load_state
+        from scripts import _common
 
 
 PIPELINE = "gsd-path/v2"

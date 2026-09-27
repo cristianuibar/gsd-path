@@ -17,12 +17,15 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Mapping, Optional, Sequence
 
-try:
-    from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
-except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
-    if error.name != "isolation":
-        raise
-    from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+if __package__:
+    from .isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+else:
+    try:
+        from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+    except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+        if error.name != "isolation":
+            raise
+        from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 
 
 if __package__:
@@ -444,18 +447,24 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
     if head.returncode != 0:
         # Pre-Git approval defers base-dependent checks to build.
         return
-    try:
-        from check_task_briefs import BriefError, _member_bases, validate_task_briefs
-    except ModuleNotFoundError as error:  # pragma: no cover - package imports
-        if error.name != "check_task_briefs":
-            raise
-        from scripts.check_task_briefs import BriefError, _member_bases, validate_task_briefs
-    try:
-        import check_handoffs
-    except ModuleNotFoundError as error:
-        if error.name != "check_handoffs":
-            raise
-        from scripts import check_handoffs
+    if __package__:
+        from .check_task_briefs import BriefError, _member_bases, validate_task_briefs
+    else:
+        try:
+            from check_task_briefs import BriefError, _member_bases, validate_task_briefs
+        except ModuleNotFoundError as error:  # pragma: no cover - package imports
+            if error.name != "check_task_briefs":
+                raise
+            from scripts.check_task_briefs import BriefError, _member_bases, validate_task_briefs
+    if __package__:
+        from . import check_handoffs
+    else:
+        try:
+            import check_handoffs
+        except ModuleNotFoundError as error:
+            if error.name != "check_handoffs":
+                raise
+            from scripts import check_handoffs
     try:
         tasks, dependency_files = check_handoffs.plan_brief_inputs(repo, project_dir)
         landed_bases = {}

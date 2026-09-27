@@ -10,36 +10,52 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, FrozenSet, List, Mapping, NamedTuple, Sequence, Tuple
 
-try:
-    from archive_milestone import (
+if __package__:
+    from .archive_milestone import (
         ArchiveError,
         validate as validate_archive_transaction,
     )
-    from integration import (
+    from .integration import (
         require_generated_integration_commit,
         require_published_integration,
     )
-    from isolation import (
+    from .isolation import (
         IsolationError,
         task_frontmatter,
         verify_landed_task_files,
     )
-    from pipeline_git import bound_branch_name, milestone_number, ship_subject
-except ImportError:
-    from scripts.archive_milestone import (
-        ArchiveError,
-        validate as validate_archive_transaction,
-    )
-    from scripts.integration import (
-        require_generated_integration_commit,
-        require_published_integration,
-    )
-    from scripts.isolation import (
-        IsolationError,
-        task_frontmatter,
-        verify_landed_task_files,
-    )
-    from scripts.pipeline_git import bound_branch_name, milestone_number, ship_subject
+    from .pipeline_git import bound_branch_name, milestone_number, ship_subject
+else:
+    try:
+        from archive_milestone import (
+            ArchiveError,
+            validate as validate_archive_transaction,
+        )
+        from integration import (
+            require_generated_integration_commit,
+            require_published_integration,
+        )
+        from isolation import (
+            IsolationError,
+            task_frontmatter,
+            verify_landed_task_files,
+        )
+        from pipeline_git import bound_branch_name, milestone_number, ship_subject
+    except ImportError:
+        from scripts.archive_milestone import (
+            ArchiveError,
+            validate as validate_archive_transaction,
+        )
+        from scripts.integration import (
+            require_generated_integration_commit,
+            require_published_integration,
+        )
+        from scripts.isolation import (
+            IsolationError,
+            task_frontmatter,
+            verify_landed_task_files,
+        )
+        from scripts.pipeline_git import bound_branch_name, milestone_number, ship_subject
 
 
 SCHEMA = "gsd-path/live-evidence/v1"
