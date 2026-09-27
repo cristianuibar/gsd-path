@@ -65,12 +65,11 @@ the selected hosts; configs for unselected hosts remain untouched.
 
 ### Local additions
 
-Skill directories are managed. Each update moves them to
-`disabled-gsd-skills` (then `disabled-gsd-skills-1`, …) and installs fresh
-copies, so edits and added files inside a skill directory are not carried
-forward. To recover them, diff the backup against the same skill from the
-release you had installed, not against the new install; that diff also holds
-upstream changes.
+Skill directories are managed. Updates and reinstalls replace existing managed
+skills with fresh copies; edits and added files inside them stay only in the
+backup described above. To recover your changes, diff each backed-up skill
+against the same skill from the release you had installed. Comparing the backup
+against the new install also includes upstream changes.
 
 Put local rules in project-owned files instead. Add a `## Local rules`
 section at the end of `AGENTS.md`, with subsections per phase if needed
