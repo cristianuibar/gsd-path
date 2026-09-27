@@ -422,7 +422,11 @@ final class ProjectRowView: MenuRowButton {
         detail = makeLabel(p.trayDetail, size: 11.5, color: NSColor.secondaryLabelColor)
         let folder = p.project_root ?? p.root ?? "Unknown"
         let paths = "Project folder: \(folder)" + (p.root != nil && p.root != folder ? "\nWorktree: \(p.root!)" : "")
-        location = makeLabel(paths, size: 10.5, color: NSColor.secondaryLabelColor)
+        let worktree = p.root.flatMap { $0 != folder ? $0 : nil }
+        let shortName = (p.git?.branch ?? p.branch)?.split(separator: "/").last.map(String.init)
+            ?? worktree.map { URL(fileURLWithPath: $0).lastPathComponent }
+        location = makeLabel(shortName.map { "Worktree: \($0)" } ?? "", size: 10.5, color: NSColor.secondaryLabelColor)
+        location.isHidden = worktree == nil
         for label in [name, location, detail] {
             label.maximumNumberOfLines = 0
             label.lineBreakMode = .byCharWrapping
@@ -457,7 +461,7 @@ final class ProjectRowView: MenuRowButton {
             detail.widthAnchor.constraint(equalTo: top.widthAnchor),
         ])
         let health = p.attentionItems.compactMap(\.label).joined(separator: " · ")
-        toolTip = [p.stackText, p.goalText, health.isEmpty ? nil : health].compactMap { $0 }.joined(separator: "\n")
+        toolTip = [paths, p.stackText, p.goalText, health.isEmpty ? nil : health].compactMap { $0 }.joined(separator: "\n")
         setAccessibilityLabel("\(p.displayProject), \(paths), \(p.stateLabel), \(p.trayDetail)")
     }
 
