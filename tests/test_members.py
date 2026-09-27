@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -374,6 +375,66 @@ class MemberTests(unittest.TestCase):
         self.assertIn("members.py repair", stale.stderr)
         self.assertEqual(self.run_members("repair").returncode, 0)
         self.assertEqual(members.member_role(member)["coordinator"], moved)
+
+    def test_malformed_markers_fail_closed_and_can_be_repaired(self) -> None:
+        member = self.joined()
+        marker = self.marker_path(member)
+        valid = json.loads(marker.read_text(encoding="utf-8"))
+        for label, content in {
+            "invalid JSON": "{invalid}",
+            "truncated": '{"schema":',
+            "null coordinator": json.dumps({**valid, "coordinator": None}),
+            "null project": json.dumps({**valid, "project": None}),
+            "null name": json.dumps({**valid, "name": None}),
+            "null schema": json.dumps({**valid, "schema": None}),
+            "blank name": json.dumps({**valid, "name": " "}),
+            "relative coordinator": json.dumps({**valid, "coordinator": "acme"}),
+        }.items():
+            with self.subTest(label):
+                marker.write_text(content, encoding="utf-8")
+                with self.assertRaisesRegex(members.MembersError,
+                                            "members.py repair --repo <coordinator>"):
+                    members.member_role(member)
+                result = self.run_members("validate")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"members.py repair --repo {self.coordinator}", result.stderr)
+                repaired = self.run_members("repair")
+                self.assertEqual(repaired.returncode, 0, repaired.stderr)
+                self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
+
+    def test_add_replaces_a_malformed_marker(self) -> None:
+        member = self.make_member("web")
+        marker = self.marker_path(member)
+        marker.parent.mkdir(parents=True)
+        marker.write_text('{"schema":', encoding="utf-8")
+        added = self.add("web", member)
+        self.assertEqual(added.returncode, 0, added.stderr)
+        self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
+
+    def test_live_coordinator_copy_cannot_take_over_member(self) -> None:
+        member = self.joined()
+        marker = self.marker_path(member)
+        original_marker = marker.read_bytes()
+        original = self.coordinator
+        copied = self.root / "acme-copy"
+        shutil.copytree(original, copied)
+        self.coordinator = copied
+        refused = self.run_members("repair")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("already a member of", refused.stderr)
+        self.assertEqual(marker.read_bytes(), original_marker)
+        self.assertEqual(members.member_role(member)["coordinator"], original)
+        (copied / ".project" / "MEMBERS.md").unlink()
+        refused = self.add("web", member)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("already a member of", refused.stderr)
+        self.assertEqual(marker.read_bytes(), original_marker)
+        shutil.copyfile(original / ".project" / "MEMBERS.md",
+                        copied / ".project" / "MEMBERS.md")
+        (original / ".project" / "MEMBERS.md").unlink()
+        transferred = self.run_members("repair")
+        self.assertEqual(transferred.returncode, 0, transferred.stderr)
+        self.assertEqual(members.member_role(member)["coordinator"], copied)
 
     def test_add_and_repair_refuse_a_member_of_another_coordinator(self) -> None:
         member = self.make_member("web")

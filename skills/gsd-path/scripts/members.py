@@ -75,6 +75,8 @@ def _coordinator(repo: Path) -> tuple[Path, pipeline_state.PipelineState]:
         state, _, _ = pipeline_state.load_state(root)
     except pipeline_state.PipelineStateError as error:
         raise MembersError(f"coordinator: {error}") from error
+    if Path(_git(root, "rev-parse", "--show-toplevel")).resolve() != root:
+        raise MembersError(f"coordinator is not a Git root: {root}")
     return root, state
 
 
@@ -100,10 +102,16 @@ def _read_marker(path: Path) -> Optional[dict[str, str]]:
         if path.is_symlink() or not path.is_file():
             raise ValueError("not a regular file")
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or set(data) != MARKER_KEYS or data["schema"] != MARKER_SCHEMA:
+        if (not isinstance(data, dict) or set(data) != MARKER_KEYS
+                or any(not isinstance(data[key], str) or not data[key].strip() for key in MARKER_KEYS)
+                or data["schema"] != MARKER_SCHEMA
+                or not Path(data["coordinator"]).is_absolute()):
             raise ValueError("unexpected content")
     except (OSError, ValueError) as error:
-        raise MembersError(f"member marker is unreadable: {path}: {error}") from error
+        raise MembersError(
+            f"member marker is unreadable: {path}: {error}; "
+            "run members.py repair --repo <coordinator>"
+        ) from error
     return data
 
 
@@ -114,10 +122,20 @@ def _write_marker(checkout: Path, coordinator: Path, project: str, name: str) ->
     _common.atomic_write(path, json.dumps(marker, sort_keys=True) + "\n")
 
 
-def _refuse_foreign_marker(checkout: Path, project: str, name: str) -> None:
-    marker = _read_marker(_marker_path(checkout))
+def _refuse_foreign_marker(checkout: Path, coordinator: Path, project: str, name: str) -> None:
+    try:
+        marker = _read_marker(_marker_path(checkout))
+    except MembersError:
+        return
     if marker is not None and (marker["project"], marker["name"]) != (project, name):
         raise MembersError(f"{checkout} is already a member of {marker['project']}")
+    if marker is not None:
+        try:
+            role = member_role(checkout)
+        except MembersError:
+            return
+        if role is not None and role["coordinator"] != coordinator:
+            raise MembersError(f"{checkout} is already a member of {role['coordinator']}")
 
 
 def member_role(checkout: Path) -> Optional[dict[str, object]]:
@@ -275,7 +293,7 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
                 or _remote_identity(member["remote"]) == identity
                 or Path(_git(previous, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve() == common):
             raise MembersError(f"member already recorded: {member['name']}")
-    _refuse_foreign_marker(resolved, state.project, name)
+    _refuse_foreign_marker(resolved, root, state.project, name)
     members.append(
         {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration}
     )
@@ -309,7 +327,7 @@ def repair_members(repo: Path) -> list[dict[str, str]]:
     for member in members:
         checkout = Path(member["checkout"])
         check_member(root, state.project, checkout, member["remote"])
-        _refuse_foreign_marker(checkout.resolve(), state.project, member["name"])
+        _refuse_foreign_marker(checkout.resolve(), root, state.project, member["name"])
     for member in members:
         _write_marker(Path(member["checkout"]).resolve(), root, state.project, member["name"])
     return members
