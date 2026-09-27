@@ -151,6 +151,48 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertEqual(self.phase(), "plan/done")
         self.assertIsNone(self.branch("web"))
 
+    def test_changed_later_member_origin_creates_no_refs(self) -> None:
+        self.tasks("sdk", "web")
+        git(self.repos["web"], "remote", "set-url", "origin", "https://github.com/other/web.git")
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "member origin changed"):
+            self.start()
+        self.assertEqual(self.phase(), "plan/done")
+        self.assertIsNone(self.branch("sdk"))
+        self.assertIsNone(self.branch("web"))
+        self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
+
+    def test_ignored_member_lock_blocks_build_start(self) -> None:
+        self.tasks("web")
+        (self.coordinator / ".gitignore").write_text("/.project/build/members.json\n", encoding="utf-8")
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "members.json"):
+            self.start()
+        self.assertEqual(self.phase(), "plan/done")
+        self.assertIsNone(self.branch("web"))
+        self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
+
+    def test_pending_discussion_creates_no_refs_or_lock(self) -> None:
+        self.tasks("web")
+        discussion = self.coordinator / ".project" / "discuss"
+        discussion.mkdir()
+        (discussion / "DIALOGUE.md").write_text(
+            "# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
+            "### D001 — 2026-09-27 — plan/done — Review\n",
+            encoding="utf-8",
+        )
+        (discussion / "ANSWERS.md").write_text(
+            "# GSD Path Discussion — Answers\n\n"
+            "## Answer A001 — 2026-09-27 — Review\n\n"
+            "- **Status**: final\n- **Follow-up**: required\n"
+            "- **Next owner**: gsd-path-plan\n"
+            "- **Target artifact**: .project/plan/PLAN.md\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "pending discussion"):
+            self.start()
+        self.assertEqual(self.phase(), "plan/done")
+        self.assertIsNone(self.branch("web"))
+        self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -355,6 +355,9 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
     unknown = sorted(named - {member["name"] for member in listed})
     if unknown:
         raise MembersError("tasks name members missing from MEMBERS.md: " + ", ".join(unknown))
+    ignore_error = _common.project_ignore_error(root)
+    if ignore_error:
+        raise MembersError(ignore_error)
     bound = _common.BOUND_BRANCH_RE.fullmatch(state.branch or "")
     if bound is None:
         raise MembersError(f"coordinator branch is not a bound branch: {state.branch}")
@@ -363,6 +366,7 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
     if lock_path.is_file():
         previous = {entry["name"]: entry for entry in json.loads(lock_path.read_text(encoding="utf-8"))["members"]}
     entries = []
+    missing = []
     for member in listed:
         if member["name"] not in named:
             continue
@@ -371,6 +375,9 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
         if role is None or role["coordinator"] != root or role["name"] != member["name"]:
             raise MembersError(f"member marker for {member['name']} is missing or stale; "
                                f"run members.py repair --repo {root}")
+        remote = _git(checkout, "remote", "get-url", "origin")
+        if remote != member["remote"]:
+            raise MembersError(f"member origin changed: {member['remote']} -> {remote}")
         require_origin_main(checkout)
         base = _git(checkout, "rev-parse", "refs/remotes/origin/main^{commit}")
         existing = _common.run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
@@ -387,8 +394,10 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
             else:
                 raise MembersError(f"member {member['name']} branch {branch} has commits not on origin/main")
         else:
-            _git(checkout, "update-ref", f"refs/heads/{branch}", base, "")
+            missing.append((checkout, base))
         entries.append({"name": member["name"], "branch": branch, "base": base})
+    for checkout, base in missing:
+        _git(checkout, "update-ref", f"refs/heads/{branch}", base, "")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     _common.atomic_write(lock_path, json.dumps({"schema": LOCK_SCHEMA, "members": entries}, indent=2) + "\n")
     return entries

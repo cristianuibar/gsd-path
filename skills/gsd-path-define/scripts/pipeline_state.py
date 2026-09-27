@@ -1670,15 +1670,6 @@ def transition_state(
         if recovery_context and recovery_context["active"]:
             if (state.milestone, state.branch, state.archive) != (after.milestone, after.branch, after.archive):
                 raise PipelineStateError("build recovery must preserve milestone identity")
-        if (project_dir == ".project" and (state.phase, state.status) == ("plan", "done")
-                and (after.phase, after.status) == ("build", "active")):
-            _lock_build_members(resolved)
-        if state.phase == "build" and after.phase in {"define", "plan"}:
-            recovery = _build_recovery().begin(resolved, state, after, event)
-            rendered = _append_event(
-                rendered, after.phase,
-                _build_recovery().MARKER + json.dumps(recovery, sort_keys=True),
-            )
         if after.status != "blocked":
             reason = _pending_discussion_block(
                 resolved, after.phase if after.status == "active" else None
@@ -1700,6 +1691,15 @@ def transition_state(
                 validator(resolved, project_dir)
             except check_handoffs.HandoffError as error:
                 raise PipelineStateError(f"{state.phase} handoff failed: {error}") from error
+        if (project_dir == ".project" and (state.phase, state.status) == ("plan", "done")
+                and (after.phase, after.status) == ("build", "active")):
+            _lock_build_members(resolved)
+        if state.phase == "build" and after.phase in {"define", "plan"}:
+            recovery = _build_recovery().begin(resolved, state, after, event)
+            rendered = _append_event(
+                rendered, after.phase,
+                _build_recovery().MARKER + json.dumps(recovery, sort_keys=True),
+            )
         _atomic_write(path, rendered)
     return {
         "schema": STATE_SCHEMA,
