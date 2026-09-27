@@ -134,6 +134,25 @@ class WorktreeDedupTests(unittest.TestCase):
         self._git("worktree", "add", str(linked), cwd=main)
         return main, linked
 
+    def test_status_keeps_worktree_and_main_project_identity(self):
+        from gsd_daemon.probe import probe_project
+        from gsd_daemon.model import ProjectStatus
+        main, linked = self.make_repo_with_worktree()
+        data = probe_project(linked, enrich=False).to_dict()
+        self.assertEqual(Path(data["project_root"]).resolve(), main.resolve())
+        self.assertEqual(data.get("repository"), main.name)
+        self.assertEqual(data["root"], str(linked))
+        self.assertEqual(data["project"], "demo")
+        self.assertEqual(ProjectStatus.from_dict(data).to_dict(), data)
+        self.assertEqual(Path(probe_project(main, enrich=False).to_dict()["project_root"]).resolve(), main.resolve())
+
+    def test_non_git_project_has_no_invented_repository(self):
+        from gsd_daemon.probe import probe_project
+        root = make_project(self.parent / "plain")
+        data = probe_project(root, enrich=False).to_dict()
+        self.assertIsNone(data.get("repository"))
+        self.assertEqual(data.get("project_root"), str(root))
+
     def test_linked_worktree_deduped_to_main_checkout(self) -> None:
         main, linked = self.make_repo_with_worktree()
         self.assertTrue((main / ".git").is_dir())
