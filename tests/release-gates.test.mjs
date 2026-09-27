@@ -72,7 +72,7 @@ test('manual frozen-candidate validation rejects stale receipts', () => {
 
 test('npm publication and release workflow retain the strict blocking gate', () => {
   assert.deepEqual(scripts['verify:release'].split('&&').map(command => command.trim()),
-    ['npm run verify', 'python3 scripts/check_trust_evidence.py --repo .']);
+    ['npm run verify', 'node scripts/dev/py.mjs scripts/check_trust_evidence.py --repo .']);
   const local = execute(scripts.prepublishOnly, 'local');
   assert.equal(local.status, 23);
   assert.deepEqual(local.calls, [['npm', 'run', 'verify:release']]);

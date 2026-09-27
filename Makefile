@@ -21,7 +21,7 @@ install:
 	npm ci
 
 check-prereqs:
-	@bash scripts/check-test-prereqs.sh
+	@npm run --silent check:prereqs
 
 test-smoke:
 	npm test
@@ -30,7 +30,7 @@ test-integration:
 	npm run test:python
 
 test-sync:
-	python3 scripts/sync_skill_resources.py --check
+	npm run test:sync
 
 verify:
 	npm run verify
@@ -39,10 +39,10 @@ verify-release:
 	npm run verify:release
 
 test-daemon:
-	PYTHONPATH=daemon python3 -m unittest discover -s tests -p 'test_daemon_*.py'
+	npm run test:daemon
 
 test-e2e:
 	@test -n "$$GSD_E2E_HOST" || (echo "Set GSD_E2E_HOST=claude or codex (see TEST_ENVIRONMENT.md)" >&2; exit 1)
-	python3 tests/dogfood.py --host "$$GSD_E2E_HOST" --evidence "$${GSD_E2E_EVIDENCE:-/tmp/gsd-path-e2e-evidence}"
+	node scripts/dev/py.mjs tests/dogfood.py --host "$$GSD_E2E_HOST" --evidence "$${GSD_E2E_EVIDENCE:-/tmp/gsd-path-e2e-evidence}"
 
 test: verify

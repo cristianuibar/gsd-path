@@ -162,17 +162,20 @@ test("npm verification graph includes every local suite", () => {
 
   assert.deepEqual(normalizedScriptGraph(packageJson, "test:python"), [
     {
-      executable: "python3",
-      args: ["-m", "unittest", "discover", "-s", "tests"],
+      executable: "node",
+      args: ["scripts/dev/py.mjs", "-m", "unittest", "discover", "-s", "tests"],
+    },
+  ]);
+  assert.deepEqual(normalizedScriptGraph(packageJson, "test:sync"), [
+    {
+      executable: "node",
+      args: ["scripts/dev/py.mjs", "scripts/sync_skill_resources.py", "--check"],
     },
   ]);
   assert.deepEqual(normalizedScriptGraph(packageJson, "verify"), [
     { script: "test" },
     { script: "test:python" },
-    {
-      executable: "python3",
-      args: ["scripts/sync_skill_resources.py", "--check"],
-    },
+    { script: "test:sync" },
   ]);
   assert.deepEqual(normalizedScriptGraph(packageJson, "prepublishOnly"), [
     { script: "verify:release" },
