@@ -42,7 +42,8 @@ node scripts/install.mjs --claude --project /path/to/repo --hooks
 ```
 
 For a project that already has `AGENTS.md` and `WORKFLOW.md`, initialize only
-the guards and keep those contracts unchanged:
+the guards and keep those contracts unchanged (use `--update --project` to
+refresh the `AGENTS.md` block):
 
 ```bash
 npx @opengsd/gsd-path --hooks-init --claude --project /path/to/repo

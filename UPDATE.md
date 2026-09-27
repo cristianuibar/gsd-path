@@ -25,7 +25,10 @@ Installed with --hooks and need to refresh wiring
 Existing project needs guards for the first time
 └─ install.mjs --hooks-init --claude --project PATH
 
-AGENTS.md or WORKFLOW.md template changed upstream
+AGENTS.md template changed upstream
+└─ install.mjs --update --project PATH (replaces only the GSD Path block)
+
+WORKFLOW.md template changed upstream
 └─ Manual diff + merge (installer never overwrites)
 ```
 
@@ -43,7 +46,8 @@ AGENTS.md or WORKFLOW.md template changed upstream
 | Project runtime | Explicit upgrade only | [Runtime lifecycle](DOCS.md#project-runtime-versions) |
 | Native hook settings + git hooks | Yes | `--hooks-refresh-full` (host flag creates missing config) |
 | Guards for an existing project | Yes | `--hooks-init` (preserves project contracts) |
-| `AGENTS.md`, `WORKFLOW.md` | **No** | Manual merge |
+| `AGENTS.md` GSD Path block | Yes | `--update --project PATH` (owner text outside the block is kept) |
+| `WORKFLOW.md` | **No** | Manual merge |
 | `.project/*` (active milestone) | **No** | Pipeline state |
 
 Existing managed skills, including the owned `path` alias, move to
@@ -56,8 +60,8 @@ it or move it aside first. Unrelated skills are never touched. Failed multi-host
 updates roll back all selected targets.
 An initial `--hooks` install merges valid native settings for explicitly selected Claude,
 Codex, or Cursor hosts; other existing project contract and guard files are refused.
-`--update --project PATH` keeps `AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md`
-and refreshes managed hook wiring, native settings, and git hooks. For runtime
+`--update --project PATH` replaces the GSD Path block in `AGENTS.md`, keeps
+`WORKFLOW.md` and `.claude/CLAUDE.md`, and refreshes managed hook wiring, native settings, and git hooks. For runtime
 changes or legacy installations, follow the [runtime lifecycle](DOCS.md#project-runtime-versions).
 Use `--hooks-init` to add guards to an existing project without changing its
 `AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
@@ -72,11 +76,13 @@ against the same skill from the release you had installed. Comparing the backup
 against the new install also includes upstream changes.
 
 Put local rules in project-owned files instead. Add a `## Local rules`
-section at the end of `AGENTS.md`, with subsections per phase if needed
-(for example, "Research: also read X"). Updates keep `AGENTS.md`, and phase
-and subagent briefs name it. Hosts load project instructions differently, so
-confirm your host and its subagents read it. Keeping the section at the end
-keeps the manual template merge small.
+section to `AGENTS.md` after the `<!-- gsd-path:end -->` line, with
+subsections per phase if needed (for example, "Research: also read X").
+Updates replace only the text between the GSD Path markers, and phase and
+subagent briefs name `AGENTS.md`. Hosts load project instructions differently,
+so confirm your host and its subagents read it. Keep owner rules after the
+block: Codex reads only the first 32 KiB, so text above the block can push
+GSD Path rules out.
 
 Gates are scripts, not an extension point. To change a gate, open an issue.
 
@@ -217,17 +223,36 @@ Details: [HOOKS.md](HOOKS.md)
 
 ## Update project contracts
 
-`AGENTS.md`, `WORKFLOW.md`, and `.claude/CLAUDE.md` (with Claude) are installed
-once with `--project`. A plain install **refuses** if they already exist. When
-one of these documents blocks a first install, the refusal prints a command to
-move it to its `.pre-path.md` name. If that name is occupied, it instead asks
-you to choose an unused name. Rerun the install, then merge the old rules into
-the new file.
-Keep a merged `AGENTS.md` under 32 KiB: Codex reads only the first 32 KiB.
-For an already-installed project, `--update --project PATH` keeps these files
+GSD Path owns one marked block in `AGENTS.md`:
+
+```text
+<!-- gsd-path:begin -->
+...GSD Path contract...
+<!-- gsd-path:end -->
+```
+
+You own everything outside the markers. `--project` puts the block first in a
+new or existing `AGENTS.md`; `--update --project PATH` replaces only the
+block. Both refuse:
+
+- a file with unmatched markers or more than one block (fix the markers by
+  hand);
+- a merged file over 32 KiB, because Codex reads only the first 32 KiB. The
+  error prints the file, block, and merged sizes and a command to move the
+  file aside.
+
+Migration from whole-file installs (1.x): an `AGENTS.md` equal to a released
+template becomes a block on the next `--project` or `--update --project`. An
+edited whole-file `AGENTS.md` is refused with a diff: keep your rules, move
+the file aside, rerun, then add your rules after the end marker.
+
+`WORKFLOW.md` and `.claude/CLAUDE.md` (with Claude) are installed once with
+`--project`. A plain install **refuses** if they already exist and prints a
+command to move each to its `.pre-path.md` name. If that name is occupied, it
+asks you to choose an unused name. `--update --project PATH` keeps them
 unchanged.
 
-To adopt upstream template changes:
+To adopt upstream `WORKFLOW.md` changes:
 
 1. Open new templates in the gsd-path repo or npm package
 2. `diff` against your project copies

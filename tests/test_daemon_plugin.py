@@ -417,6 +417,25 @@ class UninstallPlanTests(unittest.TestCase):
         self.assertIn(str(project / "WORKFLOW.md"), skipped)
         self.assertIn("user-modified", skipped[str(project / "WORKFLOW.md")])
 
+    def test_project_uninstall_removes_only_agents_block(self):
+        block = "<!-- gsd-path:begin -->\n# rules\n<!-- gsd-path:end -->\n"
+        owner = "# Team\r\nkeep me\n"
+        for text, expected in ((block + "\n" + owner, owner),
+                               ("above\n" + block + owner, "above\n" + owner),
+                               (block, None)):
+            project = Path(tempfile.mkdtemp(dir=self.tmp.name))
+            agents = project / "AGENTS.md"
+            agents.write_bytes(text.encode("utf-8"))
+            plan = self.manager.plan_uninstall_project(project)
+            entries = [e for e in plan["plan"] if e["path"] == str(agents)]
+            self.assertEqual(["agents-block"], [e["kind"] for e in entries])
+            result = self.manager.apply_plan(plan, confirm=True)
+            self.assertTrue(result["ok"], result)
+            if expected is None:
+                self.assertFalse(agents.exists())
+            else:
+                self.assertEqual(expected, agents.read_bytes().decode("utf-8"))
+
     def test_project_plan_never_touches_dot_project(self):
         project = self._make_project()
         # lookalikes inside .project/ must never appear in the plan

@@ -3,7 +3,8 @@ name: gsd-path
 description: Inspect .project/STATE.md, report GSD Path progress, and run the next valid phase. Use only when the user explicitly invokes $gsd-path. The status argument reports state without advancing; config views or edits settings without advancing. Do not infer this skill from generic project, next-step, or resume requests.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 ## Configuration mode
 

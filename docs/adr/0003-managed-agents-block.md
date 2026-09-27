@@ -1,6 +1,6 @@
 # Path owns a managed block in AGENTS.md, not the whole file
 
-Status: proposed. Tracked in #160.
+Status: accepted. Tracked in #160.
 
 `AGENTS.md` is a shared file. Repo owners, Codex, Cursor and gsd-core write
 it. Path now installs its whole 26 KB contract as `AGENTS.md`, once, and
@@ -30,7 +30,11 @@ The block holds only rules every turn needs: authority order, plain-prompt
 re-entry, gates, evidence. Phase and role detail moves into the skills that
 load on demand. Candidates: "Stay in role" (9.0 KB), "Files are the only
 memory" (5.2 KB), "New GitHub repositories" (1.9 KB), "Distribution layout"
-(1.2 KB). The byte budget for Path's block remains an open owner decision.
+(1.2 KB). Implemented: the first three moved to the bundled
+`references/operating-rules.md` (every skill reads it before phase work);
+"Distribution layout" moved to the source repo's `CLAUDE.md`. The block fell
+from 26.0 KB to about 10.9 KB. No byte budget is set; only the 32 KiB merged
+limit is enforced.
 Install and update refuse a merged `AGENTS.md` over 32 KiB. This is the one
 exception to brownfield installs without rename: silent truncation is worse
 than a refusal. The error prints the file and block sizes, the merged size,
