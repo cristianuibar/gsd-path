@@ -4845,7 +4845,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             changed = self.git(repo, "commit", "-qm", "fixture product change")
             self.assertEqual(changed.returncode, 0, changed.stderr)
             self.restamp_final_review(repo)
-            with mock.patch.dict(os.environ, {"HOME": str(root / "home")}):
+            with mock.patch.dict(os.environ, {"HOME": str(root / "home"), "USERPROFILE": str(root / "home")}):
                 installed = self.run_command(
                     sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
                     "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)

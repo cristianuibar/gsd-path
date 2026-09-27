@@ -25,7 +25,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.repo.mkdir()
         self.home = self.root / "home"
         self.home.mkdir()
-        self.environment = mock.patch.dict(os.environ, {"HOME": str(self.home)})
+        self.environment = mock.patch.dict(os.environ, {"HOME": str(self.home), "USERPROFILE": str(self.home)})
         self.environment.start()
         self.addCleanup(self.environment.stop)
         self.git("init", "-b", "main")

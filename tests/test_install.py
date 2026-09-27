@@ -26,7 +26,7 @@ class InstallerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         isolated_home = self.root / "home"
         isolated_home.mkdir()
-        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home)})
+        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home), "USERPROFILE": str(isolated_home)})
         home_patch.start()
         self.addCleanup(home_patch.stop)
         self.source = self.root / "source"
