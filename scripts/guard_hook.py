@@ -789,6 +789,35 @@ def path_kind(candidate, repo, control_roots=()):
     return "product"
 
 
+def member_target_kind(candidate, repo):
+    """'product' when the path lies in a verified member of this coordinator.
+
+    A member follows its coordinator's phase. A stale member of this
+    coordinator raises MembersError, so the caller denies the write.
+    """
+    directory = candidate if candidate.is_dir() else candidate.parent
+    while not directory.is_dir() and directory != directory.parent:
+        directory = directory.parent
+    found = subprocess.run(
+        ["git", "-C", str(directory), "rev-parse", "--path-format=absolute",
+         "--show-toplevel", "--git-common-dir"],
+        text=True, capture_output=True, check=False,
+        env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+    )
+    lines = found.stdout.splitlines()
+    if found.returncode != 0 or len(lines) != 2:
+        return None
+    toplevel, common = Path(lines[0]), Path(lines[1])
+    if not os.path.lexists(common / "gsd-path" / "member.json"):
+        return None
+    import members  # the guard's runtime directory; only paths in a member need it
+    coordinator = members.marker_coordinator(toplevel)
+    if coordinator is None or coordinator.resolve() != repo.resolve():
+        return None
+    members.member_role(toplevel)
+    return "product"
+
+
 def target_kind(path, working_directories, repo, control_roots=None):
     lexical, resolved = target_paths(path, working_directories, repo)
     repo = repo.resolve()
@@ -804,6 +833,11 @@ def target_kind(path, working_directories, repo, control_roots=None):
     }
     for kind in ("protected", "product", "artifact", "external"):
         if kind in kinds:
+            if kind == "external":
+                try:
+                    return member_target_kind(resolved, repo) or kind
+                except Exception as error:
+                    deny(f"member write refused: {error}")
             return kind
     return "external"
 

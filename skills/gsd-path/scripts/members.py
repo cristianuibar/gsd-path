@@ -145,6 +145,12 @@ def _refuse_foreign_marker(checkout: Path, coordinator: Path, project: str, name
             raise MembersError(f"{checkout} is already a member of {role['coordinator']}")
 
 
+def marker_coordinator(checkout: Path) -> Optional[Path]:
+    """The coordinator a member marker names, unverified; None without a marker."""
+    marker = _read_marker(_marker_path(Path(checkout)))
+    return None if marker is None else Path(marker["coordinator"])
+
+
 def member_role(checkout: Path) -> Optional[dict[str, object]]:
     """The verified coordinator of a member checkout, or None outside a member."""
     checkout = Path(checkout)
