@@ -3304,6 +3304,16 @@ def retire(
                         )
                     if proof_error:
                         raise IsolationError(proof_error)
+                    # A half-retire can leave the missing checkout registered, which blocks -D.
+                    if _registered_worktrees(primary).get(resolved_worktree) == f"refs/heads/{branch}":
+                        cleared = run_git(
+                            primary, "worktree", "remove", str(resolved_worktree)
+                        )
+                        if cleared.returncode != 0:
+                            raise IsolationError(
+                                (cleared.stderr or cleared.stdout).strip()
+                                or "could not clear stale worktree registration"
+                            )
                     deleted = run_git(primary, "branch", "-D", branch)
                     if deleted.returncode != 0:
                         raise IsolationError(
