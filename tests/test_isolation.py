@@ -336,6 +336,8 @@ class IsolationTests(unittest.TestCase):
         for rule, expected in (
             ("build/", r"\.gitignore:1:build/ excludes \.project/build/verify-ledger\.jsonl"),
             ("ROADMAP.md", r"\.gitignore:1:ROADMAP\.md excludes \.project/ROADMAP\.md"),
+            ("PLAN.md", r"\.gitignore:1:PLAN\.md excludes \.project/plan/PLAN\.md"),
+            ("*.jsonl\n!.project/build/*.jsonl", r"\.gitignore:1:\*\.jsonl excludes \.project/archive/001-probe/build/verify-ledger\.jsonl"),
         ):
             with self.subTest(rule=rule), tempfile.TemporaryDirectory() as temporary:
                 repo = Path(temporary) / "repo"
@@ -346,7 +348,7 @@ class IsolationTests(unittest.TestCase):
                 self.assertEqual(git(repo, "log", "-1", "--format=%s"), "declare gitignore")
 
     def test_land_accepts_anchored_negated_and_junk_rules(self) -> None:
-        for gitignore in ("/build/\n", "*.jsonl\n!.project/build/*.jsonl\n", ".DS_Store\n"):
+        for gitignore in ("/build/\n", "*.jsonl\n!.project/**/*.jsonl\n", ".DS_Store\n"):
             with self.subTest(gitignore=gitignore), tempfile.TemporaryDirectory() as temporary:
                 repo = Path(temporary) / "repo"
                 repo.mkdir()
