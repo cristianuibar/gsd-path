@@ -174,13 +174,13 @@ def set_value(repo, scope, key, value, reset=False):
     if scope == 'project':
         state, _, _ = sibling('pipeline_state').load_state(repo)
         branch = subprocess.run(['git', '-C', str(repo), 'branch', '--show-current'],
-                                capture_output=True, text=True)
+                                capture_output=True, encoding="utf-8", errors="replace")
         if branch.returncode or not state.branch or branch.stdout.strip() != state.branch:
             raise ValueError('Run the router to bind the project branch before editing settings.')
         head = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--verify', 'HEAD'], capture_output=True)
         if head.returncode == 0:
             closed = subprocess.run([sys.executable, '-B', str(Path(__file__).with_name('git_guard.py')),
-                                     'closed-milestone'], cwd=repo, capture_output=True, text=True)
+                                     'closed-milestone'], cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
             if closed.returncode:
                 raise ValueError(closed.stderr.strip() or 'Cannot verify the milestone branch is open.')
     if scope == 'project' and key == 'integration':

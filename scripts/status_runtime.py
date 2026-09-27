@@ -29,7 +29,7 @@ def process_identity(pid: int):
     else:
         command = ["ps", "-o", "lstart=", "-p", str(pid)]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
     except OSError:
         return None
     value = result.stdout.strip()
@@ -224,7 +224,9 @@ def main(argv: Sequence[str] = sys.argv[1:]) -> int:
         return 2
     if args.runtime_path:
         try:
-            print(resolve_runtime(args.repo.resolve()))
+            # Forward slashes: agents paste this into Git Bash on Windows, where
+            # unquoted backslashes are escapes.
+            print(resolve_runtime(args.repo.resolve()).as_posix())
             return 0
         except (OSError, ValueError) as error:
             print(str(error), file=sys.stderr)

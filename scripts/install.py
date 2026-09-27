@@ -311,7 +311,7 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
         raise InstallerError(f"cannot resolve the git hooks directory of {member}")
     common = Path(subprocess.run(
         ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        cwd=os.fspath(member), capture_output=True, text=True, check=True,
+        cwd=os.fspath(member), capture_output=True, encoding="utf-8", errors="replace", check=True,
     ).stdout.strip()).resolve()
     resolved = hooks_dir.resolve()
     worktree_output = subprocess.run(
@@ -428,7 +428,7 @@ def _resolve_git_hooks_path(project: "Path") -> Optional["Path"]:
             ["git", "rev-parse", "--show-toplevel", "--git-path", "hooks"],
             cwd=os.fspath(project),
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
         )
     except OSError:
@@ -885,7 +885,7 @@ def _process_identity(pid: int) -> Optional[str]:
     else:
         command = ["ps", "-o", "lstart=", "-p", str(pid)]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
     except OSError:
         return None
     value = result.stdout.strip()
@@ -1477,7 +1477,7 @@ def _validate_project_git_root(project: Path) -> None:
             ["git", "rev-parse", "--show-toplevel"],
             cwd=probe,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
@@ -2261,7 +2261,7 @@ def _validated_project_state(source_root: Path, project: Path) -> dict:
             [*interpreter.split(), "-B", str(validator), "validate", "--repo", str(project)],
             cwd=project,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
         )
     except OSError as error:
@@ -2302,7 +2302,7 @@ def _validate_project_runtime_status(source_root: Path, project: Path) -> None:
             [*interpreter.split(), "-B", str(runtime), "status", "--repo", str(project)],
             cwd=project,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
             env=environment,
         )
@@ -2487,6 +2487,28 @@ def _native_guard_contract(
     return None
 
 
+def _windows_path_warnings() -> List[str]:
+    """Settings that deep managed-worktree paths need past 260 characters."""
+    import winreg
+
+    warnings = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SYSTEM\CurrentControlSet\Control\FileSystem") as key:
+            enabled = winreg.QueryValueEx(key, "LongPathsEnabled")[0] == 1
+    except OSError:
+        enabled = False
+    if not enabled:
+        warnings.append("windows: long paths are disabled (LongPathsEnabled=0); files deep in "
+                        "managed worktrees may exceed 260 characters")
+    result = subprocess.run(["git", "config", "--get", "core.longpaths"], capture_output=True,
+                            encoding="utf-8", errors="replace", check=False)
+    if result.stdout.strip().lower() != "true":
+        warnings.append("windows: git core.longpaths is not true; run "
+                        "`git config --global core.longpaths true`")
+    return warnings
+
+
 def doctor(
     source_root: Path,
     targets: Sequence[str],
@@ -2508,6 +2530,9 @@ def doctor(
     version = _read_package_version(source_root / "package.json")
     if version is None:
         push("fail", "package: version cannot be read")
+    if os.name == "nt":
+        for text in _windows_path_warnings():
+            push("warn", text)
     seen: List[Tuple[str, Path]] = []
     installed_targets = set()
     for target in targets:

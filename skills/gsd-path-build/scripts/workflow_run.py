@@ -40,7 +40,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
 
     def step(script, *arguments, raw=False):
         command = [sys.executable, "-B", str(helpers / script), *arguments]
-        completed = subprocess.run(command, cwd=repo, capture_output=True, text=True)
+        completed = subprocess.run(command, cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
         receipt = {"script": script, "command": command, "exit_code": completed.returncode,
                    "stdout": completed.stdout, "stderr": completed.stderr}
         steps.append(receipt)
@@ -64,7 +64,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             raise StepFailed("pending discussion requires its owner disposition")
         step("check_handoffs.py", "plan", *common)
         head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
-                              cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
+                              cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
         step("check_task_briefs.py", "--repo", str(repo), "--base", head,
              "--tasks-dir", f"{project_dir}/tasks")
         panel = ["validate-plan", "--plan", str(repo / project_dir / "plan/PLAN.md"),
@@ -79,7 +79,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             resolved = subprocess.run(
                 [sys.executable, "-B", str(repo / ".gsd-path/status_runtime.py"),
                  "--repo", str(repo), "--runtime-path"],
-                cwd=repo, capture_output=True, text=True)
+                cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
             if resolved.returncode:
                 sys.stderr.write(resolved.stderr)
                 raise StepFailed(resolved.stderr.strip())
@@ -95,7 +95,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                    (repo / project_dir / "research" / spec[3]).is_symlink() for spec in specs):
                 raise StepFailed("prior inspection evidence requires the re-inspection contract")
             branch = subprocess.run(["git", "branch", "--show-current"], cwd=repo,
-                                    capture_output=True, text=True, check=True).stdout.strip()
+                                    capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
             if branch != state["branch"]:
                 raise StepFailed("current branch differs from the recorded inspection branch")
             pending = step("discussion_records.py", "pending", "--repo", str(repo))
@@ -161,7 +161,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if state["phase"] != "inspect" or state["status"] != "active":
                 raise StepFailed("inspection completion requires inspect/active")
             branch = subprocess.run(["git", "branch", "--show-current"], cwd=repo,
-                                    capture_output=True, text=True, check=True).stdout.strip()
+                                    capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
             if state["branch"] != branch:
                 raise StepFailed("current branch differs from the recorded inspection branch")
             pending = step("discussion_records.py", "pending", "--repo", str(repo))
@@ -170,7 +170,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             docs = assignments["inspect_docs"]
             step("check_docs_audit.py", "--repo", docs["worktree"], "--primary", str(repo),
                  "--audit", docs["output"], "--inventory", str(inventory_file))
-            if f"Audited HEAD: {expected_head}" not in (Path(docs["worktree"]) / docs["output"]).read_text().splitlines():
+            if f"Audited HEAD: {expected_head}" not in (Path(docs["worktree"]) / docs["output"]).read_text(encoding="utf-8").splitlines():
                 raise StepFailed("audit does not name the supplied inspection baseline")
             for task_name, _, _, _ in INSPECTION_SPECS:
                 assignment = assignments[task_name]
@@ -186,7 +186,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                  "--set-phase", "inspect", "--set-status", "done", "--event", "inspection artifacts passed")
         elif action == "lint-round":
             head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
-                                  cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
+                                  cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
             step("check_task_briefs.py", "--repo", str(repo), "--base", head,
                  "--tasks-dir", f"{project_dir}/tasks")
             step("check_handoffs.py", "plan", *common)

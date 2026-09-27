@@ -101,14 +101,14 @@ def operate(args):
                       "task_limit": args.task_limit, "session_limit": args.session_limit,
                       "authority": args.authority}
             if ledger.exists():
-                data = json.loads(ledger.read_text())
+                data = json.loads(ledger.read_text(encoding="utf-8"))
                 if any(data.get(key) != value for key, value in policy.items()):
                     raise ValueError("existing session policy differs; configuration cannot reset usage")
             else:
                 data = {**policy, "observations": {}}
                 atomic_write(ledger, json.dumps(data, indent=2) + "\n")
             return {"status": "configured", "hard_cap_supported": False}
-        data = json.loads(ledger.read_text())
+        data = json.loads(ledger.read_text(encoding="utf-8"))
         if data.get("schema") != SCHEMA or data.get("host") != "codex-cli":
             raise ValueError("unsupported budget ledger")
         if args.action == "record":

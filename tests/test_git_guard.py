@@ -822,11 +822,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 "git ls-tree HEAD",
                 "git show-ref --head",
                 "git merge-base HEAD HEAD",
-                f"python3 -B {runtime}/promote_lookahead.py select-base --repo {self.repo}",
-                f"python3 -B {hooks}/status_runtime.py --repo {self.repo}",
-                f"python3 -B {runtime}/pipeline_diagnose.py diagnose --repo {self.repo}",
-                f"python3 -B {runtime}/archive_milestone.py validate-integrated --repo {self.repo}",
-                f"python3 -B {runtime}/pipeline_git.py bind-next --repo {self.repo}",
+                f"python3 -B {runtime.as_posix()}/promote_lookahead.py select-base --repo {self.repo.as_posix()}",
+                f"python3 -B {hooks.as_posix()}/status_runtime.py --repo {self.repo.as_posix()}",
+                f"python3 -B {runtime.as_posix()}/pipeline_diagnose.py diagnose --repo {self.repo.as_posix()}",
+                f"python3 -B {runtime.as_posix()}/archive_milestone.py validate-integrated --repo {self.repo.as_posix()}",
+                f"python3 -B {runtime.as_posix()}/pipeline_git.py bind-next --repo {self.repo.as_posix()}",
             ):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
@@ -900,8 +900,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
                     ("python3 -c 'print(1)'", self.repo, 2),
                     ("git switch feature/next", self.repo, 2),
-                    (f"python3 -B {runtime}/discussion_records.py pending --repo {self.repo}", self.repo, 0),
-                    (f"python3 -B {runtime}/discussion_records.py dispose --repo {self.repo}", self.repo, 2),
+                    (f"python3 -B {runtime.as_posix()}/discussion_records.py pending --repo {self.repo.as_posix()}", self.repo, 0),
+                    (f"python3 -B {runtime.as_posix()}/discussion_records.py dispose --repo {self.repo.as_posix()}", self.repo, 2),
                 ):
                     for supplied in (True, False):
                         with self.subTest(guard=guard, command=command, cwd=cwd, supplied=supplied):

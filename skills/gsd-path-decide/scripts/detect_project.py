@@ -1801,7 +1801,7 @@ def initialize(
     if require_git:
         git = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
-            env=git_environment(), capture_output=True, text=True, check=False,
+            env=git_environment(), capture_output=True, encoding="utf-8", errors="replace", check=False,
         )
         if git.returncode != 0 or git.stdout.strip() != "true":
             return {**payload, "route": "setup-repository", "wrote_state": False}

@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shlex
+import stat
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -474,6 +475,20 @@ def collect(
             )
 
 
+def is_link_like(path):
+    """A symlink, or on Windows any name-surrogate reparse point such as a junction.
+
+    Path.is_symlink() is false for a junction, which still redirects the path.
+    """
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISLNK(status.st_mode) or bool(
+        getattr(status, "st_reparse_tag", 0) & 0x20000000  # IO_REPARSE_TAG name surrogate
+    )
+
+
 def normalize_posix(path):
     text = path.replace("\\", "/").strip()
     if not text:
@@ -536,7 +551,7 @@ def repository_root():
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         cwd=candidate,
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )
@@ -544,7 +559,7 @@ def repository_root():
         state = candidate / ".project" / "STATE.md"
         if (
             candidate.is_dir()
-            and not candidate.is_symlink()
+            and not is_link_like(candidate)
             and os.path.lexists(state)
         ):
             return candidate
@@ -560,7 +575,7 @@ def project_status(repo):
     result = subprocess.run(
         [sys.executable, "-B", str(launcher), "--repo", str(repo)],
         cwd=repo,
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )
@@ -697,7 +712,7 @@ def valid_status_branch(value):
 
 def target_paths(path, working_directories, repo):
     repo = repo.resolve()
-    candidate = Path(path)
+    candidate = Path(native_path_text(path))
     if not candidate.is_absolute():
         base = Path(working_directories[0]) if working_directories else repo
         if not base.is_absolute():
@@ -712,7 +727,7 @@ def repository_control_roots(repo):
     result = subprocess.run(
         ["git", "rev-parse", "--git-common-dir"],
         cwd=repo,
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         check=False,
@@ -801,7 +816,7 @@ def member_target_kind(candidate, repo):
     found = subprocess.run(
         ["git", "-C", str(directory), "rev-parse", "--path-format=absolute",
          "--show-toplevel", "--git-common-dir"],
-        text=True, capture_output=True, check=False,
+        encoding="utf-8", errors="replace", capture_output=True, check=False,
         env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
     )
     lines = found.stdout.splitlines()
@@ -880,12 +895,12 @@ def pipeline_target_kinds(targets):
 def closed_target_reason(targets):
     for path, working_directories in targets:
         for target in dict.fromkeys(target_paths(path, working_directories, repository_root())):
-            directory = target if target.is_dir() and not target.is_symlink() else target.parent
+            directory = target if target.is_dir() and not is_link_like(target) else target.parent
             while not directory.exists() and directory != directory.parent:
                 directory = directory.parent
             root = subprocess.run(
                 ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
-                capture_output=True, text=True,
+                capture_output=True, encoding="utf-8", errors="replace",
             )
             if root.returncode == 0:
                 reason = closed_milestone_reason(Path(root.stdout.strip()))
@@ -975,10 +990,35 @@ def expansion_can_match_archive(path):
     )
 
 
+# Git Bash (Claude Code's shell on Windows) names drive C: as /c or /cygdrive/c.
+MSYS_DRIVE_PATH = re.compile(r"^/(?:cygdrive/)?([A-Za-z])(?=/|$)")
+
+
+def native_path_text(value):
+    """On Windows, the drive path that a Git Bash path such as /c/repo names.
+
+    Python reads /c/repo as a folder named c at the root of the current drive,
+    which would hide an archive from the containment checks.
+    """
+    if os.name != "nt":
+        return value
+    text = value.replace("\\", "/")
+    match = MSYS_DRIVE_PATH.match(text)
+    if match is None:
+        return value
+    return f"{match.group(1).upper()}:{text[match.end():] or '/'}"
+
+
 def path_values(value):
-    yield value
+    values = [value]
     if value.startswith("-") and "=" in value:
-        yield value.split("=", 1)[1]
+        values.append(value.split("=", 1)[1])
+    for candidate in values:
+        yield candidate
+        # Deny when either reading of an ambiguous Windows path reaches an archive.
+        native = native_path_text(candidate)
+        if native != candidate:
+            yield native
 
 
 def is_absolute_path(path):
@@ -1215,7 +1255,7 @@ def copy_destinations(arguments, directories, assignments=None):
         lexical, source_path = target_paths(source, directories, repository_root())
         if source_path.is_dir():
             # ponytail: reject ambiguous directory links instead of emulating cp flags.
-            if lexical.is_symlink():
+            if is_link_like(lexical):
                 raise ValueError("cp directory source is a symlink; pass a literal directory")
 
             def unreadable(error):
@@ -1224,7 +1264,7 @@ def copy_destinations(arguments, directories, assignments=None):
             for root, folders, files in os.walk(source_path, onerror=unreadable):
                 for name in folders + files:
                     entry = Path(root) / name
-                    if entry.is_symlink() and entry.is_dir():
+                    if is_link_like(entry) and entry.is_dir():
                         raise ValueError("cp source contains a directory symlink; copy it separately")
                     for output in outputs:
                         yield str(output / entry.relative_to(source_path))
@@ -1704,7 +1744,7 @@ def has_short_option(arguments, option):
 def git_alias(command, git_options):
     result = subprocess.run(
         ["git", *git_options, "config", "--get", f"alias.{command}"],
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )
@@ -1847,13 +1887,13 @@ def closed_milestone_reason(repo=None):
     repo = repo or repository_root()
     branch = subprocess.run(
         ["git", "-C", str(repo), "branch", "--show-current"],
-        capture_output=True, text=True,
+        capture_output=True, encoding="utf-8", errors="replace",
     )
     if not re.fullmatch(r"gsd-path/M\d{3,}", branch.stdout.strip()):
         return None
     result = subprocess.run(
         [sys.executable, "-B", str(Path(__file__).with_name("git_guard.py")),
-         "closed-milestone"], cwd=repo, capture_output=True, text=True,
+         "closed-milestone"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
     )
     if result.returncode:
         return result.stderr.strip() or "closed milestone inspection failed"
@@ -1863,7 +1903,7 @@ def closed_milestone_reason(repo=None):
 def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPELINE_HELPERS):
     """Allow one plain ``python[3] [-B] <script>`` from the guard-owned runtime.
 
-    The interpreter token must be exactly python or python3, and the script
+    The interpreter must be exactly python, python3, or py -3, and the script
     operand is the exact parsed token, with expansions and parent traversal refused.
     The resolved helper must be a regular file inside runtime/ beside this guard,
     or beside the guard itself in the repository layout. Resolve only in supplied
@@ -1882,9 +1922,12 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
     _, substitutions = split_command_substitutions(command)
     if substitutions or wrapped_command_tokens(segments[0]) is not None:
         return False
-    if tokens[0] not in ("python", "python3"):
+    if tokens[:2] == ["py", "-3"]:
+        rest = tokens[2:]
+    elif tokens[0] in ("python", "python3"):
+        rest = tokens[1:]
+    else:
         return False
-    rest = tokens[1:]
     if rest[:1] == ["-B"]:
         rest = rest[1:]
     if not rest:
@@ -2091,7 +2134,7 @@ def closed_shell_execution_reason(command, tokens, working_directories):
                 for directory in directories:
                     result = subprocess.run(
                         ["git", *options, "rev-parse", "--show-toplevel", "--absolute-git-dir"],
-                        cwd=directory, capture_output=True, text=True,
+                        cwd=directory, capture_output=True, encoding="utf-8", errors="replace",
                     )
                     if result.returncode:
                         raise ValueError("git target repository cannot be resolved")
@@ -2172,8 +2215,14 @@ def allow(event):
 
 
 def main():
+    # Hosts exchange hook input and output as UTF-8; a Windows pipe would
+    # default to cp1252. In-process callers may substitute text streams.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     try:
-        event = json.load(sys.stdin)
+        stdin = getattr(sys.stdin, "buffer", None)
+        event = json.loads(stdin.read().decode("utf-8") if stdin is not None else sys.stdin.read())
         if not isinstance(event, dict):
             raise ValueError("hook event must be an object")
         evaluate(event)
