@@ -75,6 +75,8 @@ RELEASED_AGENTS = frozenset(
     }
 )
 LEGACY_AGENTS_TITLE = "# AGENTS.md — Operating Rules for the GSD Path Pipeline"
+# Every released whole-file AGENTS.md carries this marker.
+LEGACY_AGENTS_MARKER = "<!-- gsd-path/plain-prompt-reentry/v1 -->"
 PROJECT_CONTRACTS = (
     ("AGENTS.md", "## Plain-prompt re-entry"),
     ("WORKFLOW.md", "### Plain-prompt re-entry"),
@@ -1342,23 +1344,35 @@ def _split_agents(text: str, destination: Path) -> Optional[Tuple[str, str]]:
     return text[:start], after[1:] if after.startswith("\n") else after
 
 
-def _merged_agents(source_root: Path, destination: Path) -> bytes:
-    """AGENTS.md with Path's block inserted or replaced; owner text kept as is."""
+def _read_agents(destination: Path) -> Optional[bytes]:
+    if not _lexists(destination):
+        return None
+    try:
+        return destination.read_bytes()
+    except OSError as error:
+        raise InstallerError(f"cannot read {destination}: {error}") from error
+
+
+def _merged_agents(
+    source_root: Path, destination: Path, raw: Optional[bytes] = None
+) -> bytes:
+    """AGENTS.md with Path's block inserted or replaced; owner text kept as is.
+    raw is the current file (None when absent); read from disk when omitted."""
     template = (source_root / "AGENTS.md").read_text(encoding="utf-8")
     block = _agents_block(template)
-    raw = b""
-    if _lexists(destination):
+    if raw is None:
+        raw = _read_agents(destination)
+    if raw is not None:
         try:
-            raw = destination.read_bytes()
             text = raw.decode("utf-8")
-        except (OSError, UnicodeDecodeError) as error:
+        except UnicodeDecodeError as error:
             raise InstallerError(f"cannot read {destination}: {error}") from error
         parts = _split_agents(text, destination)
         if parts is not None:
             merged = parts[0] + block + parts[1]
         elif hashlib.sha256(raw).hexdigest() in RELEASED_AGENTS:
             merged = block  # One-time migration of an unedited whole-file install.
-        elif LEGACY_AGENTS_TITLE in text:
+        elif LEGACY_AGENTS_TITLE in text or LEGACY_AGENTS_MARKER in text:
             diff = "".join(
                 difflib.unified_diff(
                     template.splitlines(keepends=True),
@@ -1384,7 +1398,7 @@ def _merged_agents(source_root: Path, destination: Path) -> bytes:
     if len(data) > CODEX_DOC_LIMIT:
         aside = destination.with_name("AGENTS.pre-path.md")
         raise InstallerError(
-            f"{destination} would be {len(data)} bytes (existing file {len(raw)} "
+            f"{destination} would be {len(data)} bytes (existing file {len(raw or b'')} "
             f"bytes, GSD Path block {len(block.encode('utf-8'))} bytes). Codex reads "
             f"only the first {CODEX_DOC_LIMIT} bytes and silently cuts the rest. "
             f"Move it aside with `mv {shlex.quote(str(destination))} "
@@ -1396,8 +1410,9 @@ def _merged_agents(source_root: Path, destination: Path) -> bytes:
 def _apply_agents(
     source_root: Path, destination: Path, transaction: "ProjectTransaction"
 ) -> None:
-    merged = _merged_agents(source_root, destination)
-    if not _lexists(destination):
+    original = _read_agents(destination)
+    merged = _merged_agents(source_root, destination, original)
+    if original is None:
         try:
             with destination.open("xb") as output:
                 transaction.copied.append(destination)
@@ -1405,8 +1420,9 @@ def _apply_agents(
         except FileExistsError as error:
             raise _existing_contract_error(destination) from error
         return
-    original = destination.read_bytes()
     if original != merged:
+        if _read_agents(destination) != original:
+            raise InstallerError(f"{destination} changed during install; rerun")
         mode = destination.stat().st_mode & 0o777
         _atomic_write(destination, merged, mode)
         transaction.replaced.append((destination, original, mode))

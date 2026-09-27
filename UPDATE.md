@@ -14,7 +14,7 @@ Pulled new gsd-path / ran npx @opengsd/gsd-path@latest
 └─ Skills feel stale or router shows old behavior?
    ├─ Global install     → install.mjs --update
    ├─ Project-local      → install.mjs --update --local  (from repo root)
-   ├─ Project wiring     → install.mjs --update --project PATH  (keeps contracts and selected runtime)
+   ├─ Project wiring     → install.mjs --update --project PATH  (refreshes the AGENTS.md block; keeps WORKFLOW.md and selected runtime)
    └─ npm only           → npx @opengsd/gsd-path@latest --update
 
 Installed with --hooks and need to refresh wiring

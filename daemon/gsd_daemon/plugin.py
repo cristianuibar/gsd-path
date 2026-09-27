@@ -800,12 +800,14 @@ class PluginManager:
             block_removed = _without_agents_block(agents.read_bytes().decode("utf-8"))
         except (OSError, UnicodeDecodeError):
             block_removed = None
-        if block_removed is not None:
+        if block_removed is not None and agents.is_symlink():
+            skipped.append({"path": str(agents), "reason": "symlink — kept"})
+        elif block_removed is not None:
             plan.append({
                 "path": str(agents),
                 "kind": "agents-block",
                 "reason": "remove the gsd-path block; owner text is kept"
-                + ("" if block_removed.strip() else "; file becomes empty and is deleted"),
+                + ("" if block_removed else "; file becomes empty and is deleted"),
             })
         for name in CONTRACT_FILES:
             if name != "AGENTS.md" or block_removed is None:
@@ -889,10 +891,12 @@ class PluginManager:
                 elif kind == "settings":
                     self._apply_settings_removal(Path(path))
                 elif kind == "agents-block":
+                    if Path(path).is_symlink():
+                        raise ValueError("refused: AGENTS.md became a symlink")
                     remaining = _without_agents_block(Path(path).read_bytes().decode("utf-8"))
                     if remaining is None:
                         raise ValueError("gsd-path block markers changed since planning")
-                    if remaining.strip():
+                    if remaining:
                         self._write_file(path, remaining)
                     else:
                         self._remove_file(path)

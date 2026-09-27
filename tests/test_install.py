@@ -1170,6 +1170,31 @@ class InstallerTests(unittest.TestCase):
         self.assertIn(install.AGENTS_END, message)
         self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
 
+    def test_project_refuses_edited_whole_file_agents_without_title(self):
+        project = self.root / "retitled-agents"
+        project.mkdir()
+        edited = "# Our rules\n\n" + install.LEGACY_AGENTS_MARKER + "\n- mine\n"
+        (project / "AGENTS.md").write_text(edited, encoding="utf-8")
+
+        with self.assertRaisesRegex(install.InstallerError, "edited whole-file"):
+            self.install_agents(project)
+        self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_update_refuses_agents_changed_during_install(self):
+        project = self.root / "changing-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        agents.write_text("owner\n", encoding="utf-8")
+        reads = iter((b"owner\n", b"owner edit\n"))
+
+        with mock.patch.object(install, "_read_agents", side_effect=lambda _: next(reads)):
+            transaction = install.ProjectTransaction()
+            with self.assertRaisesRegex(install.InstallerError, "changed during install"):
+                install._apply_agents(self.source, agents, transaction)
+
+        self.assertEqual("owner\n", agents.read_text(encoding="utf-8"))
+        self.assertEqual([], transaction.replaced)
+
     def test_doctor_checks_agents_block(self):
         project = self.root / "doctor-agents"
         project.mkdir()

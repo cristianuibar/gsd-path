@@ -422,6 +422,7 @@ class UninstallPlanTests(unittest.TestCase):
         owner = "# Team\r\nkeep me\n"
         for text, expected in ((block + "\n" + owner, owner),
                                ("above\n" + block + owner, "above\n" + owner),
+                               (block + "\n\n", "\n"),
                                (block, None)):
             project = Path(tempfile.mkdtemp(dir=self.tmp.name))
             agents = project / "AGENTS.md"
@@ -435,6 +436,19 @@ class UninstallPlanTests(unittest.TestCase):
                 self.assertFalse(agents.exists())
             else:
                 self.assertEqual(expected, agents.read_bytes().decode("utf-8"))
+
+    def test_project_uninstall_keeps_symlinked_agents(self):
+        shared = Path(self.tmp.name) / "shared-agents.md"
+        text = "<!-- gsd-path:begin -->\nx\n<!-- gsd-path:end -->\nshared\n"
+        shared.write_text(text, encoding="utf-8")
+        project = self._make_project()
+        (project / "AGENTS.md").symlink_to(shared)
+
+        plan = self.manager.plan_uninstall_project(project)
+        self.manager.apply_plan(plan, confirm=True)
+
+        self.assertNotIn(str(project / "AGENTS.md"), [e["path"] for e in plan["plan"]])
+        self.assertEqual(text, shared.read_text(encoding="utf-8"))
 
     def test_project_plan_never_touches_dot_project(self):
         project = self._make_project()
