@@ -1071,8 +1071,17 @@ def archive_file_inventory(archive: Path) -> Sequence[str]:
     for path in archive.rglob("*"):
         if path.is_symlink():
             raise ArchiveError(f"archive contents must not be symlinks: {path}")
-        if path.is_file() and path.name != "MANIFEST.md" and not _common.is_ignored_junk(path):
-            contents.append(path.relative_to(archive).as_posix())
+        if not path.is_file() or path.name == "MANIFEST.md":
+            continue
+        relative = path.relative_to(archive)
+        if _common.is_ignored_junk(path):
+            if len(relative.parts) == 1:
+                continue
+            original = archive.parent.parent / relative
+            project = archive.parent.parent.parent
+            if run_git(project, "check-ignore", "-q", "--", str(original.relative_to(project))).returncode == 0:
+                continue
+        contents.append(relative.as_posix())
     return sorted(contents)
 
 

@@ -1138,13 +1138,7 @@ def require_canonical_abandon_inputs(active_root: Path, archive: Path) -> None:
 def write_abandon_manifest(
     archive: Path, slug: str, ruling: str, abandoned_on: str
 ) -> None:
-    contents = []
-    for path in archive.rglob("*"):
-        if path.is_symlink():
-            raise ArchiveError(f"archive contents must not be symlinks: {path}")
-        if path.is_file() and path.name != "MANIFEST.md" and not _common.is_ignored_junk(path):
-            contents.append(path.relative_to(archive).as_posix())
-    contents.sort()
+    contents = archive_file_inventory(archive)
     listed_contents = "\n".join(f"- {path}" for path in contents)
     atomic_replace(
         archive / "MANIFEST.md",
@@ -1700,11 +1694,12 @@ def require_clean_older_archives(project: Path, configured: str) -> None:
     current_prefix = f"{configured}/"
     dirty = set()
     ignored_current = set()
+    current_files = {f"{configured}/{name}" for name in archive_file_inventory(project / configured)}
     for record in status.split("\0"):
         has_status = len(record) > 3 and record[2] == " "
         code = record[:2] if has_status else ""
         path = record[3:] if has_status else record
-        if code == "!!" and _common.is_ignored_junk(project / path):
+        if code == "!!" and _common.is_ignored_junk(project / path) and path not in current_files:
             continue  # Ignored OS junk never ships and is not an artifact.
         if code == "!!" and (
             path == ".project/archive/"
