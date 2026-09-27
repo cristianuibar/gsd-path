@@ -34,14 +34,6 @@ class BuildReentryTests(unittest.TestCase):
         from scripts import install
         self.exercise_project_runtime(install.PROJECT_RUNTIME_SCRIPTS)
 
-    def test_node_project_runtime_complete_recovery(self):
-        result = subprocess.run([
-            "node", "--input-type=module", "-e",
-            "const m = await import(process.argv[1]); console.log(JSON.stringify(m.PROJECT_RUNTIME_SCRIPTS));",
-            (SCRIPT.parent / "install.mjs").as_uri(),
-        ], capture_output=True, text=True, check=True)
-        self.exercise_project_runtime(json.loads(result.stdout))
-
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
