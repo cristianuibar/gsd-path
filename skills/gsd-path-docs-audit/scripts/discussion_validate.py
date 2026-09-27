@@ -105,7 +105,7 @@ def validate_discussion_directory(
 ) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise ArchiveError("discussion archive must be a real directory")
-    entries = sorted(path.name for path in directory.iterdir())
+    entries = sorted(path.name for path in directory.iterdir() if not _common.is_ignored_junk(path))
     if entries != sorted(DISCUSSION_FILES):
         raise ArchiveError("discussion archive must contain exactly DIALOGUE.md and ANSWERS.md")
     dialogue, answers = (directory / name for name in DISCUSSION_FILES)
@@ -1071,7 +1071,7 @@ def archive_file_inventory(archive: Path) -> Sequence[str]:
     for path in archive.rglob("*"):
         if path.is_symlink():
             raise ArchiveError(f"archive contents must not be symlinks: {path}")
-        if path.is_file() and path.name != "MANIFEST.md":
+        if path.is_file() and path.name != "MANIFEST.md" and not _common.is_ignored_junk(path):
             contents.append(path.relative_to(archive).as_posix())
     return sorted(contents)
 

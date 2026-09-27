@@ -539,6 +539,8 @@ def archive_sequence_entries(project: Path) -> dict[int, Path]:
     archive_root = safe_archive_root(project)
     entries = {}
     for candidate in archive_root.iterdir():
+        if _common.is_ignored_junk(candidate):
+            continue
         match = ARCHIVE_PATTERN.fullmatch(candidate.name)
         if match is None or not candidate.is_dir():
             raise ArchiveError(f"archive root has a noncanonical entry: {candidate.name}")
@@ -624,7 +626,7 @@ def pending_ruling_count(audit: Path) -> int:
 
 
 def is_existing_carry_forward(source: Path, archived: Path) -> bool:
-    entries = list(source.iterdir()) if source.is_dir() else []
+    entries = [path for path in source.iterdir() if not _common.is_ignored_junk(path)] if source.is_dir() else []
     archived_audit = archived / "DOCS-AUDIT.md"
     if not archived_audit.is_file() or pending_ruling_count(archived_audit) == 0:
         return False
@@ -685,7 +687,7 @@ def is_real_file(path: Path) -> bool:
 def canonical_task_files(tasks: Path) -> Sequence[Path]:
     if tasks.is_symlink() or not tasks.is_dir():
         return ()
-    candidates = sorted(tasks.iterdir())
+    candidates = sorted(path for path in tasks.iterdir() if not _common.is_ignored_junk(path))
     if any(
         not TASK_FILE_PATTERN.fullmatch(path.name) or not is_real_file(path)
         for path in candidates
@@ -1140,7 +1142,7 @@ def write_abandon_manifest(
     for path in archive.rglob("*"):
         if path.is_symlink():
             raise ArchiveError(f"archive contents must not be symlinks: {path}")
-        if path.is_file() and path.name != "MANIFEST.md":
+        if path.is_file() and path.name != "MANIFEST.md" and not _common.is_ignored_junk(path):
             contents.append(path.relative_to(archive).as_posix())
     contents.sort()
     listed_contents = "\n".join(f"- {path}" for path in contents)
@@ -1702,6 +1704,8 @@ def require_clean_older_archives(project: Path, configured: str) -> None:
         has_status = len(record) > 3 and record[2] == " "
         code = record[:2] if has_status else ""
         path = record[3:] if has_status else record
+        if code == "!!" and _common.is_ignored_junk(project / path):
+            continue  # Ignored OS junk never ships and is not an artifact.
         if code == "!!" and (
             path == ".project/archive/"
             or path == configured
@@ -1765,7 +1769,9 @@ def require_clean_active_root(active_root: Path, archive: Path) -> None:
     if carried_forward:
         allowed.add("research")
         active_audit = active_research / "DOCS-AUDIT.md"
-        entries = sorted(path.name for path in active_research.iterdir()) if active_research.is_dir() else []
+        entries = sorted(
+            path.name for path in active_research.iterdir() if not _common.is_ignored_junk(path)
+        ) if active_research.is_dir() else []
         if (
             active_research.is_symlink()
             or entries != ["DOCS-AUDIT.md"]

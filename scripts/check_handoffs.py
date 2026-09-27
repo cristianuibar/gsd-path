@@ -753,6 +753,8 @@ def _task_texts(root: Path, project_dir: str) -> Dict[str, str]:
         raise HandoffError(f"missing {project_dir}/tasks")
     tasks: Dict[str, str] = {}
     for path in sorted(tasks_dir.iterdir()):
+        if _common.is_ignored_junk(path):
+            continue
         named = TASK_FILE_NAME.fullmatch(path.name)
         if named is None or not path.is_file() or path.is_symlink():
             raise HandoffError(f"non-canonical task artifact: {path.name}")

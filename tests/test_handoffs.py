@@ -956,6 +956,16 @@ The task implements the demo.
             ):
                 check_handoffs.validate_plan(root)
 
+    def test_plan_skips_an_ignored_ds_store_in_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(("git", "init", "-q", str(root)), check=True)
+            (root / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            self.write_plan_handoff(root)
+            (root / ".project/tasks/.DS_Store").write_text("finder\n", encoding="utf-8")
+
+            self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
+
     def test_plan_rejects_a_task_filename_id_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -111,7 +111,7 @@ def record_count(directory: Path) -> int:
 def validate_or_empty(directory: Path) -> None:
     if directory.is_symlink() or not directory.is_dir():
         raise DiscussionError("discussion records must be a real directory")
-    if sorted(path.name for path in directory.iterdir()) != sorted(FILES):
+    if sorted(path.name for path in directory.iterdir() if not _common.is_ignored_junk(path)) != sorted(FILES):
         raise DiscussionError("discussion directory must contain exactly DIALOGUE.md and ANSWERS.md")
     if record_count(directory) == 0:
         if "### D" in (directory / "DIALOGUE.md").read_text(encoding="utf-8"):

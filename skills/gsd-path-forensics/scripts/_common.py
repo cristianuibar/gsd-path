@@ -158,6 +158,18 @@ def run_git(
     )
 
 
+# OS files that are never pipeline artifacts when git ignores them.
+# ponytail: .DS_Store only (#149); add Thumbs.db and the like when reported.
+OS_JUNK_NAMES = frozenset({".DS_Store"})
+
+
+def is_ignored_junk(path: Path) -> bool:
+    """True for an OS junk file that git ignores and does not track."""
+    if path.name not in OS_JUNK_NAMES or path.is_symlink() or not path.is_file():
+        return False
+    return run_git(path.parent, "check-ignore", "-q", "--", path.name).returncode == 0
+
+
 def git_visible_entries(directory: Path) -> set:
     """Top-level names under directory that git tracks or would add (not ignored)."""
     result = run_git(directory, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ".")
