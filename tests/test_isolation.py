@@ -390,6 +390,69 @@ class IsolationTests(unittest.TestCase):
             result = self.serial_land_with_gitignore(repo, "/build/\n")
             self.assertEqual(git(repo, "rev-parse", "HEAD"), result["commit"])
 
+    def legacy_ignored_ledger_repo(self, root: Path, ledger: str = "") -> Path:
+        # A milestone from before verify-record refused ignored ledgers: `build/` hid the ledger.
+        repo = root / "repo"
+        repo.mkdir()
+        self.init_bound_repo(repo)
+        self.write(repo, ".gitignore", "build/\n")
+        git(repo, "add", ".gitignore")
+        git(repo, "commit", "-q", "-m", "product rule")
+        self.write(repo, isolation.VERIFY_LEDGER_PATH, ledger)
+        self.assertEqual(git(repo, "status", "--porcelain"), "")
+        return repo
+
+    def test_build_checkpoint_commits_a_legacy_ignored_ledger_so_an_anchor_task_lands(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.legacy_ignored_ledger_repo(Path(temporary))
+            base = git(repo, "rev-parse", "HEAD")
+            result = isolation.checkpoint(
+                repo, base, "build: record dispatch bookkeeping", "Why: commit the ledger", [".project"],
+            )
+            self.assertEqual(result["paths"], [isolation.VERIFY_LEDGER_PATH])
+            self.assertEqual(git(repo, "ls-files", isolation.VERIFY_LEDGER_PATH), isolation.VERIFY_LEDGER_PATH)
+
+            landed = self.serial_land_with_gitignore(repo, "/build/\n")
+            self.assertEqual(
+                git(repo, "show", "--name-only", "--format=", landed["commit"]).split(),
+                [".gitignore", ".project/tasks/T001.md", "src/app.py"],
+            )
+            self.assertEqual(git(repo, "status", "--porcelain"), "")
+
+    def test_non_build_checkpoint_leaves_a_legacy_ignored_ledger_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.legacy_ignored_ledger_repo(Path(temporary))
+            base = git(repo, "rev-parse", "HEAD")
+            self.write(repo, ".project/STATE.md", "plan done\n")
+            result = isolation.checkpoint(
+                repo, base, "plan: build plan approved", "Why: approved plan checkpoint\nMilestone: M001",
+                [".project"],
+            )
+            self.assertEqual(result["paths"], [".project/STATE.md"])
+            self.assertEqual(git(repo, "ls-files", isolation.VERIFY_LEDGER_PATH), "")
+
+    def test_build_checkpoint_refuses_a_malformed_legacy_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.legacy_ignored_ledger_repo(Path(temporary), "not json\n")
+            base = git(repo, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(isolation.IsolationError, "line 1 is not JSON"):
+                isolation.checkpoint(
+                    repo, base, "build: record dispatch bookkeeping", "Why: commit the ledger", [".project"],
+                )
+            self.assertEqual(git(repo, "rev-parse", "HEAD"), base)
+
+    def test_driver_checkpoints_a_legacy_ignored_ledger_before_dispatch(self) -> None:
+        from scripts import dispatch_driver
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.legacy_ignored_ledger_repo(Path(temporary))
+            receipt = {"steps": []}
+            commit = dispatch_driver.checkpoint_project(
+                repo, receipt, "build: record dispatch bookkeeping", "Why: commit the ledger",
+            )
+            self.assertEqual(commit, git(repo, "rev-parse", "HEAD"))
+            self.assertEqual(git(repo, "ls-files", isolation.VERIFY_LEDGER_PATH), isolation.VERIFY_LEDGER_PATH)
+
     def test_serial_land_rejects_hook_staged_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
