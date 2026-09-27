@@ -15,20 +15,22 @@ a journal makes the pair resumable. Build locks the participating members in
 their `MEMBERS.md` order under `.project/build/`, not in STATE. Ship integrates
 and tags those members in that order, then closes the coordinator. It records
 each member's reviewed HEAD and integration. Git cannot merge repos atomically,
-so a failed close remains partially shipped until resume or a patch plan.
+so a failed close remains partially shipped. Resume checks the exact remote
+merge and tag before continuing, or a patch plan completes the close.
 
 **Considered options:** a workspace folder outside Git holds `.project/` (the
 ship commit and archive leave Git); linked peer projects each hold `.project/`
 (no shared milestone or close); open every PR and merge all at the end
 (pull-request mode only).
 
-**Consequences:** member branches and tags include the coordinator name
-(`gsd-path/<coord>-M00N`, `milestone/<coord>-NNN-slug`). All branch checks must
-accept this pattern only for verified members. Joining adds no new tracked Path
+**Consequences:** every member bound, task, verify, and integrate branch, plus
+member tags, includes the coordinator name. Branch checks accept these names
+only for verified members. Joining adds no new tracked Path
 files and leaves a member's existing `.project/` untouched. Its shared Git
 directory holds a validated coordinator marker and exact push authorization;
 member hooks call the coordinator guard. Member sidecars get untracked host
-guard configs and a shared, pinned layout for cross-repo Verify. Ship records a
+guard configs. They sit beside the coordinator verify sidecar in a shared,
+pinned layout for cross-repo Verify. Ship records a
 `Reviewed-HEAD` for each member. Member execution stays disabled until the
 two-repo proof passes. A member's remote default must be `main`; each member
 may choose its integration mode. The coordinator may be a product repo or a
