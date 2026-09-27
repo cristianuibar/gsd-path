@@ -302,7 +302,7 @@ def _authorize(checkout: Path, project: str, kind: str, ref: str, sha: str) -> N
 
 
 def authorize_push(checkout: Path, project: str, ref: str, sha: str) -> None:
-    """Allow one push of `ref` to exactly `sha` (a commit or tag object)."""
+    """Authorize `ref` at exactly `sha` until cleared (a commit or tag object)."""
     _authorize(checkout, project, "push", ref, sha)
 
 
