@@ -27,10 +27,12 @@ import time
 from pathlib import Path
 from typing import BinaryIO, Iterator, List, Optional, Sequence
 
-if os.name == "nt":
-    import msvcrt
-else:
+# Chosen by what imports, not os.name, so tests can emulate Windows on POSIX.
+try:
     import fcntl
+except ImportError:
+    fcntl = None  # type: ignore[assignment]
+    import msvcrt
 
 # Windows opens descriptors in text mode unless asked otherwise.
 O_BINARY = getattr(os, "O_BINARY", 0)
@@ -327,7 +329,7 @@ def exclusive_lock(
     path.parent.mkdir(parents=True, exist_ok=True)
     deadline = None if timeout is None else time.monotonic() + timeout
     with open(path, "a+b") as handle:
-        if os.name == "nt":
+        if fcntl is None:
             # msvcrt locks bytes from the current position; keep one to lock.
             handle.seek(0, os.SEEK_END)
             if handle.tell() == 0:
@@ -336,7 +338,7 @@ def exclusive_lock(
         delay = 0.01
         while True:
             try:
-                if os.name == "nt":
+                if fcntl is None:
                     handle.seek(0)
                     msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
                 elif blocking and deadline is None:
@@ -356,7 +358,7 @@ def exclusive_lock(
         try:
             yield handle
         finally:
-            if os.name == "nt":
+            if fcntl is None:
                 handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:

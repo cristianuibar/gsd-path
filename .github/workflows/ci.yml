@@ -67,9 +67,16 @@ jobs:
         run: npm ci
       - name: Check prerequisites
         run: npm run check:prereqs
-      - name: Verify (offline gate)
-        # No PYTHONUTF8: encoding defaults must not decide the result.
-        run: npm run verify
+      # The same suites as `npm run verify`, split so each reports even when
+      # another fails. No PYTHONUTF8: encoding defaults must not decide results.
+      - name: Node tests
+        run: npm test
+      - name: Python tests
+        if: ${{ !cancelled() }}
+        run: npm run test:python
+      - name: Skill resource sync
+        if: ${{ !cancelled() }}
+        run: npm run test:sync
 
   daemon:
     runs-on: ubuntu-latest
