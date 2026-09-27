@@ -95,7 +95,13 @@ def _marker_path(checkout: Path) -> Path:
     directory = _common_dir(checkout) / "gsd-path"
     if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
         raise MembersError(f"member marker directory must be real: {directory}")
-    return directory / "member.json"
+    path = directory / "member.json"
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise MembersError(
+            f"member marker is not a regular file: {path}; "
+            "remove it by hand, then run members.py repair --repo <coordinator>"
+        )
+    return path
 
 
 def _read_marker(path: Path) -> Optional[dict[str, str]]:
@@ -103,7 +109,10 @@ def _read_marker(path: Path) -> Optional[dict[str, str]]:
         return None
     try:
         if path.is_symlink() or not path.is_file():
-            raise ValueError("not a regular file")
+            raise MembersError(
+                f"member marker is not a regular file: {path}; "
+                "remove it by hand, then run members.py repair --repo <coordinator>"
+            )
         data = json.loads(path.read_text(encoding="utf-8"))
         if (not isinstance(data, dict) or set(data) != MARKER_KEYS
                 or any(not isinstance(data[key], str) or not data[key].strip() for key in MARKER_KEYS)

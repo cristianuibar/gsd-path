@@ -472,6 +472,39 @@ class MemberTests(unittest.TestCase):
         self.assertIn(str(directory), validation.stderr)
         self.assertIn(f"members.py repair --repo {self.coordinator}", validation.stderr)
 
+    def test_nonfile_marker_requires_manual_removal_before_repair(self) -> None:
+        member = self.joined()
+        marker = self.marker_path(member)
+        marker.unlink()
+        marker.mkdir()
+        contents = marker / "keep.txt"
+        contents.write_text("keep", encoding="utf-8")
+        for command in ("validate", "repair"):
+            result = self.run_members(command)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(str(marker), result.stderr)
+            self.assertIn("remove it by hand", result.stderr)
+            self.assertIn("members.py repair --repo", result.stderr)
+        with self.assertRaises(members.MembersError) as caught:
+            members.member_role(member)
+        self.assertIn("remove it by hand", str(caught.exception))
+        self.assertEqual(contents.read_text(encoding="utf-8"), "keep")
+        shutil.rmtree(marker)
+        repaired = self.run_members("repair")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
+
+    def test_add_refuses_nonfile_marker(self) -> None:
+        member = self.make_member("web")
+        marker = self.marker_path(member)
+        marker.parent.mkdir(parents=True)
+        marker.mkdir()
+        refused = self.add("web", member)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn(str(marker), refused.stderr)
+        self.assertIn("remove it by hand", refused.stderr)
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+
     def test_live_coordinator_copy_cannot_take_over_member(self) -> None:
         member = self.joined()
         marker = self.marker_path(member)
