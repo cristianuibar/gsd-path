@@ -3,7 +3,7 @@
 <!-- Written by the docs auditor ($gsd-path-docs-audit or $gsd-path-inspect).
      Every verdict carries evidence; a verdict without evidence is a defect. -->
 
-Repo root: <absolute path>
+Repo root: <absolute primary repo root, never a sidecar>
 Audited: <date>
 Audited HEAD: <40-hex commit the claims were checked at, or none>
 Alignment mode: <yes | no — yes when .project/ artifacts were also audited>
