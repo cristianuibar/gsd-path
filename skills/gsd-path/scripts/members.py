@@ -3,10 +3,10 @@
 """Record and validate the member repositories of a multi-repo coordinator.
 
 The coordinator's `.project/MEMBERS.md` lists members in ship order
-(docs/adr/0002-multi-repo-coordinator.md). `add` only writes the file; the
-next approval checkpoint commits it with the other `.project` artifacts.
-Each member's shared Git directory holds an untracked marker naming its
-coordinator; `member_role` verifies it from any worktree of the member.
+(docs/adr/0002-multi-repo-coordinator.md). `add` writes that file and an
+untracked marker in the member's shared Git directory. The next approval
+checkpoint commits MEMBERS.md with the other `.project` artifacts.
+`member_role` verifies the marker from any worktree of the member.
 """
 
 from __future__ import annotations
