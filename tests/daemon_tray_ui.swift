@@ -49,8 +49,8 @@ struct TrayUITest {
         require(identityRow.detail.lineBreakMode == .byWordWrapping, "status values wrap between words")
         require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
         let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
-        require(identityRow.location.stringValue == "Worktree: M001", "worktree uses its short branch name")
-        require(!identityLabels.contains { $0.stringValue.contains("/Users/") }, "full paths stay out of visible rows")
+        require(identityRow.location.stringValue == "Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: M001", "actual project folder is visible above the worktree")
+        require(!identityRow.location.isHidden, "actual project folder is always visible")
         require(identityRow.toolTip?.contains("Project folder: /Users/operator/github/open-gsd/gsd-path\nWorktree: /Users/operator/orca/workspaces/gsd-path/feature/fixtures/minimal-pipeline") == true, "full paths remain in tooltip")
         for label in identityLabels {
             require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
@@ -68,7 +68,7 @@ struct TrayUITest {
             "M004 · build · wave 2\n6 of 9 tasks · 2/3 criteria · since 2026-09-10\n$24.60 · 84 turns",
             "M001 shipped 2026-09-01\n4 tasks",
         ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
-        require(rows.allSatisfy { $0.location.isHidden }, "main checkout rows need no worktree label")
+        require(rows.map(\.location.stringValue) == ["Project folder: /sample/atlas'&tab=usage", "Project folder: /sample/notes", "Project folder: /sample/gsd", "Project folder: /sample/done"], "main checkouts show their actual folders")
         let meter: (ProjectRowView) -> String = { row in
             row.meter.segments.map { $0 == .done ? "d" : $0 == .now ? "n" : "-" }.joined()
         }
