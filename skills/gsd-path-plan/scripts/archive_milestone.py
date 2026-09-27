@@ -1745,7 +1745,7 @@ def require_clean_active_root(active_root: Path, archive: Path) -> None:
     archived_audit = archive / "research" / "DOCS-AUDIT.md"
     carried_forward = pending_ruling_count(archived_audit)
     # Persistent project metadata ships but never archives with a milestone.
-    allowed = {"STATE.md", "REPOSITORY.md", "archive", "LESSONS.md", "next"}
+    allowed = {"STATE.md", "REPOSITORY.md", "MEMBERS.md", "archive", "LESSONS.md", "next"}
     for name in ("config.json", "model-policy.json"):
         path = active_root / name
         if path.exists() or path.is_symlink():

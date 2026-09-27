@@ -36,6 +36,7 @@
     "scripts/integration.py",
     "scripts/archive_milestone.py",
     "scripts/bootstrap_repository.py",
+    "scripts/members.py",
     "scripts/detect_project.py",
     "scripts/promote_lookahead.py",
     "scripts/discussion_records.py",
