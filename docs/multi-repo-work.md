@@ -24,7 +24,7 @@ Function names, not line numbers, because main moves.
 | Landing proof | `isolation._landing_state` and `build_state.LANDED_VERDICTS` expect product paths and the task file in one commit. `git_guard.product_commit_violations` still enforces this for a single repo; member mode skips it until S3 supplies landing proof. |
 | Verify ledger | `_common.latest_verify_entry`, `build_state.verify_lookup`, `isolation._verify_ledger_pass`, and `lean_verification.verify_project` use (command, SHA). |
 | Sidecar placement | `worktree_paths._workspace` gives each repo a separate hashed root; `../<member>` does not resolve across them. |
-| Guards | `guard_hook.path_kind` calls member writes `external` and allows them. Member `git_guard` skips the member's own STATE as a commit gate; archive checks still apply. |
+| Guards | `guard_hook` applies the S2d member-write rules below. Member `git_guard` skips the member's own STATE as a commit gate; archive checks still apply. |
 | Ship body | `git_guard.ship_contract_violations`, `archive_milestone.require_canonical_commit_body`, and `pipeline_undo._archive_metadata_error` require the current exact ship body. |
 | Lookahead drift | `state_checkpoint._classify_plan_drift` compares the approved plan against one repo. |
 | Close and retirement | `integration.integrate`, `integrate_pull_request`, and `validate_integrated` close one repo. They need a STATE, archive, and ship commit in that repo, require the ship commit as the merge's second parent, and name the tag `milestone/<archive-name>`. `pipeline_git.bind_next_milestone_branch` and `retire_previous_branch` retire one branch. |
@@ -33,7 +33,7 @@ Function names, not line numbers, because main moves.
 
 Each slice ships in its own PR. Every slice changes all readers of any contract
 it changes. A script that checks branch names accepts member names in the slice
-that first runs it in a member: `git_guard` in S2b; `guard_hook` in S2d; `isolation`, `dispatch_driver`,
+that first runs it in a member: `git_guard` in S2b; `isolation`, `dispatch_driver`,
 and `build_state` in S3; `integration`, `archive_milestone`, `pipeline_undo`,
 `pipeline_diagnose`, and `pipeline_git` retirement in S4. `STATE.branch` stays the
 coordinator's `gsd-path/M00N`, so `pipeline_state` does not change. Until then those
@@ -72,7 +72,7 @@ executable interface; do not infer multi-repo behavior from host receipts.
 - Brownfield `members add` creates `MEMBERS.md`; ship input validation accepts it, `REPOSITORY.md` stays fixed, and non-`main` defaults are refused.
 - A two-repo quick-lane run covers task dispatch, cross-repo milestone Verify from the coordinator sidecar with `../<member>`, final review, ordered ship, and next-milestone branch retirement.
 - Namespaced member bound, task, verify, and integrate branches work without colliding with retained member branches or being accepted as coordinator branches.
-- Member writes are denied in the wrong phase, including a coordinator-session write into a member outside build. Sidecar host configs stay untracked and compose with existing hooks.
+- S2d denies guarded file-edit requests into a member during plan, including edits from a coordinator session. In S3, sidecar host configs stay untracked and compose with existing hooks.
 - For a listed member, `members validate` rejects a missing or invalid Git-common-dir marker and names the repair command; `member_role` returns `None` when no marker exists. Member pre-push refuses an unauthorized ref or SHA, accepts the pull-request bound branch at the reviewed HEAD, and accepts direct-mode pushes of the authorized merge to `main`, bound branch at the reviewed HEAD, and annotated tag object to the member tag ref. Each ref accepts only its authorized object. A bound-branch delete is accepted only with a delete authorization whose expected remote SHA matches, and refused otherwise.
 - A member with shipped M004 and a missing local tag joins and lands a task without applying its own STATE; an active member milestone is refused.
 - A crash between member product commit and coordinator record resumes. Deleting the member commit after the record makes the task not landed. Two parallel tasks sharing Base land in order, with the second landing proved against its actual parent.
