@@ -243,8 +243,13 @@ class WorkflowRunTests(unittest.TestCase):
         edits = {
             "finding_skeptics off": lambda root: self.edit(
                 root, "plan/PLAN.md", "- review_panel: off", "- review_panel: off\n- finding_skeptics: on"),
+            "finding_skeptics": lambda root: self.edit(
+                root, "plan/PLAN.md", "## Config", "- finding_skeptics: off\n\n## Config\n\n- finding_skeptics: on"),
             "review_panel off": lambda root: self.edit(
                 root, "plan/PLAN.md", "- review_panel: off", "- review_panel: claude,gpt"),
+            "quick lane": lambda root: self.edit(
+                root, "intent/INTENT.md", "Lane: quick   <!-- quick -->",
+                "Lane: standard   <!-- quick -->\nLane: quick"),
             "one wave and at most two tasks": self.third_task,
             "user ruling": lambda root: audit_ruling(root),
             "placeholder user ruling": lambda root: audit_ruling(

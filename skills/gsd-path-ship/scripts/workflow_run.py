@@ -221,9 +221,11 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if step("discussion_records.py", "pending", "--repo", str(repo))["pending"]:
                 raise StepFailed("pending discussion requires its owner disposition")
             track = repo / project_dir
-            intent = re.sub(r"(?s)<!--.*?-->", "", (track / "intent/INTENT.md").read_text(encoding="utf-8"))
-            if not re.search(r"(?m)^Lane:\s*quick\s*$", intent):
+            intent = (track / "intent/INTENT.md").read_text(encoding="utf-8")
+            lane = re.search(r"(?m)^Lane:\s*(.+)$", intent)
+            if not lane or lane.group(1).split("<!--", 1)[0].strip().strip("`") != "quick":
                 raise StepFailed("pre-approval covers only the quick lane")
+            intent = re.sub(r"(?s)<!--.*?-->", "", intent)
             if re.search(r"(?m)^\s*-\s*\[(RESEARCH|NEEDS-USER)\]", _common.section_body(intent, "Open questions") or ""):
                 raise StepFailed("INTENT.md has open RESEARCH or NEEDS-USER questions")
             audit_path = track / "research/DOCS-AUDIT.md"
@@ -243,7 +245,8 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                 if gate_plan()["mode"] != "off":
                     raise StepFailed("pre-approval requires review_panel off")
                 plan = re.sub(r"(?s)<!--.*?-->", "", (track / "plan/PLAN.md").read_text(encoding="utf-8"))
-                skeptics = re.search(r"(?m)^-\s*finding_skeptics:\s*(\S+)", plan)
+                config = _common.section_body(plan, "Config") or ""
+                skeptics = re.search(r"(?m)^[ \t]*-[ \t]*finding_skeptics:[ \t]*(\S+)", config)
                 if skeptics and skeptics.group(1) != "off":
                     raise StepFailed("pre-approval requires finding_skeptics off")
                 # Quick-lane limit from project policy (gsd-path-plan Quick mode): one wave, at most two tasks.
