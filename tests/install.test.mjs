@@ -596,6 +596,7 @@ test("existing managed entries backed up and unrelated preserved", async () => {
   assert.equal(fs.readFileSync(path.join(outside, "marker"), "utf8"), "preserve");
   assert.ok(fs.statSync(path.join(target, "other-skill")).isDirectory());
   assert.match(results.join("\n"), /backed up 5 entries/);
+  assert.match(results.join("\n"), /local edits inside these skills are not carried forward/);
 });
 
 test("codex migrates legacy root and preserves unrelated entries", async () => {

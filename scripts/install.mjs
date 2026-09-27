@@ -40,6 +40,8 @@ export const PROJECT_RUNTIME_MARKER = "gsd-path project runtime";
 export const PROJECT_STATUS_LAUNCHER = "status_runtime.py";
 export const PROJECT_STATUS_MARKER = "gsd-path project status launcher";
 const INSTALL_LOCK_NAME = ".gsd-path-install-lock";
+const LOCAL_EDITS_NOTE =
+  "; local edits inside these skills are not carried forward (see UPDATE.md#local-additions)";
 const INSTALL_LOCK_OWNER = "owner.json";
 const INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2";
 export const CLAUDE_MATCHER = ".*";
@@ -1503,7 +1505,7 @@ export async function install(sourceRoot, plans, options = {}) {
         if (transaction.backup !== null) {
           results.push(
             `${plan.targets.join("+")}: backed up ${transaction.moved.length} entries ` +
-              `to ${transaction.backup}`
+              `to ${transaction.backup}${LOCAL_EDITS_NOTE}`
           );
         }
       }

@@ -63,6 +63,24 @@ Use `--hooks-init` to add guards to an existing project without changing its
 `AGENTS.md` or `WORKFLOW.md`. It inspects and merges native configs only for
 the selected hosts; configs for unselected hosts remain untouched.
 
+### Local additions
+
+Skill directories are managed. Each update moves them to
+`disabled-gsd-skills` (then `disabled-gsd-skills-1`, …) and installs fresh
+copies, so edits and added files inside a skill directory are not carried
+forward. To recover them, diff the backup against the same skill from the
+release you had installed, not against the new install; that diff also holds
+upstream changes.
+
+Put local rules in project-owned files instead. Add a `## Local rules`
+section at the end of `AGENTS.md`, with subsections per phase if needed
+(for example, "Research: also read X"). Updates keep `AGENTS.md`, and phase
+and subagent briefs name it. Hosts load project instructions differently, so
+confirm your host and its subagents read it. Keeping the section at the end
+keeps the manual template merge small.
+
+Gates are scripts, not an extension point. To change a gate, open an issue.
+
 ---
 
 ## Update skills

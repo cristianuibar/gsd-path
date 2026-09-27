@@ -885,6 +885,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual("preserve", (outside / "marker").read_text(encoding="utf-8"))
         self.assertTrue(unrelated.is_dir())
         self.assertIn("backed up 5 entries", output)
+        self.assertIn("local edits inside these skills are not carried forward", output)
 
     def test_case_variant_managed_entry_is_backed_up_before_install(self):
         target = self.root / "case-entry" / "skills"
