@@ -158,6 +158,14 @@ def run_git(
     )
 
 
+def git_visible_entries(directory: Path) -> set:
+    """Top-level names under directory that git tracks or would add (not ignored)."""
+    result = run_git(directory, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ".")
+    if result.returncode != 0:
+        raise RuntimeError(f"git ls-files failed in {directory}: {result.stderr.strip()}")
+    return {path.split("/", 1)[0] for path in result.stdout.split("\0") if path}
+
+
 def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:
     temporary_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = None

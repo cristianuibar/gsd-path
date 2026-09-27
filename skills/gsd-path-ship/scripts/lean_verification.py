@@ -148,8 +148,10 @@ def _require_ship_inputs(repo, expected_head):
     if _git(repo, "rev-parse", "HEAD") != expected_head:
         raise contracts.HandoffError("primary HEAD changed")
     isolation.prune_host_scratch(repo / ".project")
+    # Ignored, untracked entries (.DS_Store) never ship, so they are not artifacts.
+    visible = _common.git_visible_entries(repo / ".project")
     unexpected = sorted(path.name for path in (repo / ".project").iterdir()
-                        if path.name not in isolation.PROJECT_ENTRIES)
+                        if path.name not in isolation.PROJECT_ENTRIES and path.name in visible)
     if unexpected:
         raise contracts.HandoffError("unsupported .project artifacts: " + ", ".join(unexpected))
     dirty = isolation.uncommitted_paths(repo)
