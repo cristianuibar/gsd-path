@@ -717,8 +717,8 @@ def _member_journal_path(coordinator: Path, task_id: str) -> Path:
 
 
 @contextlib.contextmanager
-def _member_landing_lock(coordinator: Path, member: str) -> Iterator[None]:
-    path = common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, f"{validate_name(member, 'member')}.lock")
+def _member_landing_lock(coordinator: Path) -> Iterator[None]:
+    path = common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, ".lock")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as handle:
         if sys.platform == "win32":
@@ -906,10 +906,15 @@ def land_member(
     coordinator = require_directory(coordinator, "coordinator")
     _require_member_coordinator_branch(coordinator)
     task_file = relative_posix(task_file)
-    with _member_landing_lock(coordinator, member):
+    with _member_landing_lock(coordinator):
         path = _member_journal_path(coordinator, task_id)
         if os.path.lexists(path):
             raise IsolationError(f"a member landing is pending for {task_id}; run recover_member_landing first")
+        for pending in sorted(path.parent.glob("*.json")):
+            if json.loads(pending.read_text(encoding="utf-8"))["member"] == member:
+                raise IsolationError(
+                    f"member {member} has pending landing {pending.stem}; run recover_member_landing first"
+                )
         checkout, project, _ = _member_context(coordinator, member)
         bound = Path(member_bound_checkout(coordinator, member)["checkout"])
         sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
@@ -950,14 +955,11 @@ def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]
     if not os.path.lexists(path):
         return {"state": "none"}
     _require_member_coordinator_branch(coordinator)
-    journal = json.loads(path.read_text(encoding="utf-8"))
-    member = str(journal["member"])
-    with _member_landing_lock(coordinator, member):
+    with _member_landing_lock(coordinator):
         if not os.path.lexists(path):
             return {"state": "none"}
         journal = json.loads(path.read_text(encoding="utf-8"))
-        if journal["member"] != member:
-            raise IsolationError("member landing journal changed while acquiring its lock")
+        member = str(journal["member"])
         bound = Path(member_bound_checkout(coordinator, member)["checkout"])
         _, allowed = _member_contract(coordinator, str(journal["base"]), str(journal["task_file"]), member)
         if journal.get("landing"):

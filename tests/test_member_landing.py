@@ -81,6 +81,18 @@ class MemberLandingTests(unittest.TestCase):
     def edit(self, name: str = "app.py", text: str = "v2\n") -> None:
         (self.sidecar / name).write_text(text, encoding="utf-8")
 
+    def prepare_second_task(self) -> str:
+        second_file = ".project/tasks/T002-add.md"
+        second_task = TASK.replace("T001", "T002").replace("Change app", "Add config").replace(
+            "app.py", "config.py")
+        (self.coordinator / second_file).write_text(second_task, encoding="utf-8")
+        git(self.coordinator, "add", second_file)
+        git(self.coordinator, "commit", "-q", "-m", "add second task")
+        self.base = git(self.coordinator, "rev-parse", "HEAD")
+        second = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        (Path(second["worktree"]) / "config.py").write_text("added\n", encoding="utf-8")
+        return second_file
+
     def journal(self) -> Path:
         common = git(self.coordinator, "rev-parse", "--path-format=absolute", "--git-common-dir")
         return Path(common) / "gsd-path" / "member-landings" / "T001.json"
@@ -118,15 +130,7 @@ class MemberLandingTests(unittest.TestCase):
         self.assert_landed_once(self.land())
 
     def test_parallel_member_landings_use_successive_bound_parents(self) -> None:
-        second_file = ".project/tasks/T002-add.md"
-        second_task = TASK.replace("T001", "T002").replace("Change app", "Add config").replace(
-            "app.py", "config.py")
-        (self.coordinator / second_file).write_text(second_task, encoding="utf-8")
-        git(self.coordinator, "add", second_file)
-        git(self.coordinator, "commit", "-q", "-m", "add second task")
-        self.base = git(self.coordinator, "rev-parse", "HEAD")
-        second = isolation.isolate_member_task(self.coordinator, "web", "T002")
-        (Path(second["worktree"]) / "config.py").write_text("added\n", encoding="utf-8")
+        second_file = self.prepare_second_task()
         self.edit()
         first_checked = threading.Event()
         second_started = threading.Event()
@@ -150,7 +154,7 @@ class MemberLandingTests(unittest.TestCase):
                 try:
                     first_future = pool.submit(self.land)
                     self.assertTrue(first_checked.wait(10))
-                    lock = self.journal().with_name("web.lock")
+                    lock = self.journal().with_name(".lock")
                     with lock.open("r+b") as handle:
                         if sys.platform == "win32":
                             import msvcrt
@@ -235,6 +239,28 @@ class MemberLandingTests(unittest.TestCase):
 
     def test_crash_before_the_cherry_pick_resumes_the_landing(self) -> None:
         self.crash_then_recover("_pick_member_landing")
+
+    def test_pending_member_journal_blocks_next_task_until_recovery(self) -> None:
+        second_file = self.prepare_second_task()
+        self.edit()
+        with mock.patch.object(isolation, "_pick_member_landing", side_effect=RuntimeError("crash")):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        self.assertEqual(self.bound_tip(), self.member_base)
+        with self.assertRaisesRegex(isolation.IsolationError, "T001.*recover_member_landing"):
+            isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
+                                  self.base, self.member_base)
+        self.assertTrue(self.journal().exists())
+        self.assertFalse(self.journal().with_name("T002.json").exists())
+        self.assertEqual(self.bound_tip(), self.member_base)
+        first = isolation.recover_member_landing(self.coordinator, "T001")
+        second = isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
+                                       self.base, self.member_base)
+        self.assertEqual(git(self.bound, "rev-parse", f"{second['landing']}^"), first["landing"])
+        self.assertEqual(git(self.coordinator, "log", "-2", "--format=%s").splitlines(),
+                         ["T002: Add config", "T001: Change app"])
+        self.assertFalse(self.journal().exists())
+        self.assertFalse(self.journal().with_name("T002.json").exists())
 
     def test_crash_after_the_cherry_pick_does_not_pick_twice(self) -> None:
         original = isolation._record_member_journal
