@@ -1182,6 +1182,10 @@ def land(
         raise IsolationError(f"source is not its Git root: {source}")
     if common_git_dir(primary) != common_git_dir(source):
         raise IsolationError("source worktree belongs to another repository")
+    # The source holds the task's own .gitignore edits, so a task that anchors a rule can land.
+    ignore_error = _common.project_ignore_error(source)
+    if ignore_error:
+        raise IsolationError(ignore_error)
     bound = require_bound(primary)
     source_branch = require_attached(source)
     resolved_base = require_commit(primary, require_full_sha(base))

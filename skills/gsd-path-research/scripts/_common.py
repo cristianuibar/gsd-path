@@ -33,6 +33,56 @@ VERIFY_LEDGER_SCHEMA = "gsd-path/verify-ledger/v2"
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 
 
+# Sample paths the pipeline must commit. A product rule such as an unanchored
+# `build/` would otherwise drop them silently from every commit.
+PROJECT_PROBE_PATHS = (
+    ".project/STATE.md",
+    ".project/LESSONS.md",
+    ".project/REPOSITORY.md",
+    ".project/MEMBERS.md",
+    ".project/CHARTER.md",
+    ".project/ROADMAP.md",
+    ".project/SYNTHESIS.md",
+    VERIFY_LEDGER_PATH,
+    ".project/build/evidence.json",
+    ".project/archive/001-probe/build/evidence.json",
+    ".project/archive/001-probe/build/verify-ledger.jsonl",
+    ".project/intent/probe.md",
+    ".project/research/probe.md",
+    ".project/plan/probe.md",
+    ".project/plan/PLAN.md",
+    ".project/tasks/probe.md",
+    ".project/review/probe.md",
+    ".project/discuss/probe.md",
+    ".project/next/probe.md",
+)
+
+
+def project_ignore_error(repo: Path) -> Optional[str]:
+    """Why ignore rules would drop pipeline state from commits, or None."""
+    result = subprocess.run(
+        ("git", "-C", str(repo), "check-ignore", "-v", "-n", "-z", "--no-index", "--stdin"),
+        input="\0".join(PROJECT_PROBE_PATHS) + "\0",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode not in (0, 1):
+        return f"could not check ignore rules: {result.stderr.strip()}"
+    fields = result.stdout.split("\0")
+    hits = []
+    for index in range(0, len(fields) - 3, 4):
+        source, line, pattern, path = fields[index:index + 4]
+        # A `!` match re-includes the path; only a plain match excludes it.
+        if pattern and not pattern.startswith("!"):
+            hits.append(f"{source}:{line}:{pattern} excludes {path}")
+    if not hits:
+        return None
+    return ("ignore rules exclude GSD Path state that must be committed: "
+            + "; ".join(hits)
+            + ". Anchor the product rule (for example `/build/`) in a task that owns it.")
+
+
 def section_body(text: str, heading: str) -> Optional[str]:
     """The text under `## <heading>` up to the next `## `, or None when absent."""
     match = re.search(
