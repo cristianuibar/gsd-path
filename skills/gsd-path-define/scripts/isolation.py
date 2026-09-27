@@ -590,7 +590,7 @@ def _member_context(coordinator: Path, member: str) -> Tuple[Path, str, Dict[str
     entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
     entry = next((item for item in entries if item["name"] == member), None)
     if entry is None:
-        raise IsolationError(f"member {member} is not locked for this build")
+        raise IsolationError(f"member {member} is not locked for this build because no task named it at build start")
     repair = f"run members.py repair --repo {coordinator}"
     try:
         listed = {item["name"]: item for item in members.read_members(coordinator)}
@@ -667,7 +667,9 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
         if removed.returncode != 0:
             raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
     if tip.returncode == 0:
-        run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
+        deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
+        if deleted.returncode != 0:
+            raise IsolationError((deleted.stderr or deleted.stdout).strip() or "git update-ref failed")
 
 
 def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:

@@ -72,11 +72,24 @@ class MemberIsolationTests(unittest.TestCase):
         self.assertEqual(isolation.member_bound_checkout(self.coordinator, "web"), first)
         self.team_checkout_untouched()
 
+    def test_bound_checkout_ignores_a_legacy_bound_directory(self) -> None:
+        legacy = self.root / "web.gsd-path" / "bound" / "acme-M001"
+        legacy.mkdir(parents=True)
+        result = isolation.member_bound_checkout(self.coordinator, "web")
+        self.assertTrue(Path(result["checkout"]).is_relative_to(self.workspace))
+        self.assertNotEqual(Path(result["checkout"]), legacy)
+        self.assertEqual(git(Path(result["checkout"]), "branch", "--show-current").stdout.strip(), BOUND)
+
     def test_bound_checkout_refuses_unlocked_or_stale_members(self) -> None:
-        with self.assertRaisesRegex(isolation.IsolationError, "not locked"):
+        with self.assertRaisesRegex(isolation.IsolationError, "not locked for this build because no task named it at build start"):
             isolation.member_bound_checkout(self.coordinator, "sdk")
         (self.coordinator / ".project" / "MEMBERS.md").unlink()
         with self.assertRaisesRegex(isolation.IsolationError, "members.py repair"):
+            isolation.member_bound_checkout(self.coordinator, "web")
+
+    def test_bound_checkout_refuses_a_member_when_the_build_lock_is_missing(self) -> None:
+        (self.coordinator / ".project" / "build" / "members.json").unlink()
+        with self.assertRaisesRegex(isolation.IsolationError, "not locked for this build because no task named it at build start"):
             isolation.member_bound_checkout(self.coordinator, "web")
 
     def test_bound_checkout_refuses_a_member_whose_marker_is_gone(self) -> None:
@@ -126,6 +139,21 @@ class MemberIsolationTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "unlanded"):
             isolation.retire_member_task(self.coordinator, "web", "T001")
         self.assertTrue(sidecar.exists())
+
+    def test_retire_reports_failed_task_branch_deletion(self) -> None:
+        result = isolation.isolate_member_task(self.coordinator, "web", "T001")
+        original_run_git = isolation.run_git
+
+        def fail_delete(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
+            if arguments[:2] == ("update-ref", "-d"):
+                return subprocess.CompletedProcess(arguments, 1, "", "cannot delete task ref")
+            return original_run_git(repo, *arguments)
+
+        with mock.patch.object(isolation, "run_git", side_effect=fail_delete):
+            with self.assertRaisesRegex(isolation.IsolationError, "cannot delete task ref"):
+                isolation.retire_member_task(self.coordinator, "web", "T001")
+        self.assertFalse(Path(result["worktree"]).exists())
+        self.assertNotEqual(git(self.member, "branch", "--list", "gsd-path-task/acme-T001").stdout, "")
 
 
 if __name__ == "__main__":

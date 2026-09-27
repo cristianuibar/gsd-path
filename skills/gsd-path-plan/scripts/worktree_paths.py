@@ -80,6 +80,8 @@ def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> 
     primary = primary.resolve()
     if kind not in {"task", "verify", "integrate", "bound"} or not name or Path(name).name != name or name in {".", ".."}:
         raise ValueError("invalid managed worktree kind or name")
+    if kind == "bound":
+        return _workspace(primary, pin) / kind / name
     legacy = (primary.parent / f".{primary.name}-gsd-path-integrate-{name}"
               if kind == "integrate" else primary.parent / f"{primary.name}.gsd-path" / kind / name)
     branch = f"refs/heads/gsd-path-{kind}/{name}"
