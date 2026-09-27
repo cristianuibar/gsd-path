@@ -216,7 +216,8 @@ def synchronize(root: Path) -> int:
     package_path = root / "package.json"
     package = json.loads(package_path.read_text(encoding="utf-8"))
     package["files"] = list(PACKAGE_FILES)
-    package_path.write_text(json.dumps(package, indent=2) + "\n", encoding="utf-8")
+    # Bytes, so Windows text mode never writes CRLF.
+    package_path.write_bytes((json.dumps(package, indent=2) + "\n").encode("utf-8"))
     print(
         json.dumps(
             {

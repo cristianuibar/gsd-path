@@ -35,7 +35,7 @@ console.log(`  repo: ${root}\n`);
 
 const nodeVersion = process.versions.node;
 // npm is npm.cmd on Windows, which only runs through a shell.
-const npmVersion = output("npm", ["--version"], { shell: windows });
+const npmVersion = windows ? output("npm --version", [], { shell: true }) : output("npm", ["--version"]);
 if (!npmVersion) fail("missing required command: npm");
 const python = findPython();
 if (!python) fail("missing Python 3.9+ (tried python3, python, py -3; set GSD_PATH_PYTHON)");
