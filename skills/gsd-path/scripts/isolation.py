@@ -700,7 +700,7 @@ def committed_paths_since(repo: Path, base: str) -> Set[str]:
 
 
 def ignored_legacy_ledger(repo: Path) -> bool:
-    """True when an untracked verify ledger on disk is hidden by an ignore rule.
+    """True when a verify ledger absent from HEAD is hidden by an ignore rule.
 
     Only milestones started before verify-record refused ignored ledgers reach
     this state. A build checkpoint commits the file so a task that anchors the
@@ -709,8 +709,9 @@ def ignored_legacy_ledger(repo: Path) -> bool:
     path = repo.joinpath(*PurePosixPath(VERIFY_LEDGER_PATH).parts)
     if path.is_symlink() or not path.is_file():
         return False
-    # check-ignore skips tracked files, so a hit means untracked and ignored.
-    return run_git(repo, "check-ignore", "-q", "--", VERIFY_LEDGER_PATH).returncode == 0
+    if run_git(repo, "cat-file", "-e", f"HEAD:{VERIFY_LEDGER_PATH}").returncode == 0:
+        return False
+    return run_git(repo, "check-ignore", "-q", "--no-index", "--", VERIFY_LEDGER_PATH).returncode == 0
 
 
 def _commit_pending(

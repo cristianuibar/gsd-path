@@ -419,6 +419,21 @@ class IsolationTests(unittest.TestCase):
             )
             self.assertEqual(git(repo, "status", "--porcelain"), "")
 
+    def test_build_checkpoint_retries_with_a_staged_legacy_ignored_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = self.legacy_ignored_ledger_repo(Path(temporary))
+            base = git(repo, "rev-parse", "HEAD")
+            git(repo, "add", "-f", isolation.VERIFY_LEDGER_PATH)
+            self.assertEqual(git(repo, "diff", "--cached", "--name-only"), isolation.VERIFY_LEDGER_PATH)
+
+            result = isolation.checkpoint(
+                repo, base, "build: record dispatch bookkeeping", "Why: commit the ledger", [".project"],
+            )
+
+            self.assertEqual(result["paths"], [isolation.VERIFY_LEDGER_PATH])
+            self.assertEqual(git(repo, "show", "--format=", "--name-only", "HEAD"), isolation.VERIFY_LEDGER_PATH)
+            self.assertEqual(git(repo, "status", "--porcelain"), "")
+
     def test_non_build_checkpoint_leaves_a_legacy_ignored_ledger_alone(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.legacy_ignored_ledger_repo(Path(temporary))
