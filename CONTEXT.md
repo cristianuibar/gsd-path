@@ -88,6 +88,18 @@ A named throwaway checkout at a recorded revision used only for review,
 inspect, or project Verify. It is never the bound branch.
 _Avoid_: detached HEAD, disposable worktree (unless you mean the filesystem path)
 
+**Coordinator**:
+The repository whose `.project/` owns a multi-repo project: state, tasks,
+review, archive, and the ship commit. Its `.project/MEMBERS.md` lists the
+Members in ship order.
+_Avoid_: main repo, parent repo, workspace
+
+**Member**:
+A repository listed in the Coordinator's `.project/MEMBERS.md`. Joining adds
+no new tracked Path files to it. Its Path refs carry the Coordinator's project
+name, so they cannot collide with its own Path history.
+_Avoid_: submodule, child repo, secondary repo
+
 **Surface**:
 Something a person opens, sees, or types into to get a milestone's outcome:
 a screen, a command, an endpoint. `Surfaces:` on the roadmap entry and

@@ -638,7 +638,8 @@ def _split_paths(block: str) -> Set[str]:
 
 # Top-level .project entries the pipeline owns; ship verification rejects anything else.
 PROJECT_ENTRIES = frozenset({
-    "STATE.md", "LESSONS.md", "REPOSITORY.md", "CHARTER.md", "ROADMAP.md", "SYNTHESIS.md",
+    "STATE.md", "LESSONS.md", "REPOSITORY.md", "MEMBERS.md", "CHARTER.md", "ROADMAP.md",
+    "SYNTHESIS.md",
     "intent", "research", "plan", "tasks", "review", "build", "discuss", "archive", "next",
 })
 
