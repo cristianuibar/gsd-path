@@ -105,6 +105,10 @@ Codex invokes it as `$gsd-path-discuss`.
 | Build | Escalations only |
 | Ship | Approve patch waves if blocked; approve archive and ship when green |
 
+Unattended quick lane (CI, cron): start with `--pre-approve intent,plan`. The
+intent and plan gates pass on their own when their checks pass; the run stops
+at the ship approval. A failed check asks you as usual.
+
 ---
 
 ## 5. Resume

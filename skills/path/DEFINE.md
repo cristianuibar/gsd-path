@@ -281,6 +281,12 @@ runtimes without config support). Include that preference in the draft.
 Retain `Review panel:` as reviewed: the CHARTER copy, the explicit user choice,
 or the configured future preference. Quick lane keeps the panel off.
 
+When the active router recorded an `intent` pre-approval grant and the draft
+needs no answer from the user, run the router's `workflow_run.py preauthorize
+--kind intent` before asking. On `complete`, present Outcome and Review, say
+the owner's pre-approval passed this gate, and continue as approved. On
+`blocked`, ask as usual.
+
 After approval, finalize `.project/intent/INTENT.md` and run
 `pipeline_state.py transition` with expected `define/active`, the exact
 current milestone/branch/archive values, event `milestone intent approved`,

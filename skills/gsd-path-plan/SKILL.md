@@ -226,6 +226,11 @@ as stated in Lookahead mode.
    Before asking for approval, require exactly one panel artifact for non-off
    Config: `PLAN-PANEL.md` for `ready`, or `PLAN-PANEL.skipped.json` for
    `skipped`. Off Config requires neither. A mismatch blocks approval.
+   When the active router recorded a `plan` pre-approval grant, first run
+   `python3 <absolute workflow_run.py> preauthorize --repo <absolute root>
+   --kind plan`. On `complete`, present Outcome and Review, say the owner's
+   pre-approval passed this gate, and continue at step 6 as approved. On
+   `blocked`, ask as below.
    Ask one explicit next question: whether to approve this plan and start the
    build. When PLAN-PANEL.md has `Actionable: 0` or the panel did not run,
    list `Approve and start build (recommended)` first, with `Request changes`
