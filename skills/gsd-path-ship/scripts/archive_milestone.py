@@ -28,6 +28,7 @@ try:
     from isolation import (
         IsolationError,
         prune_host_scratch,
+        PROJECT_ENTRIES,
         checkpoint as isolation_checkpoint,
         verify_landed_task_files,
     )
@@ -56,6 +57,7 @@ except ImportError:  # pragma: no cover - package import used by tests
     from scripts.isolation import (
         IsolationError,
         prune_host_scratch,
+        PROJECT_ENTRIES,
         checkpoint as isolation_checkpoint,
         verify_landed_task_files,
     )
@@ -1775,7 +1777,12 @@ def require_clean_active_root(active_root: Path, archive: Path) -> None:
     elif active_research.exists() or active_research.is_symlink():
         raise ArchiveError("active research exists without a pending carry-forward queue")
 
-    unexpected = sorted(path.name for path in active_root.iterdir() if path.name not in allowed)
+    # Ignored, untracked non-pipeline entries (.DS_Store) never ship; pipeline entries block even when ignored.
+    visible = _common.git_visible_entries(active_root)
+    unexpected = sorted(
+        path.name for path in active_root.iterdir()
+        if path.name not in allowed and (path.name in PROJECT_ENTRIES or path.name in visible)
+    )
     if unexpected:
         raise ArchiveError(f"unexpected active .project paths remain: {', '.join(unexpected)}")
 

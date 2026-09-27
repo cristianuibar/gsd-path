@@ -579,8 +579,24 @@ class MembersArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(check_handoffs.HandoffError, "unsupported .project artifacts: .claude"):
                 lean_verification._require_ship_inputs(repo, head)
 
+    def test_ship_verification_skips_ignored_untracked_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary).resolve()
+            git(repo, "init", "-q", "-b", "gsd-path/M001")
+            write_state(repo, "acme", "ship")
+            (repo / ".gitignore").write_text(".DS_Store\n", encoding="utf-8")
+            commit_all(repo)
+            head = git(repo, "rev-parse", "HEAD")
+            (repo / ".project" / ".DS_Store").write_text("x", encoding="utf-8")
+            lean_verification._require_ship_inputs(repo, head)
+            # A tracked copy ships, so it is an artifact again.
+            git(repo, "add", "-f", ".project/.DS_Store")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, r"\.DS_Store"):
+                lean_verification._require_ship_inputs(repo, head)
+
     def test_milestone_close_keeps_members_file_active(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
+            git(Path(temporary), "init", "-q")
             active = Path(temporary) / ".project"
             archive = active / "archive" / "001-demo"
             archive.mkdir(parents=True)
@@ -589,6 +605,22 @@ class MembersArtifactTests(unittest.TestCase):
             archive_milestone.require_clean_active_root(active, archive)
             (active / "STRAY.md").write_text("x", encoding="utf-8")
             with self.assertRaisesRegex(archive_milestone.ArchiveError, "STRAY.md"):
+                archive_milestone.require_clean_active_root(active, archive)
+
+    def test_milestone_close_skips_ignored_entries_but_not_pipeline_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            git(root, "init", "-q")
+            (root / ".gitignore").write_text(".DS_Store\nintent/\n", encoding="utf-8")
+            active = root / ".project"
+            archive = active / "archive" / "001-demo"
+            archive.mkdir(parents=True)
+            (active / "STATE.md").write_text("state", encoding="utf-8")
+            (active / ".DS_Store").write_text("x", encoding="utf-8")
+            archive_milestone.require_clean_active_root(active, archive)
+            (active / "intent").mkdir()
+            (active / "intent" / "INTENT.md").write_text("x", encoding="utf-8")
+            with self.assertRaisesRegex(archive_milestone.ArchiveError, "intent"):
                 archive_milestone.require_clean_active_root(active, archive)
 
 

@@ -474,8 +474,12 @@ validation.
 
 Ship preparation removes file-free `.claude` staging directories left under the
 active `.project/` tree. Archive preflight also removes them from the current
-uncommitted archive. A `.claude` directory containing a file or symlink still
-fails the existing checks; committed archives remain untouched.
+uncommitted archive. At the `.project/` top level, ship input and active-root
+checks skip non-pipeline entries only when Git neither tracks nor would add
+them (for example, an ignored, untracked `.DS_Store`). Tracked entries still
+block, and pipeline-owned active paths block even when ignored. Nested entries
+and the current archive keep their existing checks; committed archives remain
+untouched.
 
 One exception: a DOCS-AUDIT.md with pending `planned: no` rulings is copied
 atomically back into a recreated `research/` so the alignment queue survives;
