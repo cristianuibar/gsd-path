@@ -472,6 +472,11 @@ real wave-review files, every final artifact names the reviewed HEAD, and Notes
 must be completed. A committed target is immutable and routes only to
 validation.
 
+Ship preparation removes file-free `.claude` staging directories left under the
+active `.project/` tree. Archive preflight also removes them from the current
+uncommitted archive. A `.claude` directory containing a file or symlink still
+fails the existing checks; committed archives remain untouched.
+
 One exception: a DOCS-AUDIT.md with pending `planned: no` rulings is copied
 atomically back into a recreated `research/` so the alignment queue survives;
 the archived original keeps full history. Active and archived research may
