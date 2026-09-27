@@ -329,7 +329,13 @@ def repair_members(repo: Path) -> list[dict[str, str]]:
         check_member(root, state.project, checkout, member["remote"])
         _refuse_foreign_marker(checkout.resolve(), root, state.project, member["name"])
     for member in members:
-        _write_marker(Path(member["checkout"]).resolve(), root, state.project, member["name"])
+        checkout = Path(member["checkout"]).resolve()
+        try:
+            role = member_role(checkout)
+        except MembersError:
+            role = None
+        if role != {"coordinator": root, "project": state.project, "name": member["name"]}:
+            _write_marker(checkout, root, state.project, member["name"])
     return members
 
 

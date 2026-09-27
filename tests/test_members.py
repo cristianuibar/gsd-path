@@ -1,5 +1,6 @@
 import json
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -375,6 +376,24 @@ class MemberTests(unittest.TestCase):
         self.assertIn("members.py repair", stale.stderr)
         self.assertEqual(self.run_members("repair").returncode, 0)
         self.assertEqual(members.member_role(member)["coordinator"], moved)
+
+    def test_repair_skips_valid_read_only_marker_and_fixes_missing_marker(self) -> None:
+        first = self.joined("web")
+        second = self.joined("sdk")
+        first_marker = self.marker_path(first)
+        self.marker_path(second).unlink()
+        inode = first_marker.stat().st_ino
+        directory = first_marker.parent
+        original_mode = stat.S_IMODE(directory.stat().st_mode)
+        directory.chmod(0o555)
+        try:
+            repaired = self.run_members("repair")
+            self.assertEqual(repaired.returncode, 0, repaired.stderr)
+            self.assertEqual(first_marker.stat().st_ino, inode)
+            self.assertEqual(members.member_role(first)["coordinator"], self.coordinator)
+            self.assertEqual(members.member_role(second)["coordinator"], self.coordinator)
+        finally:
+            directory.chmod(original_mode)
 
     def test_malformed_markers_fail_closed_and_can_be_repaired(self) -> None:
         member = self.joined()
