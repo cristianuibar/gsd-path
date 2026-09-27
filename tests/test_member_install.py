@@ -19,6 +19,7 @@ STATE = (
     "status: {status}\nbranch: gsd-path/M001\narchive: {archive}\n---\n"
 )
 GUARD_LAUNCHER = (
+    "# gsd-path guard — stable runtime launcher\n"
     "import runpy\n"
     f"runpy.run_path({str(ROOT / 'scripts' / 'git_guard.py')!r}, run_name='__main__')\n"
 )
@@ -205,6 +206,17 @@ class MemberInstallTests(unittest.TestCase):
         self.assertIn("inside the member worktree", self.install().stderr)
         self.assertEqual(sorted(path.name for path in self.hooks.iterdir()), ["pre-commit"])
         self.assertEqual((self.hooks / "pre-commit").read_text(encoding="utf-8"), "#!/bin/sh\nexit 0\n")
+
+    def test_unmanaged_coordinator_guard_refuses_without_writing_hooks(self) -> None:
+        self.join()
+        guard = self.coordinator / ".gsd-path" / "git_guard.py"
+        guard.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+        result = self.install()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("coordinator guard is not installed", result.stderr)
+        self.assertEqual(list(self.hooks.iterdir()), [])
 
     def test_existing_temporary_symlink_refuses_without_changing_hooks(self) -> None:
         self.join()

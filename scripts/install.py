@@ -283,7 +283,7 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
     if role is None or not _same_path(Path(role["coordinator"]), coordinator):
         raise InstallerError(f"{member} is not a member of {coordinator}; run members.py add first")
     guard = coordinator / HOOKS_DIRECTORY / "git_guard.py"
-    if guard.is_symlink() or not guard.is_file():
+    if guard.is_symlink() or not _is_managed_guard_script(guard):
         raise InstallerError(f"coordinator guard is not installed: {guard}")
     hooks_dir = _resolve_git_hooks_path(member)
     if hooks_dir is None:
