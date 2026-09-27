@@ -316,9 +316,30 @@ Intent: `.project/intent/INTENT.md`
 
             with self.assertRaisesRegex(
                 check_handoffs.HandoffError,
-                "STATE.md must be research/active",
+                "STATE.md must be one of decide/active, research/active",
             ):
                 check_handoffs.validate_research(root)
+
+    def test_research_handoff_cli_runs_at_decide_active(self) -> None:
+        script = Path(__file__).resolve().parents[1] / "scripts/check_handoffs.py"
+        for track in (".project", ".project/next"):
+            with self.subTest(track=track), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_state(root, "decide", "active", track)
+                self.write_intent(root, "- [RESEARCH] Which domain applies?\n", track)
+                self.write_research_handoff(root, track)
+                command = [sys.executable, "-B", str(script), "research",
+                           "--repo", str(root), "--project-dir", track]
+                passed = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(passed.returncode, 0, passed.stderr)
+                self.assertIn('"dispatched": ["domain"]', passed.stdout)
+
+                evidence = root / track / "research/evidence-domain.md"
+                evidence.write_text(evidence.read_text().replace(
+                    "Questions assigned: Which domain applies?", "Questions assigned: wrong"))
+                failed = subprocess.run(command, capture_output=True, text=True)
+                self.assertNotEqual(failed.returncode, 0, failed.stdout)
+                self.assertIn("Questions assigned", failed.stderr)
 
     def test_frontmatter_keeps_a_hash_inside_a_quoted_value(self) -> None:
         values = check_handoffs._strict_frontmatter(

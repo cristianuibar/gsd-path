@@ -60,8 +60,10 @@ rules are unchanged; never write an active-path artifact.
 
 1. Read the local [synthesis template](templates/synthesis.md),
    `.project/research/RESEARCH.md`, and the bundled `scripts/check_handoffs.py`;
-   resolve each to an absolute path. Run the research hand-off validator before
-   dispatch so decide receives a complete, intentional evidence set.
+   resolve each to an absolute path. At `decide/active`, before dispatch, run
+   `python3 <absolute check_handoffs.py> research --repo <absolute root>
+   [--project-dir .project/next]` so decide receives a complete, intentional
+   evidence set.
 2. Read the local [decider role](references/decider.md), then follow
    the local [runtime dispatch contract](references/dispatch.md) with
    deterministic logical task name `decide`. Give it absolute paths to the role,
