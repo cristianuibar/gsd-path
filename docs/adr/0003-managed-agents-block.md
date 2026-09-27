@@ -39,7 +39,7 @@ and the path to rename the existing file.
 `WORKFLOW.md` stays Path-owned (no host reads it natively). `.claude/CLAUDE.md`
 stays a bridge.
 
-**Considered options:** rename the existing file aside (#147 short-term fix;
+**Considered options:** rename the existing file aside (#147 short-term fix in PR #161;
 keeps the manual merge and the size problem); append the owner's file under
 Path's contract with an opt-in flag (works only for owner files under about
 6.7 KB, makes upgrades harder); move Path's contract to its own file and
