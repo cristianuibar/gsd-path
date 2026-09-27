@@ -1670,6 +1670,9 @@ def transition_state(
         if recovery_context and recovery_context["active"]:
             if (state.milestone, state.branch, state.archive) != (after.milestone, after.branch, after.archive):
                 raise PipelineStateError("build recovery must preserve milestone identity")
+        if (project_dir == ".project" and (state.phase, state.status) == ("plan", "done")
+                and (after.phase, after.status) == ("build", "active")):
+            _lock_build_members(resolved)
         if state.phase == "build" and after.phase in {"define", "plan"}:
             recovery = _build_recovery().begin(resolved, state, after, event)
             rendered = _append_event(
@@ -1705,6 +1708,17 @@ def transition_state(
         "previous": before,
         "state": after.json(),
     }
+
+
+def _lock_build_members(repo: Path) -> None:
+    if __package__:
+        from scripts import members
+    else:
+        import members
+    try:
+        members.lock_build_members(repo)
+    except members.MembersError as error:
+        raise PipelineStateError(f"build start: {error}") from error
 
 
 def _build_recovery():
