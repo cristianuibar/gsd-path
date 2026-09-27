@@ -3,8 +3,10 @@
 """Record and validate the member repositories of a multi-repo coordinator.
 
 The coordinator's `.project/MEMBERS.md` lists members in ship order
-(docs/adr/0002-multi-repo-coordinator.md). `add` only writes the file; the
-next approval checkpoint commits it with the other `.project` artifacts.
+(docs/adr/0002-multi-repo-coordinator.md). `add` writes that file and an
+untracked marker in the member's shared Git directory. The next approval
+checkpoint commits MEMBERS.md with the other `.project` artifacts.
+`member_role` verifies the marker from any worktree of the member.
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ else:
 
 
 MEMBERS_FILE = "MEMBERS.md"
+MARKER_SCHEMA = "gsd-path/member/v1"
+MARKER_KEYS = {"schema", "coordinator", "project", "name"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FIELDS = ("Checkout", "Remote", "Integration")
 INTEGRATIONS = ("default", "direct", "pull-request")
@@ -71,6 +75,8 @@ def _coordinator(repo: Path) -> tuple[Path, pipeline_state.PipelineState]:
         state, _, _ = pipeline_state.load_state(root)
     except pipeline_state.PipelineStateError as error:
         raise MembersError(f"coordinator: {error}") from error
+    if Path(_git(root, "rev-parse", "--show-toplevel")).resolve() != root:
+        raise MembersError(f"coordinator is not a Git root: {root}")
     return root, state
 
 
@@ -79,6 +85,94 @@ def _remote_identity(remote: str) -> Optional[tuple[str, str]]:
     if match is None:
         return None
     return match.group(1).lower(), match.group(2).removesuffix(".git").lower()
+
+
+def _common_dir(checkout: Path) -> Path:
+    return Path(_git(checkout, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
+
+
+def _marker_path(checkout: Path) -> Path:
+    directory = _common_dir(checkout) / "gsd-path"
+    if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+        raise MembersError(f"member marker directory must be real: {directory}")
+    path = directory / "member.json"
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise MembersError(
+            f"member marker is not a regular file: {path}; "
+            "remove it by hand, then run members.py repair --repo <coordinator>"
+        )
+    return path
+
+
+def _read_marker(path: Path) -> Optional[dict[str, str]]:
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise MembersError(
+                f"member marker is not a regular file: {path}; "
+                "remove it by hand, then run members.py repair --repo <coordinator>"
+            )
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if (not isinstance(data, dict) or set(data) != MARKER_KEYS
+                or any(not isinstance(data[key], str) or not data[key].strip() for key in MARKER_KEYS)
+                or data["schema"] != MARKER_SCHEMA
+                or not Path(data["coordinator"]).is_absolute()):
+            raise ValueError("unexpected content")
+    except (OSError, ValueError) as error:
+        raise MembersError(
+            f"member marker is unreadable: {path}: {error}; "
+            "run members.py repair --repo <coordinator>"
+        ) from error
+    return data
+
+
+def _write_marker(checkout: Path, coordinator: Path, project: str, name: str) -> None:
+    path = _marker_path(checkout)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    marker = {"schema": MARKER_SCHEMA, "coordinator": str(coordinator), "project": project, "name": name}
+    _common.atomic_write(path, json.dumps(marker, sort_keys=True) + "\n")
+
+
+def _refuse_foreign_marker(checkout: Path, coordinator: Path, project: str, name: str) -> None:
+    path = _marker_path(checkout)
+    try:
+        marker = _read_marker(path)
+    except MembersError:
+        return
+    if marker is not None and (marker["project"], marker["name"]) != (project, name):
+        raise MembersError(f"{checkout} is already a member of {marker['project']}")
+    if marker is not None:
+        try:
+            role = member_role(checkout)
+        except MembersError:
+            return
+        if role is not None and role["coordinator"] != coordinator:
+            raise MembersError(f"{checkout} is already a member of {role['coordinator']}")
+
+
+def member_role(checkout: Path) -> Optional[dict[str, object]]:
+    """The verified coordinator of a member checkout, or None outside a member."""
+    checkout = Path(checkout)
+    marker = _read_marker(_marker_path(checkout))
+    if marker is None:
+        return None
+    stale = MembersError(
+        f"member marker for {marker['name']} is stale; "
+        "run members.py repair --repo <coordinator>"
+    )
+    try:
+        root, state = _coordinator(Path(marker["coordinator"]))
+        listed = read_members(root)
+        common = _common_dir(checkout)
+        for member in listed:
+            if member["name"] == marker["name"] and _common_dir(Path(member["checkout"])) == common:
+                if state.project != marker["project"]:
+                    break
+                return {"coordinator": root, "project": state.project, "name": member["name"]}
+    except (MembersError, OSError) as error:
+        raise stale from error
+    raise stale
 
 
 def read_members(coordinator: Path) -> list[dict[str, str]]:
@@ -212,9 +306,11 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
                 or _remote_identity(member["remote"]) == identity
                 or Path(_git(previous, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve() == common):
             raise MembersError(f"member already recorded: {member['name']}")
+    _refuse_foreign_marker(resolved, root, state.project, name)
     members.append(
         {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration}
     )
+    _write_marker(resolved, root, state.project, name)
     _common.atomic_write(root / ".project" / MEMBERS_FILE, render(members))
     return members
 
@@ -223,7 +319,36 @@ def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
     for member in members:
-        check_member(root, state.project, Path(member["checkout"]), member["remote"])
+        checkout = Path(member["checkout"])
+        check_member(root, state.project, checkout, member["remote"])
+        try:
+            role = member_role(checkout)
+        except MembersError as error:
+            raise MembersError(f"{error}; run members.py repair --repo {root}") from error
+        if role != {"coordinator": root, "project": state.project, "name": member["name"]}:
+            raise MembersError(
+                f"member marker for {member['name']} is missing or stale; "
+                f"run members.py repair --repo {root}"
+            )
+    return members
+
+
+def repair_members(repo: Path) -> list[dict[str, str]]:
+    """Rewrite missing or stale markers; never take over another coordinator's member."""
+    root, state = _coordinator(repo)
+    members = read_members(root)
+    for member in members:
+        checkout = Path(member["checkout"])
+        check_member(root, state.project, checkout, member["remote"])
+        _refuse_foreign_marker(checkout.resolve(), root, state.project, member["name"])
+    for member in members:
+        checkout = Path(member["checkout"]).resolve()
+        try:
+            role = member_role(checkout)
+        except MembersError:
+            role = None
+        if role != {"coordinator": root, "project": state.project, "name": member["name"]}:
+            _write_marker(checkout, root, state.project, member["name"])
     return members
 
 
@@ -237,6 +362,8 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--integration", choices=INTEGRATIONS, default="default")
     validate = commands.add_parser("validate", help="check MEMBERS.md and every member")
     validate.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    repair = commands.add_parser("repair", help="rewrite missing or stale member markers")
+    repair.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
     return result
 
 
@@ -247,6 +374,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             members = add_member(
                 arguments.repo, arguments.name, arguments.checkout, arguments.integration
             )
+        elif arguments.command == "repair":
+            members = repair_members(arguments.repo)
         else:
             members = validate_members(arguments.repo)
     except (MembersError, OSError) as error:
