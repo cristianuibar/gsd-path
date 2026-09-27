@@ -349,6 +349,11 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
     root, state = _coordinator(coordinator)
     named = _task_members(root)
     lock_path = root / LOCK_PATH
+    build_dir = lock_path.parent
+    if build_dir.is_symlink() or (build_dir.exists() and not build_dir.is_dir()):
+        raise MembersError(f"member lock directory must be real: {build_dir}")
+    if lock_path.is_symlink() or (lock_path.exists() and not lock_path.is_file()):
+        raise MembersError(f"member lock must be a regular file: {lock_path}")
     if not named:
         lock_path.unlink(missing_ok=True)
         return None

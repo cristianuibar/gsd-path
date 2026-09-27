@@ -111,6 +111,55 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
         self.assertEqual(self.branch("web"), branch)
 
+    def test_symlinked_build_directory_blocks_member_start(self) -> None:
+        self.tasks("web")
+        outside = self.root / "outside"
+        outside.mkdir()
+        external_lock = outside / "members.json"
+        original = '{"schema":"gsd-path/member-lock/v1","members":[]}\n'
+        external_lock.write_text(original, encoding="utf-8")
+        (self.coordinator / ".project" / "build").symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, r"\.project/build"):
+            self.start()
+        self.assertEqual(self.phase(), "plan/done")
+        self.assertIsNone(self.branch("web"))
+        self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
+
+    def test_symlinked_build_directory_blocks_member_free_reentry(self) -> None:
+        self.tasks("web")
+        self.start()
+        branch = self.branch("web")
+        self.tasks("")
+        build_dir = self.coordinator / ".project" / "build"
+        build_dir.rename(self.root / "saved-build")
+        outside = self.root / "outside"
+        outside.mkdir()
+        external_lock = outside / "members.json"
+        original = '{"schema":"gsd-path/member-lock/v1","members":[]}\n'
+        external_lock.write_text(original, encoding="utf-8")
+        build_dir.symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(members.MembersError, r"\.project/build"):
+            members.lock_build_members(self.coordinator)
+        self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
+        self.assertEqual(self.branch("web"), branch)
+
+    def test_symlinked_member_lock_file_blocks_start(self) -> None:
+        self.tasks("web")
+        build_dir = self.coordinator / ".project" / "build"
+        build_dir.mkdir()
+        external_lock = self.root / "members.json"
+        original = '{"schema":"gsd-path/member-lock/v1","members":[]}\n'
+        external_lock.write_text(original, encoding="utf-8")
+        (build_dir / "members.json").symlink_to(external_lock)
+
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "members.json"):
+            self.start()
+        self.assertEqual(self.phase(), "plan/done")
+        self.assertIsNone(self.branch("web"))
+        self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
+
     def test_existing_unused_member_branch_is_reused(self) -> None:
         self.tasks("web")
         git(self.repos["web"], "branch", "gsd-path/acme-M001", "refs/remotes/origin/main")
