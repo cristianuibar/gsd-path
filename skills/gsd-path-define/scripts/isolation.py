@@ -10,6 +10,7 @@ it never detaches HEAD.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import io
 import json
@@ -23,7 +24,12 @@ import sys
 sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
-from typing import Dict, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterator, Optional, Sequence, Set, Tuple
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 if __package__:
     from .pipeline_git import (
@@ -710,6 +716,30 @@ def _member_journal_path(coordinator: Path, task_id: str) -> Path:
     return common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, f"{validate_task_id(task_id)}.json")
 
 
+@contextlib.contextmanager
+def _member_landing_lock(coordinator: Path, member: str) -> Iterator[None]:
+    path = common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, f"{validate_name(member, 'member')}.lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as handle:
+        if sys.platform == "win32":
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if sys.platform == "win32":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _require_member_coordinator_branch(coordinator: Path) -> None:
     branch = require_bound(coordinator)
     if __package__:
@@ -876,40 +906,41 @@ def land_member(
     coordinator = require_directory(coordinator, "coordinator")
     _require_member_coordinator_branch(coordinator)
     task_file = relative_posix(task_file)
-    path = _member_journal_path(coordinator, task_id)
-    if os.path.lexists(path):
-        raise IsolationError(f"a member landing is pending for {task_id}; run recover_member_landing first")
-    checkout, project, _ = _member_context(coordinator, member)
-    bound = Path(member_bound_checkout(coordinator, member)["checkout"])
-    sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
-    if require_attached(sidecar) != f"{TASK_BRANCH_PREFIX}{project}-{task_id}":
-        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
-    resolved_base = require_commit(coordinator, require_full_sha(base))
-    contract_title, allowed = _member_contract(coordinator, resolved_base, task_file, member)
-    if title != contract_title:
-        raise IsolationError(f"title does not match the task contract: {contract_title!r}")
-    dirty = sorted(uncommitted_paths(coordinator) - {task_file})
-    if dirty:
-        raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
-    journal: Dict[str, object] = {
-        "base": resolved_base, "member": member, "member_base": require_full_sha(member_base),
-        "subject": task_commit_subject(task_id, title), "task_file": task_file, "task_id": task_id,
-    }
-    journal["source"] = _commit_member_source(sidecar, journal, allowed)
-    journal["expected_parent"] = current_sha(bound)
-    journal["landing"] = None
-    _record_member_journal(path, journal)
-    try:
-        landing = _pick_member_landing(bound, journal)
-    except IsolationError:
-        path.unlink()
-        raise
-    error = _prove_member_landing(bound, journal, landing, allowed)
-    if error:
-        raise IsolationError(f"member landing proof failed: {error}; the journal keeps it for recovery")
-    journal["landing"] = landing
-    _record_member_journal(path, journal)
-    return _finish_member_landing(coordinator, path, journal)
+    with _member_landing_lock(coordinator, member):
+        path = _member_journal_path(coordinator, task_id)
+        if os.path.lexists(path):
+            raise IsolationError(f"a member landing is pending for {task_id}; run recover_member_landing first")
+        checkout, project, _ = _member_context(coordinator, member)
+        bound = Path(member_bound_checkout(coordinator, member)["checkout"])
+        sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
+        if require_attached(sidecar) != f"{TASK_BRANCH_PREFIX}{project}-{task_id}":
+            raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+        resolved_base = require_commit(coordinator, require_full_sha(base))
+        contract_title, allowed = _member_contract(coordinator, resolved_base, task_file, member)
+        if title != contract_title:
+            raise IsolationError(f"title does not match the task contract: {contract_title!r}")
+        dirty = sorted(uncommitted_paths(coordinator) - {task_file})
+        if dirty:
+            raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
+        journal: Dict[str, object] = {
+            "base": resolved_base, "member": member, "member_base": require_full_sha(member_base),
+            "subject": task_commit_subject(task_id, title), "task_file": task_file, "task_id": task_id,
+        }
+        journal["source"] = _commit_member_source(sidecar, journal, allowed)
+        journal["expected_parent"] = current_sha(bound)
+        journal["landing"] = None
+        _record_member_journal(path, journal)
+        try:
+            landing = _pick_member_landing(bound, journal)
+        except IsolationError:
+            path.unlink()
+            raise
+        error = _prove_member_landing(bound, journal, landing, allowed)
+        if error:
+            raise IsolationError(f"member landing proof failed: {error}; the journal keeps it for recovery")
+        journal["landing"] = landing
+        _record_member_journal(path, journal)
+        return _finish_member_landing(coordinator, path, journal)
 
 
 def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]:
@@ -921,34 +952,40 @@ def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]
     _require_member_coordinator_branch(coordinator)
     journal = json.loads(path.read_text(encoding="utf-8"))
     member = str(journal["member"])
-    bound = Path(member_bound_checkout(coordinator, member)["checkout"])
-    _, allowed = _member_contract(coordinator, str(journal["base"]), str(journal["task_file"]), member)
-    if journal.get("landing"):
-        record = _existing_member_record(coordinator, journal)
-        if record:
-            path.unlink()
-            return {"commit": record, "landing": journal["landing"], "member": member,
-                    "mode": "member", "source_commit": journal["source"], "state": "landed"}
-        if current_sha(bound) != journal["landing"]:
-            raise IsolationError("the member bound branch moved after the landing journal was written")
-        _require_first_parent_commit(bound, current_sha(bound), str(journal["landing"]))
-        error = _prove_member_landing(bound, journal, str(journal["landing"]), allowed)
-        if error:
-            raise IsolationError(f"member landing proof failed: {error}")
-    if not journal.get("landing"):
-        tip = current_sha(bound)
-        if tip == journal["expected_parent"]:
-            landing = _pick_member_landing(bound, journal)
-        elif _prove_member_landing(bound, journal, tip, allowed) is None:
-            landing = tip
-        else:
-            raise IsolationError("the member bound branch moved after the landing journal was written")
-        error = _prove_member_landing(bound, journal, landing, allowed)
-        if error:
-            raise IsolationError(f"member landing proof failed: {error}")
-        journal["landing"] = landing
-        _record_member_journal(path, journal)
-    return _finish_member_landing(coordinator, path, journal)
+    with _member_landing_lock(coordinator, member):
+        if not os.path.lexists(path):
+            return {"state": "none"}
+        journal = json.loads(path.read_text(encoding="utf-8"))
+        if journal["member"] != member:
+            raise IsolationError("member landing journal changed while acquiring its lock")
+        bound = Path(member_bound_checkout(coordinator, member)["checkout"])
+        _, allowed = _member_contract(coordinator, str(journal["base"]), str(journal["task_file"]), member)
+        if journal.get("landing"):
+            record = _existing_member_record(coordinator, journal)
+            if record:
+                path.unlink()
+                return {"commit": record, "landing": journal["landing"], "member": member,
+                        "mode": "member", "source_commit": journal["source"], "state": "landed"}
+            if current_sha(bound) != journal["landing"]:
+                raise IsolationError("the member bound branch moved after the landing journal was written")
+            _require_first_parent_commit(bound, current_sha(bound), str(journal["landing"]))
+            error = _prove_member_landing(bound, journal, str(journal["landing"]), allowed)
+            if error:
+                raise IsolationError(f"member landing proof failed: {error}")
+        if not journal.get("landing"):
+            tip = current_sha(bound)
+            if tip == journal["expected_parent"]:
+                landing = _pick_member_landing(bound, journal)
+            elif _prove_member_landing(bound, journal, tip, allowed) is None:
+                landing = tip
+            else:
+                raise IsolationError("the member bound branch moved after the landing journal was written")
+            error = _prove_member_landing(bound, journal, landing, allowed)
+            if error:
+                raise IsolationError(f"member landing proof failed: {error}")
+            journal["landing"] = landing
+            _record_member_journal(path, journal)
+        return _finish_member_landing(coordinator, path, journal)
 
 
 def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:

@@ -1,8 +1,10 @@
+import concurrent.futures
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -114,6 +116,66 @@ class MemberLandingTests(unittest.TestCase):
     def test_member_task_lands_once_with_a_coordinator_record(self) -> None:
         self.edit()
         self.assert_landed_once(self.land())
+
+    def test_parallel_member_landings_use_successive_bound_parents(self) -> None:
+        second_file = ".project/tasks/T002-add.md"
+        second_task = TASK.replace("T001", "T002").replace("Change app", "Add config").replace(
+            "app.py", "config.py")
+        (self.coordinator / second_file).write_text(second_task, encoding="utf-8")
+        git(self.coordinator, "add", second_file)
+        git(self.coordinator, "commit", "-q", "-m", "add second task")
+        self.base = git(self.coordinator, "rev-parse", "HEAD")
+        second = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        (Path(second["worktree"]) / "config.py").write_text("added\n", encoding="utf-8")
+        self.edit()
+        first_checked = threading.Event()
+        second_started = threading.Event()
+        release_first = threading.Event()
+        original_pick = isolation._pick_member_landing
+
+        def pause_first(bound, journal):
+            if journal["task_id"] == "T001":
+                first_checked.set()
+                if not release_first.wait(10):
+                    raise AssertionError("second landing did not start")
+            return original_pick(bound, journal)
+
+        def land_second():
+            second_started.set()
+            return isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
+                                         self.base, self.member_base)
+
+        with mock.patch.object(isolation, "_pick_member_landing", side_effect=pause_first):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                try:
+                    first_future = pool.submit(self.land)
+                    self.assertTrue(first_checked.wait(10))
+                    lock = self.journal().with_name("web.lock")
+                    with lock.open("r+b") as handle:
+                        if sys.platform == "win32":
+                            import msvcrt
+                            handle.seek(0)
+                            with self.assertRaises(OSError):
+                                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        else:
+                            import fcntl
+                            with self.assertRaises(BlockingIOError):
+                                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    second_future = pool.submit(land_second)
+                    self.assertTrue(second_started.wait(10))
+                finally:
+                    release_first.set()
+                first = first_future.result(timeout=10)
+                second_result = second_future.result(timeout=10)
+        self.assertEqual(git(self.bound, "rev-parse", f"{first['landing']}^"), self.member_base)
+        self.assertEqual(git(self.bound, "rev-parse", f"{second_result['landing']}^"), first["landing"])
+        self.assertEqual(self.bound_tip(), second_result["landing"])
+        self.assertEqual((self.bound / "app.py").read_text(encoding="utf-8"), "v2\n")
+        self.assertEqual((self.bound / "config.py").read_text(encoding="utf-8"), "added\n")
+        self.assertEqual(git(self.coordinator, "log", "-2", "--format=%s").splitlines(),
+                         ["T002: Add config", "T001: Change app"])
+        self.assertFalse(self.journal().exists())
+        self.assertFalse(self.journal().with_name("T002.json").exists())
 
     def test_undeclared_member_path_is_refused_before_any_ref_moves(self) -> None:
         self.edit()
