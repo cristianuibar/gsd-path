@@ -1011,7 +1011,10 @@ def _validate_task_graph(
     graph: Dict[str, List[str]] = {}
     task_waves: Dict[str, int] = {}
     task_files: Dict[str, List[str]] = {}
+    # `repo:` names the member a task changes; absent means the coordinator.
+    task_repos: Dict[str, str] = {}
     for task_id, text in tasks.items():
+        task_repos[task_id] = str(_strict_frontmatter(text, task_id).get("repo") or "")
         # Patch mode reopens planning beside landed tasks; only new tasks start clean.
         landed = _task_scalar(text, task_id, "status") == "done"
         _require_task_structure(task_id, text, initial=initial and not landed)
@@ -1031,7 +1034,7 @@ def _validate_task_graph(
 
     for index, left in enumerate(task_ids):
         for right in task_ids[index + 1 :]:
-            if task_waves[left] != task_waves[right]:
+            if task_waves[left] != task_waves[right] or task_repos[left] != task_repos[right]:
                 continue
             overlap = sorted(set(task_files[left]) & set(task_files[right]))
             if overlap:
@@ -1042,6 +1045,7 @@ def _validate_task_graph(
     visiting: Set[str] = set()
     visited: Set[str] = set()
     dependency_files: Dict[str, Set[str]] = {}
+    dependency_pairs: Dict[str, Set[Tuple[str, str]]] = {}
 
     def visit(task_id: str) -> None:
         if task_id in visiting:
@@ -1049,11 +1053,15 @@ def _validate_task_graph(
         if task_id in visited:
             return
         visiting.add(task_id)
-        dependency_files[task_id] = set()
+        dependency_pairs[task_id] = set()
         for dependency in graph[task_id]:
             visit(dependency)
-            dependency_files[task_id].update(task_files[dependency])
-            dependency_files[task_id].update(dependency_files[dependency])
+            dependency_pairs[task_id].update((task_repos[dependency], name) for name in task_files[dependency])
+            dependency_pairs[task_id].update(dependency_pairs[dependency])
+        # A dependency's files are supplied only within the same repo.
+        dependency_files[task_id] = {
+            name for repo, name in dependency_pairs[task_id] if repo == task_repos[task_id]
+        }
         visiting.remove(task_id)
         visited.add(task_id)
 
