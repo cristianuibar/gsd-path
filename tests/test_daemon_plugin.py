@@ -402,20 +402,24 @@ class UninstallPlanTests(unittest.TestCase):
         declaration.write_text(json.dumps({
             "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
         }))
-        # template-identical AGENTS.md -> planned; modified WORKFLOW.md -> kept
         (project / "AGENTS.md").write_bytes((self.src / "AGENTS.md").read_bytes())
         (project / "WORKFLOW.md").write_text("user edits\n", encoding="utf-8")
         (project / ".claude").mkdir()
         (project / ".claude" / "CLAUDE.md").write_text(CLAUDE_BRIDGE, encoding="utf-8")
         plan = self.manager.plan_uninstall_project(project)
         paths = [entry["path"] for entry in plan["plan"]]
-        for expected in (managed, launcher, guard, declaration, project / "AGENTS.md",
+        for expected in (managed, launcher, guard, declaration,
                          project / ".claude" / "CLAUDE.md"):
             self.assertIn(str(expected), paths)
+        self.assertNotIn(str(project / "AGENTS.md"), paths)
         skipped = {entry["path"]: entry["reason"] for entry in plan["skipped"]}
         self.assertIn(str(foreign), skipped)
         self.assertIn(str(project / "WORKFLOW.md"), skipped)
         self.assertIn("user-modified", skipped[str(project / "WORKFLOW.md")])
+        result = self.manager.apply_plan(plan, confirm=True)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual((self.src / "AGENTS.md").read_bytes(),
+                         (project / "AGENTS.md").read_bytes())
 
     def test_project_uninstall_removes_only_agents_block(self):
         block = "<!-- gsd-path:begin -->\n# rules\n<!-- gsd-path:end -->\n"
@@ -423,6 +427,8 @@ class UninstallPlanTests(unittest.TestCase):
         for text, expected in ((block + "\n" + owner, owner),
                                ("above\n" + block + owner, "above\n" + owner),
                                (block + "\n\n", "\n"),
+                               (block.replace("\n", "\r\n"), None),
+                               (block.replace("\n", "\r\n") + owner, owner),
                                ("see `<!-- gsd-path:begin -->`\n" + block + owner,
                                 "see `<!-- gsd-path:begin -->`\n" + owner),
                                (block, None)):

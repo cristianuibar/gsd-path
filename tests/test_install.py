@@ -1122,6 +1122,24 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(text, (project / "AGENTS.md").read_text(encoding="utf-8"))
             self.assertFalse((project / "WORKFLOW.md").exists())
 
+    def test_update_preserves_owner_bytes_after_crlf_agents_marker(self):
+        project = self.root / "crlf-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        owner_before = b"before\r\n"
+        owner_after = b"after\r\nowner\n"
+        block = install._agents_block("# Old contract\n").replace("\n", "\r\n")
+        agents.write_bytes(owner_before + block.encode("utf-8") + owner_after)
+        (self.source / "AGENTS.md").write_text("# New contract\n", encoding="utf-8")
+
+        self.install_agents(project, update=True)
+
+        self.assertEqual(
+            owner_before + install._agents_block("# New contract\n").encode("utf-8")
+            + owner_after,
+            agents.read_bytes(),
+        )
+
     def test_project_refuses_merged_agents_over_codex_limit_with_sizes(self):
         project = self.root / "large-agents"
         project.mkdir()
@@ -1230,6 +1248,8 @@ class InstallerTests(unittest.TestCase):
             (template, "fail", "no GSD Path block"),
             (f"{install.AGENTS_BEGIN}\n", "fail", "exactly one"),
             ("x" * install.CODEX_DOC_LIMIT + "\n" + install._agents_block(template),
+             "fail", "Codex reads only the first"),
+            (install._agents_block(template) + "x" * install.CODEX_DOC_LIMIT,
              "fail", "Codex reads only the first"),
         )
         for text, level, expected in cases:

@@ -1332,19 +1332,17 @@ def _split_agents(text: str, destination: Path) -> Optional[Tuple[str, str]]:
     """Owner text (before, after) around Path's block, or None without markers.
     Markers count only as whole lines; inline mentions are owner text."""
     begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
-    ends = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?$", text)]
+    ends = list(re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?(?:\n|$)", text))
     if not begins and not ends:
         return None
-    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+    if len(begins) != 1 or len(ends) != 1 or ends[0].start() < begins[0]:
         begins, ends = len(begins), len(ends)
         raise InstallerError(
             f"{destination} needs exactly one {AGENTS_BEGIN} line followed by one "
             f"{AGENTS_END} line; found {begins} begin and {ends} end markers. "
             "Fix the markers by hand, then rerun."
         )
-    start, end = begins[0], ends[0]
-    after = text[end + len(AGENTS_END):]
-    return text[:start], after[1:] if after.startswith("\n") else after
+    return text[:begins[0]], text[ends[0].end():]
 
 
 def _read_agents(destination: Path) -> Optional[bytes]:
@@ -2543,13 +2541,11 @@ def doctor(
                 push("fail", f'project: AGENTS.md has no GSD Path block — run --update --project "{project}"')
             elif _agents_block(canonical.decode("utf-8", errors="replace")) not in text:
                 push("fail", f'project: AGENTS.md block is stale — run --update --project "{project}"')
-            elif len(content) - len(parts[1].encode("utf-8")) > CODEX_DOC_LIMIT:
+            elif len(content) > CODEX_DOC_LIMIT:
                 push(
                     "fail",
-                    f"project: AGENTS.md block ends at byte "
-                    f"{len(content) - len(parts[1].encode('utf-8'))} of {len(content)}; "
-                    f"Codex reads only the first {CODEX_DOC_LIMIT} — move owner text "
-                    "above the block to after it",
+                    f"project: AGENTS.md is {len(content)} bytes; Codex reads only "
+                    f"the first {CODEX_DOC_LIMIT} — reduce the file to keep all rules visible",
                 )
             else:
                 push("ok", "project: AGENTS.md block present")

@@ -106,12 +106,10 @@ def _is_newer(latest: Optional[str], installed: Optional[str]) -> bool:
 def _without_agents_block(text: str) -> Optional[str]:
     """AGENTS.md owner text with the one gsd-path block removed, or None."""
     begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
-    ends = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?$", text)]
-    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+    ends = list(re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?(?:\n|$)", text))
+    if len(begins) != 1 or len(ends) != 1 or ends[0].start() < begins[0]:
         return None
-    start, end = begins[0], ends[0]
-    before, after = text[:start], text[end + len(AGENTS_END):]
-    after = after[1:] if after.startswith("\n") else after
+    before, after = text[:begins[0]], text[ends[0].end():]
     if not before and after.startswith("\n"):
         after = after[1:]  # The installer puts one blank line after the block.
     return before + after
@@ -810,7 +808,7 @@ class PluginManager:
                 + ("" if block_removed else "; file becomes empty and is deleted"),
             })
         for name in CONTRACT_FILES:
-            if name != "AGENTS.md" or block_removed is None:
+            if name != "AGENTS.md":
                 self._plan_contract(project / name, self._template_bytes(name), plan, skipped)
         self._plan_contract(
             project / ".claude" / "CLAUDE.md", CLAUDE_BRIDGE.encode("utf-8"), plan, skipped
