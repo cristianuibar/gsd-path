@@ -23,7 +23,7 @@ import sys
 sys.dont_write_bytecode = True
 import tempfile
 from pathlib import Path, PurePosixPath
-from typing import Dict, Optional, Sequence, Set
+from typing import Dict, Optional, Sequence, Set, Tuple
 
 try:
     from pipeline_git import (
@@ -480,8 +480,11 @@ def _cleanup_reserved_worktree(
         run_git(primary, "update-ref", "-d", ref, base)
 
 
-def create_named_worktree(primary: Path, branch: str, destination: Path, base: str) -> None:
-    bound = require_bound(primary)
+def create_named_worktree(
+    primary: Path, branch: str, destination: Path, base: str, bound: Optional[str] = None
+) -> None:
+    # A member names its bound branch; the member team's checkout is never on it.
+    bound = bound or require_bound(primary)
     if branch == bound:
         raise IsolationError(
             f"refusing to check out the bound branch {bound} in a second worktree"
@@ -574,6 +577,110 @@ def isolate_task(
         "task_branch": branch,
         "worktree": str(destination),
     }
+
+
+def _member_context(coordinator: Path, member: str) -> Tuple[Path, str, Dict[str, str]]:
+    """The checkout, coordinator project, and lock entry of a locked, verified member."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    coordinator = require_directory(coordinator, "coordinator")
+    lock = coordinator / members.LOCK_PATH
+    entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    entry = next((item for item in entries if item["name"] == member), None)
+    if entry is None:
+        raise IsolationError(f"member {member} is not locked for this build because no task named it at build start")
+    repair = f"run members.py repair --repo {coordinator}"
+    try:
+        listed = {item["name"]: item for item in members.read_members(coordinator)}
+        if member not in listed:
+            raise IsolationError(f"member {member} is not in MEMBERS.md; {repair}")
+        checkout = Path(listed[member]["checkout"]).resolve()
+        role = members.member_role(checkout)
+    except members.MembersError as error:
+        raise IsolationError(f"{error}; {repair}") from error
+    if role is None or role["coordinator"] != coordinator or role["name"] != member:
+        raise IsolationError(f"member marker for {member} is missing or stale; {repair}")
+    return checkout, str(role["project"]), entry
+
+
+def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
+    """Path's own checkout of a locked member's bound branch, outside the team's checkout."""
+    checkout, _, entry = _member_context(coordinator, member)
+    branch = entry["branch"]
+    destination = sidecar_root(checkout, "bound", branch.removeprefix("gsd-path/"), pin=True)
+    holders = [path for path, ref in _registered_worktrees(checkout).items() if ref == f"refs/heads/{branch}"]
+    if holders and holders != [destination.resolve()]:
+        raise IsolationError(f"{branch} is checked out outside Path's workspace: {holders[0]}")
+    if holders:
+        root = run_git(destination, "rev-parse", "--show-toplevel")
+        common = run_git(destination, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        head = run_git(destination, "symbolic-ref", "-q", "HEAD")
+        if (root.returncode != 0 or Path(root.stdout.strip()).resolve() != destination.resolve()
+                or common.returncode != 0 or Path(common.stdout.strip()).resolve() != common_git_dir(checkout)
+                or head.returncode != 0 or head.stdout.strip() != f"refs/heads/{branch}"):
+            raise IsolationError(f"bound checkout is missing or invalid: {destination}")
+    if not holders:
+        if os.path.lexists(destination):
+            raise IsolationError(f"worktree path already exists: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        added = run_git(checkout, "worktree", "add", str(destination), branch)
+        if added.returncode != 0:
+            raise IsolationError((added.stderr or added.stdout).strip() or "git worktree add failed")
+    return {"branch": branch, "checkout": str(destination.resolve()), "member": member}
+
+
+def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[str, object]:
+    """Member tasks always run in a sidecar at the member bound branch tip."""
+    validate_task_id(task_id)
+    bound = member_bound_checkout(coordinator, member)
+    bound_checkout = Path(bound["checkout"])
+    dirty = uncommitted_paths(bound_checkout)
+    if dirty:
+        raise IsolationError(
+            "member task isolation requires a clean member bound checkout: " + ", ".join(sorted(dirty))
+        )
+    checkout, project, _ = _member_context(coordinator, member)
+    member_base = current_sha(bound_checkout)
+    name = f"{project}-{task_id}"
+    branch = f"{TASK_BRANCH_PREFIX}{name}"
+    destination = sidecar_root(checkout, "task", name, pin=True)
+    create_named_worktree(checkout, branch, destination, member_base, bound=str(bound["branch"]))
+    return {
+        "bound_branch": bound["branch"],
+        "bound_checkout": bound["checkout"],
+        "kind": "task",
+        "member": member,
+        "member_base": member_base,
+        "mode": "member",
+        "task_branch": branch,
+        "worktree": str(destination),
+    }
+
+
+def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
+    """Remove an unused member task sidecar; landed work needs the landing proof."""
+    checkout, project, entry = _member_context(coordinator, member)
+    name = f"{project}-{validate_task_id(task_id)}"
+    ref = f"refs/heads/{TASK_BRANCH_PREFIX}{name}"
+    tip = run_git(checkout, "rev-parse", "--verify", "--quiet", ref)
+    if tip.returncode == 0 and run_git(
+        checkout, "merge-base", "--is-ancestor", tip.stdout.strip(), f"refs/heads/{entry['branch']}"
+    ).returncode != 0:
+        raise IsolationError(f"member task branch {ref} has unlanded commits")
+    destination = sidecar_root(checkout, "task", name)
+    registered = _registered_worktrees(checkout)
+    if destination.resolve() in registered:
+        if registered[destination.resolve()] != ref:
+            raise IsolationError(f"member task sidecar is on another branch: {destination}")
+        removed = run_git(checkout, "worktree", "remove", str(destination))
+        if removed.returncode != 0:
+            raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
+    if tip.returncode == 0:
+        deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
+        if deleted.returncode != 0:
+            raise IsolationError((deleted.stderr or deleted.stdout).strip() or "git update-ref failed")
 
 
 def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:
