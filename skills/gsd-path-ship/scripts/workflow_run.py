@@ -230,7 +230,13 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if audit_path.exists():
                 audit = audit_path.read_text(encoding="utf-8")
                 queue = _table_rows(_common.section_body(audit, "Remediation queue"))
-                ruled = {row[0] for row in _table_rows(_common.section_body(audit, "User rulings"))}
+                ruled = set()
+                for row in _table_rows(_common.section_body(audit, "User rulings")):
+                    if len(row) != 4 or row[1] not in {"fix-code", "fix-doc", "accept-drift"}:
+                        continue
+                    words = row[2].strip().strip('`"').strip()
+                    if words and words.casefold() != "none" and not re.fullmatch(r"<[^>]*>", words):
+                        ruled.add(row[0])
                 if any(len(row) == 6 and row[4] == "NEEDS-USER" and row[0] not in ruled for row in queue):
                     raise StepFailed("DOCS-AUDIT.md has NEEDS-USER rows without a user ruling")
             if kind == "plan":

@@ -232,17 +232,23 @@ class WorkflowRunTests(unittest.TestCase):
                 self.assertEqual(before, (root / ".project/STATE.md").read_bytes())
 
     def test_preauthorize_enforces_quick_plan_limits_and_scope(self):
+        def audit_ruling(root, ruling=""):
+            audit = root / ".project/research/DOCS-AUDIT.md"
+            audit.parent.mkdir()
+            audit.write_text(
+                "## Remediation queue\n\n| # | Doc | Claim | Verdict | Class | Action |\n|---|---|---|---|---|---|\n"
+                "| 1 | README.md | runs | stale | NEEDS-USER | ask |\n\n## User rulings\n\n"
+                "| Queue # | Ruling | User's words | Planned |\n|---|---|---|---|\n" + ruling)
+
         edits = {
             "finding_skeptics off": lambda root: self.edit(
                 root, "plan/PLAN.md", "- review_panel: off", "- review_panel: off\n- finding_skeptics: on"),
             "review_panel off": lambda root: self.edit(
                 root, "plan/PLAN.md", "- review_panel: off", "- review_panel: claude,gpt"),
             "one wave and at most two tasks": self.third_task,
-            "user ruling": lambda root: (root / ".project/research").mkdir() or (
-                root / ".project/research/DOCS-AUDIT.md").write_text(
-                "## Remediation queue\n\n| # | Doc | Claim | Verdict | Class | Action |\n|---|---|---|---|---|---|\n"
-                "| 1 | README.md | runs | stale | NEEDS-USER | ask |\n\n## User rulings\n\n"
-                "| Queue # | Ruling | User's words | Planned |\n|---|---|---|---|\n"),
+            "user ruling": lambda root: audit_ruling(root),
+            "placeholder user ruling": lambda root: audit_ruling(
+                root, '| 1 | fix-doc | "<verbatim>" | no |\n'),
             "build recovery or patch planning": lambda root: (root / ".project/review").mkdir() or (
                 root / ".project/review/PATCH-FINDINGS.md").write_text("findings\n"),
         }
@@ -251,9 +257,12 @@ class WorkflowRunTests(unittest.TestCase):
                 root = Path(tmp)
                 self.quick_fixture(root)
                 edit(root)
+                before = (root / ".project/STATE.md").read_bytes()
                 code, receipt = self.preauthorize(root)
                 self.assertEqual(code, 1, receipt)
-                self.assertIn(reason, receipt["reason"] + receipt["steps"][-1].get("stderr", ""))
+                self.assertIn("user ruling" if reason == "placeholder user ruling" else reason,
+                              receipt["reason"] + receipt["steps"][-1].get("stderr", ""))
+                self.assertEqual(before, (root / ".project/STATE.md").read_bytes())
 
     def edit(self, root, relative, old, new):
         path = root / ".project" / relative
