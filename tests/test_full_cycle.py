@@ -277,7 +277,7 @@ class FullCycleTests(unittest.TestCase):
     def write(self, relative, content):
         path = self.repo / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_bytes(content.encode("utf-8"))
 
     def state(self, phase, status, archive="null"):
         self.write(".project/STATE.md", STATE.format(
@@ -625,7 +625,7 @@ class FullCycleTests(unittest.TestCase):
             self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), "gsd-path/M002")
 
             # --- guards hold on shipped history: archive tamper is rejected by pre-commit
-            (archive / "MANIFEST.md").write_text("tampered\n", encoding="utf-8")
+            (archive / "MANIFEST.md").write_bytes("tampered\n".encode("utf-8"))
             git(repo, "add", "-A")
             tamper = git(repo, "commit", "-q", "-m", "tamper")
             self.assertNotEqual(tamper.returncode, 0)

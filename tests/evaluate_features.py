@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from tests import evaluate_codex, widget_acceptance
 from tests.dogfood import FIXTURE_SCRIPT
 
-SCENARIOS = json.loads((Path(__file__).with_name('feature_scenarios.json')).read_text())
+SCENARIOS = json.loads((Path(__file__).with_name('feature_scenarios.json')).read_text(encoding="utf-8"))
 GROUPS = {
     'install': ['test_install', 'test_sync_skill_resources'],
     'inspect': ['test_detect_project', 'test_check_docs_audit'],
@@ -77,14 +77,14 @@ def prepare(directory, candidate, scenarios=None):
         git(repo, 'init', '-q', '-b', 'main')
         git(repo, 'config', 'user.name', 'Feature Evaluation')
         git(repo, 'config', 'user.email', 'evaluation@example.invalid')
-        (repo / 'README.md').write_text('# Feature evaluation fixture\n')
+        (repo / 'README.md').write_bytes('# Feature evaluation fixture\n'.encode("utf-8"))
         if spec['fixture'] == 'program':
             for filename in ('ledger.py', 'reports.py'):
-                (repo / filename).write_text("raise SystemExit('Not implemented')\n")
+                (repo / filename).write_bytes("raise SystemExit('Not implemented')\n".encode("utf-8"))
         elif spec['fixture'] in ('counter', 'stale-docs'):
-            (repo / 'count.py').write_text(FIXTURE_SCRIPT)
+            (repo / 'count.py').write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
             if spec['fixture'] == 'stale-docs':
-                (repo / 'README.md').write_text('# Counter\n\nThe --json flag prints JSON.\n')
+                (repo / 'README.md').write_bytes('# Counter\n\nThe --json flag prints JSON.\n'.encode("utf-8"))
         git(repo, 'add', '.')
         git(repo, 'commit', '-qm', 'fixture: initial product')
         remote = arm / 'origin.git'
@@ -128,8 +128,8 @@ wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
 '''
         if spec.get('external'):
             prompt += '\nEXTERNAL PREREQUISITE: ' + spec['external'] + '\n'
-        (arm / 'prompt.txt').write_text(prompt)
-        (arm / 'STEPS.md').write_text(f'# {name}\n\n' + '\n'.join(f'- {s}' for s in spec['steps']) + '\n')
+        (arm / 'prompt.txt').write_bytes(prompt.encode("utf-8"))
+        (arm / 'STEPS.md').write_bytes((f'# {name}\n\n' + '\n'.join(f'- {s}' for s in spec['steps']) + '\n').encode("utf-8"))
     report(directory)
     return manifest
 
@@ -233,21 +233,21 @@ def run_tests(suite):
 
 def check(directory):
     directory = Path(directory).resolve()
-    manifest = json.loads((directory / 'manifest.json').read_text())
+    manifest = json.loads((directory / 'manifest.json').read_text(encoding="utf-8"))
     plugin = directory / 'plugin'
     if git(plugin, 'rev-parse', 'HEAD') != manifest['candidate'] or git(plugin, 'status', '--porcelain'):
         raise ValueError('pinned candidate changed')
     receipt = directory / 'automated.json'
     if receipt.exists():
-        saved = json.loads(receipt.read_text())
+        saved = json.loads(receipt.read_text(encoding="utf-8"))
         if saved['candidate'] != manifest['candidate']: raise ValueError('automated receipt belongs to another candidate')
         return saved
     # Execute the pinned test code, not an importing session's checkout.
     result = subprocess.run([sys.executable, '-B', str(plugin / 'tests/evaluate_features.py'),
                              '_check', '--directory', str(directory)], cwd=plugin, capture_output=True, text=True)
-    (directory / 'automated-command.log').write_text(result.stdout + result.stderr)
+    (directory / 'automated-command.log').write_bytes((result.stdout + result.stderr).encode("utf-8"))
     if not receipt.exists(): raise ValueError('automated runner did not produce its receipt; see automated-command.log')
-    return json.loads(receipt.read_text())
+    return json.loads(receipt.read_text(encoding="utf-8"))
 
 
 def check_candidate(directory):
@@ -269,7 +269,7 @@ def check_candidate(directory):
 
 def record_review(directory, feature, verdict, evidence, reason):
     directory = Path(directory).resolve()
-    manifest = json.loads((directory / 'manifest.json').read_text())
+    manifest = json.loads((directory / 'manifest.json').read_text(encoding="utf-8"))
     if feature not in GROUPS or verdict not in ('pass', 'fail', 'unverifiable'):
         raise ValueError('unknown feature or verdict')
     relevant = [directory / name for name in manifest['scenarios'] if feature in SCENARIOS[name]['features']]
@@ -325,7 +325,7 @@ def capture(arm, label, promotion=None):
              'state': primary['state'], 'next': future['state'] if future else None,
              'primary_receipt': primary, 'next_receipt': future, 'promotion': None}
     if promotion:
-        receipt = json.loads(Path(promotion).read_text())
+        receipt = json.loads(Path(promotion).read_text(encoding="utf-8"))
         if receipt.get('commit') != value['head'] or receipt.get('milestone') != value['state']['milestone']:
             raise ValueError('promotion receipt must match the captured milestone and HEAD')
         value['promotion'] = receipt
@@ -337,8 +337,8 @@ def capture(arm, label, promotion=None):
 
 def report(directory):
     directory = Path(directory).resolve()
-    manifest = json.loads((directory / 'manifest.json').read_text())
-    automated = json.loads((directory / 'automated.json').read_text()) if (directory / 'automated.json').exists() else {}
+    manifest = json.loads((directory / 'manifest.json').read_text(encoding="utf-8"))
+    automated = json.loads((directory / 'automated.json').read_text(encoding="utf-8")) if (directory / 'automated.json').exists() else {}
     if automated and automated.get('candidate') != manifest['candidate']:
         raise ValueError('automated evidence belongs to another candidate')
     features = {}
@@ -353,15 +353,15 @@ def report(directory):
     scenarios = {}
     for name in manifest['scenarios']:
         arm = directory / name
-        runs = [json.loads(p.read_text()) for p in sorted(arm.glob('run-*/run.json'))]
-        captures = [json.loads(line) for line in (arm / 'captures.jsonl').read_text().splitlines()] if (arm / 'captures.jsonl').exists() else []
+        runs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(arm.glob('run-*/run.json'))]
+        captures = [json.loads(line) for line in (arm / 'captures.jsonl').read_text(encoding="utf-8").splitlines()] if (arm / 'captures.jsonl').exists() else []
         scenarios[name] = {'native': 'review-required' if runs else 'untested', 'runs': len(runs),
                            'active_seconds': sum(r['elapsed_seconds'] for r in runs),
                            'failed_invocations': sum(r['exit_code'] != 0 for r in runs),
                            'prerequisite': SCENARIOS[name].get('external'),
                            'captures': len(captures)}
         activity_file = arm / 'activities.jsonl'
-        activities = [json.loads(line) for line in activity_file.read_text().splitlines()] if activity_file.exists() else []
+        activities = [json.loads(line) for line in activity_file.read_text(encoding="utf-8").splitlines()] if activity_file.exists() else []
         scenarios[name]['activity_seconds'] = {
             category: sum(event['duration_seconds'] for event in activities if event['category'] == category)
             if any(event['category'] == category for event in activities) else None
@@ -371,14 +371,14 @@ def report(directory):
         product = arm / 'product.json'
         scenarios[name]['product'] = 'untested'
         if product.exists():
-            receipt = json.loads(product.read_text())
+            receipt = json.loads(product.read_text(encoding="utf-8"))
             current = receipt.get('sources') == product_sources(arm / 'repo')
             scenarios[name]['product'] = receipt['verdict'] if current else 'stale'
         for feature in SCENARIOS[name]['features']:
             if runs: features[feature]['native'] = 'review-required'
     reviews = directory / 'reviews.jsonl'
     if reviews.exists():
-        for line in reviews.read_text().splitlines():
+        for line in reviews.read_text(encoding="utf-8").splitlines():
             review = json.loads(line)
             valid = review['candidate'] == manifest['candidate'] and bool(review['evidence'])
             for ref in review['evidence']:
@@ -401,7 +401,7 @@ def report(directory):
              '| Feature | Automated | Native | Scenarios |', '|---|---|---|---|']
     for name, row in features.items():
         lines.append(f"| {name} | {row['automated']} | {row['native']} | {', '.join(row['scenarios']) or 'host/install checks'} |")
-    (directory / 'REPORT.md').write_text('\n'.join(lines) + '\n')
+    (directory / 'REPORT.md').write_bytes(('\n'.join(lines) + '\n').encode("utf-8"))
     return result
 
 

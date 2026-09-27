@@ -27,7 +27,7 @@ class PathConfigTests(unittest.TestCase):
                        check=True, capture_output=True)
         (self.repo / '.project').mkdir()
         self.state = self.repo / '.project/STATE.md'
-        self.state.write_text(state_text(phase='define', status='active', branch='gsd-path/M001'))
+        self.state.write_bytes(state_text(phase='define', status='active', branch='gsd-path/M001').encode("utf-8"))
         self.env = patch.dict(os.environ, {'HOME': str(self.home), 'USERPROFILE': str(self.home)})
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -35,7 +35,7 @@ class PathConfigTests(unittest.TestCase):
     def profile(self, data):
         path = self.home / '.gsd-path/config.json'
         path.parent.mkdir(exist_ok=True)
-        path.write_text(json.dumps(data))
+        path.write_bytes(json.dumps(data).encode("utf-8"))
         return path
 
     def cli(self, *args, ok=True):
@@ -55,7 +55,7 @@ class PathConfigTests(unittest.TestCase):
 
     def test_new_state_uses_user_shipping_default(self):
         self.profile({'integration': 'pull-request'})
-        template = (ROOT / 'skills/gsd-path/templates/state.md').read_text()
+        template = (ROOT / 'skills/gsd-path/templates/state.md').read_text(encoding="utf-8")
         text = detect_project.filled_state_template(template, 'demo', 'define')
         self.assertIn('integration_default: pull-request', text)
         self.assertIn('integration: pull-request', text)
@@ -64,7 +64,7 @@ class PathConfigTests(unittest.TestCase):
         self.cli('set', 'integration', 'pull-request')
         shown = self.cli('show')
         self.assertEqual(shown['settings']['integration']['value'], 'pull-request')
-        self.state.write_text(state_text(phase='build', status='active', branch='gsd-path/M001'))
+        self.state.write_bytes(state_text(phase='build', status='active', branch='gsd-path/M001').encode("utf-8"))
         before = self.state.read_bytes()
         self.assertIn('locked', self.cli('set', 'integration', 'pull-request', ok=False)['error'])
         self.assertEqual(self.state.read_bytes(), before)
@@ -72,17 +72,17 @@ class PathConfigTests(unittest.TestCase):
     def test_review_preferences_do_not_rewrite_approved_contracts(self):
         intent = self.repo / '.project/intent/INTENT.md'
         intent.parent.mkdir()
-        intent.write_text('Review panel: off\n')
+        intent.write_bytes('Review panel: off\n'.encode("utf-8"))
         plan = self.repo / '.project/plan/PLAN.md'
         plan.parent.mkdir()
-        plan.write_text('- review_panel: gpt\n')
+        plan.write_bytes('- review_panel: gpt\n'.encode("utf-8"))
         self.cli('set', 'review_panel', 'detected')
         shown = self.cli('show')
         self.assertEqual(shown['settings']['review_panel']['value'], 'detected')
-        self.assertEqual(intent.read_text(), 'Review panel: off\n')
+        self.assertEqual(intent.read_text(encoding="utf-8"), 'Review panel: off\n')
         self.assertEqual(shown['approved_review_panel']['value'], 'gpt')
         self.assertEqual(shown['approved_review_panel']['source'], 'plan')
-        self.assertEqual(plan.read_text(), '- review_panel: gpt\n')
+        self.assertEqual(plan.read_text(encoding="utf-8"), '- review_panel: gpt\n')
 
     def test_model_precedence_and_reset(self):
         self.cli('set', 'models.hosts.codex.coder.effort', 'high', '--scope', 'user')
@@ -111,19 +111,19 @@ class PathConfigTests(unittest.TestCase):
         self.cli('show')
         self.assertEqual(sorted(str(p) for p in self.home.rglob('*')), paths)
         path = self.profile({})
-        path.write_text('{bad')
+        path.write_bytes('{bad'.encode("utf-8"))
         self.cli('validate', ok=False)
         self.cli('set', 'review_panel', 'off', '--scope', 'user', ok=False)
-        self.assertEqual(path.read_text(), '{bad')
+        self.assertEqual(path.read_text(encoding="utf-8"), '{bad')
 
     def test_closed_branch_remains_locked_if_live_state_is_rewritten(self):
         from scripts.pipeline_git import ship_subject
-        self.state.write_text(state_text(phase='shipped', status='done', milestone='demo',
-                              branch='gsd-path/M001', archive='.project/archive/001-demo'))
+        self.state.write_bytes(state_text(phase='shipped', status='done', milestone='demo',
+                              branch='gsd-path/M001', archive='.project/archive/001-demo').encode("utf-8"))
         for args in [('add', '.'), ('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
                                   'commit', '-m', ship_subject('001-demo'))]:
             subprocess.run(['git', '-C', str(self.repo), *args], check=True, capture_output=True)
-        self.state.write_text(state_text(phase='define', status='active', branch='gsd-path/M001'))
+        self.state.write_bytes(state_text(phase='define', status='active', branch='gsd-path/M001').encode("utf-8"))
         before = self.state.read_bytes()
         for key, value in [('integration', 'pull-request'), ('review_panel', 'detected'),
                            ('models.roles.coder.model', 'example')]:
@@ -150,7 +150,7 @@ class PathConfigTests(unittest.TestCase):
         result = subprocess.run([sys.executable, '-B', str(helper), 'set', 'review_panel',
                                  'detected', '--repo', str(self.repo)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(json.loads((self.repo / '.project/config.json').read_text())['review_panel'], 'detected')
+        self.assertEqual(json.loads((self.repo / '.project/config.json').read_text(encoding="utf-8"))['review_panel'], 'detected')
 
     def test_shipping_retains_project_preferences(self):
         from tests.test_archive_milestone import ArchiveMilestoneTests
@@ -159,14 +159,14 @@ class PathConfigTests(unittest.TestCase):
         files = {'config.json': {'review_panel': 'detected'},
                  'model-policy.json': {'roles': {'coder': {'model': 'inherit'}}}}
         for name, data in files.items():
-            (self.repo / '.project' / name).write_text(json.dumps(data))
+            (self.repo / '.project' / name).write_bytes(json.dumps(data).encode("utf-8"))
         archive = fixture.prepare_archive(self.repo)
         result = fixture.render_manifest(self.repo)
         self.assertEqual(result.returncode, 0, result.stderr)
         result = fixture.preflight(self.repo)
         self.assertEqual(result.returncode, 0, result.stderr)
         for name, data in files.items():
-            self.assertEqual(json.loads((self.repo / '.project' / name).read_text()), data)
+            self.assertEqual(json.loads((self.repo / '.project' / name).read_text(encoding="utf-8")), data)
             self.assertFalse((archive / name).exists())
 
     def test_config_edits_do_not_block_an_inflight_task_landing(self):
@@ -186,9 +186,9 @@ class PathConfigTests(unittest.TestCase):
         result = isolation.land(repo, source, base, 'T001', 'add greeting',
                                 '.project/tasks/T001.md', ['src/app.py'])
         self.assertEqual(result['mode'], 'parallel')
-        self.assertEqual((repo / 'src/app.py').read_text(), "print('done')\n")
-        self.assertEqual((repo / '.project/config.json').read_text(), config)
-        self.assertEqual((repo / '.project/model-policy.json').read_text(), models)
+        self.assertEqual((repo / 'src/app.py').read_text(encoding="utf-8"), "print('done')\n")
+        self.assertEqual((repo / '.project/config.json').read_text(encoding="utf-8"), config)
+        self.assertEqual((repo / '.project/model-policy.json').read_text(encoding="utf-8"), models)
         self.assertEqual(isolation.uncommitted_paths(repo),
                          {'.project/config.json', '.project/model-policy.json'})
 

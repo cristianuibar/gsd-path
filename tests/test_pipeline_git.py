@@ -30,7 +30,7 @@ def make_remote_repo(tmp: str) -> tuple[Path, Path, str]:
     run_git(Path(tmp), "init", "-b", "main", str(repo))
     run_git(repo, "config", "user.name", "GSD Path Test")
     run_git(repo, "config", "user.email", "test@example.com")
-    (repo / "product.txt").write_text("base\n", encoding="utf-8")
+    (repo / "product.txt").write_bytes("base\n".encode("utf-8"))
     run_git(repo, "add", "product.txt")
     run_git(repo, "commit", "-m", "base")
     run_git(repo, "remote", "add", "origin", str(origin))
@@ -43,7 +43,7 @@ def make_integrated_milestone(tmp: str) -> tuple[Path, Path, str, str]:
     run_git(repo, "switch", "-c", "gsd-path/M001", base)
     project = repo / ".project"
     project.mkdir()
-    (project / "STATE.md").write_text(
+    (project / "STATE.md").write_bytes(
         "---\n"
         "pipeline: gsd-path/v2\n"
         "project: demo\n"
@@ -54,10 +54,9 @@ def make_integrated_milestone(tmp: str) -> tuple[Path, Path, str, str]:
         "archive: .project/archive/001-first/\n"
         "---\n\n"
         "# Project State\n\n"
-        "## Log\n",
-        encoding="utf-8",
+        "## Log\n".encode("utf-8"),
     )
-    (repo / "milestone.txt").write_text("shipped\n", encoding="utf-8")
+    (repo / "milestone.txt").write_bytes("shipped\n".encode("utf-8"))
     run_git(repo, "add", ".project/STATE.md", "milestone.txt")
     run_git(repo, "commit", "-m", "ship: M001 — first")
     ship = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -109,18 +108,18 @@ class PipelineGitTests(unittest.TestCase):
                 detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
                 path = repo / ".project/STATE.md"
                 if change == "product":
-                    (repo / "product.txt").write_text("dirty")
+                    (repo / "product.txt").write_bytes("dirty".encode("utf-8"))
                 elif change == "extra":
-                    (repo / ".project/another\nfile").write_text("extra")
+                    (repo / ".project/another\nfile").write_bytes("extra".encode("utf-8"))
                 elif change == "ignored-extra":
-                    (repo / ".git/info/exclude").write_text(".project/ignored\n")
-                    (repo / ".project/ignored").write_text("extra")
+                    (repo / ".git/info/exclude").write_bytes(".project/ignored\n".encode("utf-8"))
+                    (repo / ".project/ignored").write_bytes("extra".encode("utf-8"))
                 elif change == "staged":
                     run_git(repo, "add", ".project/STATE.md")
                 elif change == "invalid":
-                    path.write_text("not owned state")
+                    path.write_bytes("not owned state".encode("utf-8"))
                 elif change == "noninitial":
-                    path.write_text(path.read_text().replace("status: active", "status: done"))
+                    path.write_bytes(path.read_text(encoding="utf-8").replace("status: active", "status: done").encode("utf-8"))
                 elif change == "directory-link":
                     target = Path(tmp) / "project-copy"
                     path.parent.rename(target)
@@ -262,7 +261,7 @@ class PipelineGitTests(unittest.TestCase):
                     "origin/main",
                     base[:12],
                 )
-            (repo / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+            (repo / "untracked.txt").write_bytes("dirty\n".encode("utf-8"))
             with self.assertRaisesRegex(
                 pipeline_git.PipelineGitError,
                 "not clean",
@@ -274,7 +273,7 @@ class PipelineGitTests(unittest.TestCase):
                     base,
                 )
             (repo / "untracked.txt").unlink()
-            (repo / "second.txt").write_text("ahead\n", encoding="utf-8")
+            (repo / "second.txt").write_bytes("ahead\n".encode("utf-8"))
             run_git(repo, "add", "second.txt")
             run_git(repo, "commit", "-m", "ahead")
             with self.assertRaisesRegex(
@@ -320,7 +319,7 @@ class PipelineGitTests(unittest.TestCase):
             run_git(Path(tmp), "clone", str(origin), str(other))
             run_git(other, "config", "user.name", "GSD Path Test")
             run_git(other, "config", "user.email", "test@example.com")
-            (other / "remote.txt").write_text("new remote head\n", encoding="utf-8")
+            (other / "remote.txt").write_bytes("new remote head\n".encode("utf-8"))
             run_git(other, "add", "remote.txt")
             run_git(other, "commit", "-m", "advance remote")
             run_git(other, "push", "origin", "main")
@@ -518,7 +517,7 @@ class PipelineGitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _, repo, ship, integrate = make_integrated_milestone(tmp)
             run_git(repo, "switch", "main")
-            (repo / "later.txt").write_text("later\n", encoding="utf-8")
+            (repo / "later.txt").write_bytes("later\n".encode("utf-8"))
             run_git(repo, "add", "later.txt")
             run_git(repo, "commit", "-m", "later main change")
             base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -600,7 +599,7 @@ class PipelineGitTests(unittest.TestCase):
             run_git(Path(tmp), "init", "-b", "main", str(default_checkout))
             run_git(default_checkout, "config", "user.name", "GSD Path Test")
             run_git(default_checkout, "config", "user.email", "test@example.com")
-            (default_checkout / "product.txt").write_text("base\n", encoding="utf-8")
+            (default_checkout / "product.txt").write_bytes("base\n".encode("utf-8"))
             run_git(default_checkout, "add", "product.txt")
             run_git(default_checkout, "commit", "-m", "base")
             run_git(default_checkout, "remote", "add", "origin", str(origin))
@@ -617,7 +616,7 @@ class PipelineGitTests(unittest.TestCase):
 
             project = primary / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 "---\n"
                 "pipeline: gsd-path/v2\n"
                 "project: demo\n"
@@ -629,8 +628,7 @@ class PipelineGitTests(unittest.TestCase):
                 "integration_default: pull-request\n"
                 "integration: pull-request\n"
                 "integration_source: default\n"
-                "---\n\n# Project State\n\n## Log\n",
-                encoding="utf-8",
+                "---\n\n# Project State\n\n## Log\n".encode("utf-8"),
             )
             run_git(primary, "add", ".project/STATE.md")
             run_git(
@@ -780,7 +778,7 @@ class PipelineGitTests(unittest.TestCase):
             self.assertIn("refs/heads/gsd-path/M002 on origin", collision_retry.stderr)
             run_git(primary, "push", "origin", "--delete", "gsd-path/M002")
 
-            (primary / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+            (primary / "untracked.txt").write_bytes("dirty\n".encode("utf-8"))
             dirty_retry = subprocess.run(bind_next, capture_output=True, text=True)
             self.assertEqual(dirty_retry.returncode, 1)
             self.assertIn("primary worktree is not clean", dirty_retry.stderr)
@@ -794,7 +792,7 @@ class PipelineGitTests(unittest.TestCase):
             run_git(Path(tmp), "init", "-b", "main", str(main))
             run_git(main, "config", "user.name", "GSD Path Test")
             run_git(main, "config", "user.email", "test@example.com")
-            (main / "product.txt").write_text("base\n", encoding="utf-8")
+            (main / "product.txt").write_bytes("base\n".encode("utf-8"))
             run_git(main, "add", "product.txt")
             run_git(main, "commit", "-m", "base")
             run_git(main, "remote", "add", "origin", str(origin))
@@ -810,7 +808,7 @@ class PipelineGitTests(unittest.TestCase):
             )
             project = primary / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 "---\n"
                 "pipeline: gsd-path/v2\n"
                 "project: demo\n"
@@ -822,8 +820,7 @@ class PipelineGitTests(unittest.TestCase):
                 "integration_default: direct\n"
                 "integration: direct\n"
                 "integration_source: default\n"
-                "---\n\n# Project State\n\n## Log\n",
-                encoding="utf-8",
+                "---\n\n# Project State\n\n## Log\n".encode("utf-8"),
             )
             run_git(primary, "add", ".project/STATE.md")
             run_git(primary, "commit", "-m", "ship: M001 — first")
@@ -888,7 +885,7 @@ class PipelineGitTests(unittest.TestCase):
             run_git(Path(tmp), "init", "-b", "main", str(default_checkout))
             run_git(default_checkout, "config", "user.name", "GSD Path Test")
             run_git(default_checkout, "config", "user.email", "test@example.com")
-            (default_checkout / "product.txt").write_text("base\n", encoding="utf-8")
+            (default_checkout / "product.txt").write_bytes("base\n".encode("utf-8"))
             run_git(default_checkout, "add", "product.txt")
             run_git(default_checkout, "commit", "-m", "base")
             run_git(
@@ -903,7 +900,7 @@ class PipelineGitTests(unittest.TestCase):
 
             project = primary / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text("status: shipped\n", encoding="utf-8")
+            (project / "STATE.md").write_bytes("status: shipped\n".encode("utf-8"))
             run_git(primary, "add", ".project/STATE.md")
             run_git(
                 primary,

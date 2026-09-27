@@ -29,8 +29,8 @@ def make_repo(path: Path, project: str, remote: str = "") -> Path:
     path.mkdir()
     git(path, "init", "-q", "-b", "main")
     (path / ".project").mkdir()
-    (path / ".project" / "STATE.md").write_text(STATE.format(project=project), encoding="utf-8")
-    (path / "app.py").write_text("print('v1')\n", encoding="utf-8")
+    (path / ".project" / "STATE.md").write_bytes(STATE.format(project=project).encode("utf-8"))
+    (path / "app.py").write_bytes("print('v1')\n".encode("utf-8"))
     git(path, "add", "-A")
     git(path, "commit", "-q", "-m", "init")
     if remote:

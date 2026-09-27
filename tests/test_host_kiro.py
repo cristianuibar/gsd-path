@@ -42,7 +42,7 @@ CHILD_META = {"session_id": CHILD, "cwd": "/x", "created_at": "2026-09-07T03:08:
 def write_run(root, lines, name="run-1"):
     run = Path(root) / "quick" / name
     run.mkdir(parents=True)
-    (run / "events.jsonl").write_text("".join(json.dumps({"elapsed_seconds": i, "raw": l}) + "\n" for i, l in enumerate(lines)))
+    (run / "events.jsonl").write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": l}) + "\n" for i, l in enumerate(lines)).encode("utf-8"))
     return run
 
 
@@ -97,9 +97,9 @@ class KiroHostTests(unittest.TestCase):
     def test_bind_child_adds_session_store_evidence_when_present(self):
         write_run(self.root, CHILD_RUN)
         store = self.root / "sessions"; store.mkdir()
-        (store / f"{CHILD}.json").write_text(json.dumps(CHILD_META))
-        (store / f"{PARENT}.json").write_text(json.dumps({"session_id": PARENT, "session_created_reason": "subagent"}))
-        (store / f"{PARENT}.jsonl").write_text(PARENT_TRANSCRIPT)
+        (store / f"{CHILD}.json").write_bytes(json.dumps(CHILD_META).encode("utf-8"))
+        (store / f"{PARENT}.json").write_bytes(json.dumps({"session_id": PARENT, "session_created_reason": "subagent"}).encode("utf-8"))
+        (store / f"{PARENT}.jsonl").write_bytes(PARENT_TRANSCRIPT.encode("utf-8"))
         with mock.patch.object(kiro, "SESSION_ROOT", store):
             out = kiro.bind_child(self.root, "build_probe")
         self.assertEqual([c["session_id"] for c in out["child_sessions"]], [CHILD])

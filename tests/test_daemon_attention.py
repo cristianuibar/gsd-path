@@ -105,7 +105,7 @@ def make_task(project_dir: Path, task_id: str, slug: str, status: str,
     tasks_dir.mkdir(parents=True, exist_ok=True)
     title = title or f"Task {task_id}"
     path = tasks_dir / f"{task_id}-{slug}.md"
-    path.write_text(
+    path.write_bytes(
         f"""---
 id: {task_id}
 title: {title}
@@ -121,8 +121,7 @@ files:
 ---
 
 # {task_id} — {title}
-""",
-        encoding="utf-8",
+""".encode("utf-8"),
     )
     return path
 
@@ -130,7 +129,7 @@ files:
 def make_project(root: Path) -> Path:
     project_dir = root / ".project"
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "STATE.md").write_text(STATE, encoding="utf-8")
+    (project_dir / "STATE.md").write_bytes(STATE.encode("utf-8"))
     make_task(project_dir, "T001", "first-task", status="done", title="First task")
     make_task(project_dir, "T002", "second-task", status="in-progress", title="Second task")
     return root
@@ -159,7 +158,7 @@ class AttentionTests(unittest.TestCase):
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
-        (runtime_dir / "pipeline_state.py").write_text(RUNTIME_PENDING, encoding="utf-8")
+        (runtime_dir / "pipeline_state.py").write_bytes(RUNTIME_PENDING.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(self.kinds(status), ["question"])
         item = status.attention[0]
@@ -171,7 +170,7 @@ class AttentionTests(unittest.TestCase):
         make_project(self.root)
         discuss_dir = self.root / ".project" / "discuss"
         discuss_dir.mkdir()
-        (discuss_dir / "ANSWERS.md").write_text(ANSWERS_MD, encoding="utf-8")
+        (discuss_dir / "ANSWERS.md").write_bytes(ANSWERS_MD.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(status.status_source, "parse-only")
         self.assertEqual(status.pending_answers, [])
@@ -186,10 +185,10 @@ class AttentionTests(unittest.TestCase):
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
-        (runtime_dir / "pipeline_state.py").write_text(RUNTIME_PENDING, encoding="utf-8")
+        (runtime_dir / "pipeline_state.py").write_bytes(RUNTIME_PENDING.encode("utf-8"))
         discuss_dir = self.root / ".project" / "discuss"
         discuss_dir.mkdir()
-        (discuss_dir / "ANSWERS.md").write_text(ANSWERS_MD, encoding="utf-8")
+        (discuss_dir / "ANSWERS.md").write_bytes(ANSWERS_MD.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(status.status_source, "runtime")
         self.assertEqual(len(status.pending_answers), 1)
@@ -201,9 +200,8 @@ class AttentionTests(unittest.TestCase):
     def test_blocked_task_red(self) -> None:
         make_project(self.root)
         path = self.root / ".project" / "tasks" / "T002-second-task.md"
-        path.write_text(
-            path.read_text(encoding="utf-8").replace("status: in-progress", "status: blocked"),
-            encoding="utf-8",
+        path.write_bytes(
+            path.read_text(encoding="utf-8").replace("status: in-progress", "status: blocked").encode("utf-8"),
         )
         status = probe.probe_project(self.root)
         self.assertEqual(self.kinds(status), ["blocked", "unverified"])
@@ -216,8 +214,8 @@ class AttentionTests(unittest.TestCase):
         make_project(self.root)
         review_dir = self.root / ".project" / "review"
         review_dir.mkdir()
-        (review_dir / "FINAL.md").write_text(FINAL_REVIEW_BLOCKED, encoding="utf-8")
-        (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW_PASS, encoding="utf-8")
+        (review_dir / "FINAL.md").write_bytes(FINAL_REVIEW_BLOCKED.encode("utf-8"))
+        (review_dir / "wave-1.cycle1.md").write_bytes(WAVE_REVIEW_PASS.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(self.kinds(status), ["failed", "failed", "unverified"])
         review_item, criterion_item, _ = status.attention
@@ -231,7 +229,7 @@ class AttentionTests(unittest.TestCase):
         make_project(self.root)
         review_dir = self.root / ".project" / "review"
         review_dir.mkdir()
-        (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW_PASS, encoding="utf-8")
+        (review_dir / "wave-1.cycle1.md").write_bytes(WAVE_REVIEW_PASS.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(self.kinds(status), ["unverified"])
         self.assertEqual(status.health, "amber")
@@ -249,9 +247,8 @@ class AttentionTests(unittest.TestCase):
     def test_shipped_project_not_stale(self) -> None:
         make_project(self.root)
         state_path = self.root / ".project" / "STATE.md"
-        state_path.write_text(
-            STATE.replace("phase: build", "phase: shipped").replace("status: active", "status: done"),
-            encoding="utf-8",
+        state_path.write_bytes(
+            STATE.replace("phase: build", "phase: shipped").replace("status: active", "status: done").encode("utf-8"),
         )
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
@@ -263,9 +260,8 @@ class AttentionTests(unittest.TestCase):
                     "state": {"phase": "shipped", "status": "done"},
                     "completion": {"status": completion},
                 }
-                (runtime_dir / "pipeline_state.py").write_text(
-                    "import json\nprint(json.dumps(" + repr(payload) + "))\n",
-                    encoding="utf-8",
+                (runtime_dir / "pipeline_state.py").write_bytes(
+                    ("import json\nprint(json.dumps(" + repr(payload) + "))\n").encode("utf-8"),
                 )
                 status = probe.probe_project(self.root)
                 if completion == "verified":
@@ -286,9 +282,8 @@ class AttentionTests(unittest.TestCase):
     def test_health_attention_round_trip(self) -> None:
         make_project(self.root)
         path = self.root / ".project" / "tasks" / "T002-second-task.md"
-        path.write_text(
-            path.read_text(encoding="utf-8").replace("status: in-progress", "status: blocked"),
-            encoding="utf-8",
+        path.write_bytes(
+            path.read_text(encoding="utf-8").replace("status: in-progress", "status: blocked").encode("utf-8"),
         )
         status = probe.probe_project(self.root)
         data = json.loads(json.dumps(status.to_dict(), sort_keys=True))

@@ -51,7 +51,7 @@ class ArchiveMilestoneTests(unittest.TestCase):
         for directory in ("intent", "research", "plan", "tasks", "review"):
             (project / directory).mkdir(parents=True, exist_ok=True)
 
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             f"""---
 pipeline: gsd-path/v2
 project: demo
@@ -66,15 +66,15 @@ archive: null
 
 ## Log
 - 2026-08-01 — ship — final review passed
-"""
+""".encode("utf-8")
         )
-        (project / "intent" / "INTENT.md").write_text(
-            "# Intent\n\n## Success criteria\n\n1. demo works\n"
+        (project / "intent" / "INTENT.md").write_bytes(
+            "# Intent\n\n## Success criteria\n\n1. demo works\n".encode("utf-8")
         )
         for evidence in ("domain", "stack", "pitfalls", "similar"):
-            (project / "research" / f"evidence-{evidence}.md").write_text("# Evidence\n")
-        (project / "research" / "SYNTHESIS.md").write_text("# Synthesis\n")
-        (project / "research" / "DOCS-AUDIT.md").write_text(
+            (project / "research" / f"evidence-{evidence}.md").write_bytes("# Evidence\n".encode("utf-8"))
+        (project / "research" / "SYNTHESIS.md").write_bytes("# Synthesis\n".encode("utf-8"))
+        (project / "research" / "DOCS-AUDIT.md").write_bytes(
             """# Docs Audit
 
 ## User rulings
@@ -82,9 +82,9 @@ archive: null
 | Queue # | Ruling | User's words | Planned |
 |---------|--------|--------------|---------|
 | 1 | fix-doc | "keep this queued" | no |
-"""
+""".encode("utf-8")
         )
-        (project / "plan" / "PLAN.md").write_text(
+        (project / "plan" / "PLAN.md").write_bytes(
             """# Plan
 
 ## Wave 1 — demo
@@ -100,13 +100,13 @@ Review depth: full
 | Criterion | Task | Acceptance |
 |-----------|------|------------|
 | SC1 | T001 | AC1 |
-"""
+""".encode("utf-8")
         )
         (root / "src").mkdir()
         product = root / "src" / "demo.py"
-        product.write_text("value = 'before'\n", encoding="utf-8")
+        product.write_bytes("value = 'before'\n".encode("utf-8"))
         task = project / "tasks" / "T001-demo.md"
-        task.write_text(
+        task.write_bytes(
             """---
 id: T001
 title: demo
@@ -135,15 +135,14 @@ python3 -c 'print(1)'
 ## Log
 
 - created
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
         if acceptance:
-            task.write_text(task.read_text().replace(
+            task.write_bytes(task.read_text(encoding="utf-8").replace(
                 "## Intent coverage", f"## Acceptance criteria\n\n{acceptance}\n\n## Intent coverage"
-            ))
-        (project / "review" / "FINAL.md").write_text("Overall verdict: pass\n")
-        (project / "review" / "wave-1.cycle1.md").write_text(
+            ).encode("utf-8"))
+        (project / "review" / "FINAL.md").write_bytes("Overall verdict: pass\n".encode("utf-8"))
+        (project / "review" / "wave-1.cycle1.md").write_bytes(
             """# Review — wave 1, cycle 1
 
 Wave verdict: pass
@@ -160,29 +159,27 @@ Tasks reviewed: 1
 ### SC1 — demo works: pass
 
 - ✅ focused Verify passed in tests
-"""
+""".encode("utf-8")
         )
 
         self.git(root, "add", ".project", "src/demo.py")
         baseline = self.git(root, "commit", "-q", "-m", "baseline")
         self.assertEqual(baseline.returncode, 0, baseline.stderr)
         base = self.git(root, "rev-parse", "HEAD").stdout.strip()
-        task.write_text(
+        task.write_bytes(
             task.read_text(encoding="utf-8")
             .replace("status: pending", "status: in-progress")
             .replace("agent: null", "agent: builder")
             .replace("base: null", f"base: {base}")
-            .replace("worktree: null", f"worktree: {root}"),
-            encoding="utf-8",
+            .replace("worktree: null", f"worktree: {root}").encode("utf-8"),
         )
-        task.write_text(
+        task.write_bytes(
             isolation._landed_task_text(
                 task.read_text(encoding="utf-8") + "- implementation complete\n",
                 base,
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
-        product.write_text("value = 'implemented'\n", encoding="utf-8")
+        product.write_bytes("value = 'implemented'\n".encode("utf-8"))
         task_file = ".project/tasks/T001-demo.md"
         changed_paths = [task_file, "src/demo.py"]
         self.git(root, "add", *changed_paths)
@@ -205,7 +202,7 @@ Tasks reviewed: 1
             )
             self.assertEqual(landed.returncode, 0, landed.stderr)
         reviewed_head = self.git(root, "rev-parse", "HEAD").stdout.strip()
-        (project / "review" / "FINAL.md").write_text(
+        (project / "review" / "FINAL.md").write_bytes(
             f"""# Final Review — demo
 
 Reviewed HEAD: {reviewed_head}
@@ -221,9 +218,9 @@ Overall verdict: pass
 - **Reference**: tests
 - **Finding**: none
 - **Fix direction**: none
-"""
+""".encode("utf-8")
         )
-        (project / "review" / "final-gap-1.md").write_text(
+        (project / "review" / "final-gap-1.md").write_bytes(
             f"""# Gap Review — 1: project Verify command
 
 Reviewed HEAD: {reviewed_head}
@@ -241,7 +238,7 @@ Waves checked: 1
 
 - **Found**: The project Verify command passed at the reviewed HEAD.
 - **Fix direction**: none
-"""
+""".encode("utf-8")
         )
 
     def write_manifest(self, archive: Path) -> None:
@@ -251,7 +248,7 @@ Waves checked: 1
             if path.is_file() and path.name != "MANIFEST.md"
         )
         listed_contents = "\n".join(f"- {path}" for path in contents)
-        (archive / "MANIFEST.md").write_text(
+        (archive / "MANIFEST.md").write_bytes(
             f"""# Archive — {archive.name}
 
 Milestone: demo
@@ -273,7 +270,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 ## Notes
 
 - none
-"""
+""".encode("utf-8")
         )
 
     def write_panel_skip_receipt(self, path: Path) -> None:
@@ -281,7 +278,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             {"mode": "detected", "families": ()},
             (),
         )
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        path.write_bytes((json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
     def write_discussion(
         self, directory: Path, turn: int = 1, final: bool = True,
@@ -333,12 +330,12 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 """
             )
 
-        (directory / "DIALOGUE.md").write_text(
-            "# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
-            + "\n".join(dialogue_turns)
+        (directory / "DIALOGUE.md").write_bytes(
+            ("# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
+            + "\n".join(dialogue_turns)).encode("utf-8")
         )
-        (directory / "ANSWERS.md").write_text(
-            "# GSD Path Discussion — Answers\n\n" + "\n".join(answer_records)
+        (directory / "ANSWERS.md").write_bytes(
+            ("# GSD Path Discussion — Answers\n\n" + "\n".join(answer_records)).encode("utf-8")
         )
 
     def restamp_final_review(self, repo: Path) -> None:
@@ -346,9 +343,9 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
         for name in ("FINAL.md", "final-gap-1.md"):
             path = repo / ".project" / "review" / name
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             old = text.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
-            path.write_text(text.replace(old, head))
+            path.write_bytes(text.replace(old, head).encode("utf-8"))
 
     def prepare_archive(self, repo: Path, slug: str = "demo") -> Path:
         prepare = self.run_command(
@@ -376,16 +373,15 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
     def write_deep_review_cycle(self, repo: Path) -> None:
         plan = repo / ".project" / "plan" / "PLAN.md"
-        plan.write_text(
+        plan.write_bytes(
             plan.read_text(encoding="utf-8").replace(
                 "Review depth: full", "Review depth: deep"
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         review = repo / ".project" / "review"
         (review / "wave-1.cycle1.md").unlink()
         for lens in ("contract", "adversarial"):
-            (review / f"wave-1.cycle1.{lens}.md").write_text(
+            (review / f"wave-1.cycle1.{lens}.md").write_bytes(
                 f"""# Review — wave 1, cycle 1
 
 Wave verdict: pass
@@ -403,8 +399,7 @@ Tasks reviewed: 1
 ### SC1 — demo works: pass
 
 - ✅ {lens} evidence passed in focused tests
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
 
     def write_skeptic(
@@ -420,7 +415,7 @@ Tasks reviewed: 1
             / "review"
             / "wave-1.cycle1.skeptic-t001_ac1.md"
         )
-        path.write_text(
+        path.write_bytes(
             f"""# Skeptic — wave 1, cycle 1
 
 - Criterion: demo works
@@ -442,8 +437,7 @@ The archived evidence proves the criterion holds.
 ## Verdict
 
 refuted
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
         return path
 
@@ -459,8 +453,8 @@ refuted
 
     def mark_shipped(self, repo: Path) -> None:
         state_path = repo / ".project" / "STATE.md"
-        state = state_path.read_text().replace("phase: ship", "phase: shipped")
-        state_path.write_text(state.replace("status: active", "status: done"))
+        state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+        state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
 
     def commit_ship(
         self,
@@ -543,9 +537,9 @@ refuted
             self.assertEqual([path.name for path in archive_directories], ["001-demo"])
 
             state_path = repo / ".project" / "STATE.md"
-            state = state_path.read_text().replace("phase: ship", "phase: shipped")
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
             state = state.replace("status: active", "status: done")
-            state_path.write_text(state)
+            state_path.write_bytes(state.encode("utf-8"))
             self.write_manifest(archive)
 
             before_commit = self.run_command(
@@ -580,8 +574,8 @@ refuted
             switched = self.git(repo, "switch", "-q", "-c", "gsd-path/M002")
             self.assertEqual(switched.returncode, 0, switched.stderr)
             state = repo / ".project" / "STATE.md"
-            state.write_text(
-                state.read_text().replace("branch: gsd-path/M001", "branch: gsd-path/M002")
+            state.write_bytes(
+                state.read_text(encoding="utf-8").replace("branch: gsd-path/M001", "branch: gsd-path/M002").encode("utf-8")
             )
             before = self.snapshot_worktree(repo)
 
@@ -665,7 +659,7 @@ refuted
             repo = Path(tmp)
             self.make_repo(repo)
             intent = repo / ".project/intent/INTENT.md"
-            intent.write_text(intent.read_text().replace("1. demo works", "1. demo\n   works"))
+            intent.write_bytes(intent.read_text(encoding="utf-8").replace("1. demo works", "1. demo\n   works").encode("utf-8"))
             before = intent.read_bytes()
             archive = self.prepare_archive(repo)
             rendered = self.render_manifest(repo)
@@ -677,16 +671,16 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             final = repo / ".project" / "review" / "FINAL.md"
-            final.write_text(final.read_text().replace("tests", "tests | smoke"))
+            final.write_bytes(final.read_text(encoding="utf-8").replace("tests", "tests | smoke").encode("utf-8"))
             archive = self.prepare_archive(repo)
             manifest = archive / "MANIFEST.md"
-            manifest.write_text("stale\n")
+            manifest.write_bytes("stale\n".encode("utf-8"))
 
             rendered = self.render_manifest(repo)
 
             self.assertEqual(rendered.returncode, 0, rendered.stderr)
             self.assertEqual(json.loads(rendered.stdout)["archive"], ".project/archive/001-demo")
-            content = manifest.read_text()
+            content = manifest.read_text(encoding="utf-8")
             self.assertIn("# Archive — 001-demo", content)
             self.assertRegex(content, r"(?m)^Shipped: \d{4}-\d{2}-\d{2}$")
             self.assertIn("Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1", content)
@@ -704,25 +698,25 @@ refuted
             intent_criterion = "`demo.py <integer>` prints the signed integer."
             for relative in ("intent/INTENT.md", "review/FINAL.md", "review/wave-1.cycle1.md"):
                 path = repo / ".project" / relative
-                path.write_text(path.read_text().replace("demo works", intent_criterion))
+                path.write_bytes(path.read_text(encoding="utf-8").replace("demo works", intent_criterion).encode("utf-8"))
             wave = repo / ".project/review/wave-1.cycle1.md"
-            original = wave.read_text()
+            original = wave.read_text(encoding="utf-8")
             old = f"- ✅ {intent_criterion} — focused Verify passed"
-            wave.write_text(original.replace(old, f"- ✅ {criterion} — ran demo.py 7; stdout 7"))
+            wave.write_bytes(original.replace(old, f"- ✅ {criterion} — ran demo.py 7; stdout 7").encode("utf-8"))
             archive = self.prepare_archive(repo)
             result = self.render_manifest(repo)
             self.assertEqual(result.returncode, 0, result.stderr)
             result = self.preflight(repo)
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = archive / "MANIFEST.md"
-            content = manifest.read_text()
-            manifest.write_text(content.replace("<integer>", "<other>"))
+            content = manifest.read_text(encoding="utf-8")
+            manifest.write_bytes(content.replace("<integer>", "<other>").encode("utf-8"))
             self.assertNotEqual(self.preflight(repo).returncode, 0)
-            manifest.write_text(content)
+            manifest.write_bytes(content.encode("utf-8"))
             wave = archive / "review/wave-1.cycle1.md"
             for evidence in ("<observed result>", "none", ""):
                 with self.subTest(evidence=evidence):
-                    wave.write_text(original.replace(old, f"- ✅ {criterion} — {evidence}"))
+                    wave.write_bytes(original.replace(old, f"- ✅ {criterion} — {evidence}").encode("utf-8"))
                     result = self.render_manifest(repo)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("non-placeholder evidence", result.stderr)
@@ -736,14 +730,14 @@ refuted
             rendered = self.render_manifest(repo)
 
             self.assertEqual(rendered.returncode, 0, rendered.stderr)
-            content = (archive / "MANIFEST.md").read_text()
+            content = (archive / "MANIFEST.md").read_text(encoding="utf-8")
             self.assertIn(
                 "Waves: 1  Tasks: 1 done / 1 total  Review cycles used: 1  Attested: 1", content
             )
             checked = self.preflight(repo)
             self.assertEqual(checked.returncode, 0, checked.stderr)
 
-            (archive / "MANIFEST.md").write_text(content.replace("  Attested: 1", ""))
+            (archive / "MANIFEST.md").write_bytes(content.replace("  Attested: 1", "").encode("utf-8"))
             checked = self.preflight(repo)
             self.assertNotEqual(checked.returncode, 0)
             self.assertIn("counts do not match", checked.stderr)
@@ -754,11 +748,10 @@ refuted
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             task = archive / "tasks" / "T001-demo.md"
-            task.write_text(
+            task.write_bytes(
                 task.read_text(encoding="utf-8").replace(
                     "status: done", "status: in-progress"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             rendered = self.render_manifest(repo)
@@ -773,11 +766,10 @@ refuted
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             final = archive / "review" / "FINAL.md"
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "### SC1 — demo works", "### SC1 — an easier demo starts"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             rendered = self.render_manifest(repo)
@@ -807,11 +799,10 @@ refuted
 
             for name in ("FINAL.md", "final-gap-1.md"):
                 review = repo / ".project" / "review" / name
-                review.write_text(
+                review.write_bytes(
                     review.read_text(encoding="utf-8").replace(
                         landed, reviewed_head
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
             archive = self.prepare_archive(repo)
 
@@ -826,9 +817,8 @@ refuted
             self.make_repo(repo)
             previous = self.git(repo, "rev-parse", "HEAD").stdout.strip()
             task = repo / ".project" / "tasks" / "T001-demo.md"
-            task.write_text(
-                task.read_text(encoding="utf-8") + "\n- malformed landing\n",
-                encoding="utf-8",
+            task.write_bytes(
+                (task.read_text(encoding="utf-8") + "\n- malformed landing\n").encode("utf-8"),
             )
             self.git(repo, "add", ".project/tasks/T001-demo.md")
             committed = self.git(
@@ -844,9 +834,8 @@ refuted
             malformed = self.git(repo, "rev-parse", "HEAD").stdout.strip()
             for name in ("FINAL.md", "final-gap-1.md"):
                 review = repo / ".project" / "review" / name
-                review.write_text(
-                    review.read_text(encoding="utf-8").replace(previous, malformed),
-                    encoding="utf-8",
+                review.write_bytes(
+                    review.read_text(encoding="utf-8").replace(previous, malformed).encode("utf-8"),
                 )
             archive = self.prepare_archive(repo)
             self.write_manifest(archive)
@@ -862,16 +851,16 @@ refuted
             self.make_repo(repo)
             discussion = repo / ".project" / "discuss"
             self.write_discussion(discussion)
-            expected_dialogue = (discussion / "DIALOGUE.md").read_text()
+            expected_dialogue = (discussion / "DIALOGUE.md").read_text(encoding="utf-8")
 
             archive = self.prepare_archive(repo)
 
             self.assertFalse(discussion.exists())
             self.assertEqual(
-                (archive / "discuss" / "DIALOGUE.md").read_text(),
+                (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"),
                 expected_dialogue,
             )
-            self.assertIn("## Answer A001", (archive / "discuss" / "ANSWERS.md").read_text())
+            self.assertIn("## Answer A001", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
             self.write_manifest(archive)
             preflight = self.preflight(repo)
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
@@ -896,7 +885,7 @@ refuted
             self.make_repo(repo)
             ledger = repo / ".project" / "build" / "verify-ledger.jsonl"
             ledger.parent.mkdir()
-            ledger.write_text('{"command": "true", "commit": "x", "result": "pass", "recorded_at": "t"}\n')
+            ledger.write_bytes('{"command": "true", "commit": "x", "result": "pass", "recorded_at": "t"}\n'.encode("utf-8"))
 
             archive = self.prepare_archive(repo)
 
@@ -928,22 +917,22 @@ refuted
             discussion.mkdir()
             dialogue_template = (
                 PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "dialogue.md"
-            ).read_text()
+            ).read_text(encoding="utf-8")
             answers_template = (
                 PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "answers.md"
-            ).read_text()
-            (discussion / "DIALOGUE.md").write_text(
-                dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n"
+            ).read_text(encoding="utf-8")
+            (discussion / "DIALOGUE.md").write_bytes(
+                (dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n").encode("utf-8")
             )
-            (discussion / "ANSWERS.md").write_text(
-                answers_template.split("\n## Answer A001", 1)[0].rstrip() + "\n"
+            (discussion / "ANSWERS.md").write_bytes(
+                (answers_template.split("\n## Answer A001", 1)[0].rstrip() + "\n").encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
 
             self.assertFalse(discussion.exists())
             self.assertEqual(
-                (archive / "discuss" / "DIALOGUE.md").read_text(),
+                (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"),
                 dialogue_template.split("\n### D001", 1)[0].rstrip() + "\n",
             )
 
@@ -1039,8 +1028,8 @@ refuted
 
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             self.assertFalse(discussion.exists())
-            self.assertIn("### D002", (archive / "discuss" / "DIALOGUE.md").read_text())
-            self.assertIn("## Answer A002", (archive / "discuss" / "ANSWERS.md").read_text())
+            self.assertIn("### D002", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"))
+            self.assertIn("## Answer A002", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
 
     def test_prepare_rejects_incomplete_discussion_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1071,9 +1060,8 @@ refuted
             discussion = repo / ".project" / "discuss"
             self.write_discussion(discussion)
             dialogue = discussion / "DIALOGUE.md"
-            dialogue.write_text(
-                dialogue.read_text().replace("  > question 1", "  >   "),
-                encoding="utf-8",
+            dialogue.write_bytes(
+                dialogue.read_text(encoding="utf-8").replace("  > question 1", "  >   ").encode("utf-8"),
             )
 
             prepare = self.run_command(
@@ -1097,18 +1085,17 @@ refuted
             discussion = repo / ".project" / "discuss"
             self.write_discussion(discussion)
             dialogue = discussion / "DIALOGUE.md"
-            dialogue.write_text(
-                dialogue.read_text().replace(
+            dialogue.write_bytes(
+                dialogue.read_text(encoding="utf-8").replace(
                     "  answer 1",
                     "- **Decision:** keep it\n\n### Result\n\nanswer 1",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             archive = self.prepare_archive(repo)
 
             self.assertIn(
-                "### Result", (archive / "discuss" / "DIALOGUE.md").read_text()
+                "### Result", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8")
             )
 
     def test_prepare_rejects_cross_thread_reply_and_supersession(self) -> None:
@@ -1119,10 +1106,10 @@ refuted
             self.write_discussion(discussion, turn=2)
             for name in ("DIALOGUE.md", "ANSWERS.md"):
                 path = discussion / name
-                content = path.read_text()
+                content = path.read_text(encoding="utf-8")
                 marker = "### D002" if name == "DIALOGUE.md" else "## Answer A002"
                 before, after = content.split(marker, 1)
-                path.write_text(before + marker + after.replace("T001", "T002", 1))
+                path.write_bytes((before + marker + after.replace("T001", "T002", 1)).encode("utf-8"))
 
             prepare = self.run_command(
                 sys.executable,
@@ -1145,14 +1132,14 @@ refuted
             discussion = repo / ".project" / "discuss"
             self.write_discussion(discussion)
             answers = discussion / "ANSWERS.md"
-            answers.write_text(
-                answers.read_text()
+            answers.write_bytes(
+                answers.read_text(encoding="utf-8")
                 .replace("- **Next owner**: none", "- **Next owner**: gsd-path-ship")
                 .replace(
                     "- **Target artifact**: none",
                     "- **Target artifact**: .project/review/FINAL.md",
                 )
-                .replace("- **Follow-up**: none", "- **Follow-up**: required")
+                .replace("- **Follow-up**: none", "- **Follow-up**: required").encode("utf-8")
             )
 
             prepare = self.run_command(
@@ -1183,7 +1170,7 @@ refuted
                     self.write_discussion(discussion)
                     answers = discussion / "ANSWERS.md"
                     content = (
-                        answers.read_text()
+                        answers.read_text(encoding="utf-8")
                         .replace(
                             "- **Next owner**: none",
                             "- **Next owner**: gsd-path-plan",
@@ -1196,8 +1183,8 @@ refuted
                             "- **Follow-up**: none", "- **Follow-up**: required"
                         )
                     )
-                    answers.write_text(
-                        content
+                    answers.write_bytes(
+                        (content
                         + f"""
 
 ## Disposition X001 — 2026-08-01
@@ -1207,7 +1194,7 @@ refuted
 - **Owner**: {owner}
 - **Artifact**: {artifact}
 - **Evidence**: unrelated review change
-"""
+""").encode("utf-8")
                     )
 
                     prepare = self.run_command(
@@ -1232,7 +1219,7 @@ refuted
             self.write_discussion(discussion)
             for name in ("DIALOGUE.md", "ANSWERS.md"):
                 path = discussion / name
-                path.write_text(path.read_text().replace("ship/active", "bogus/active"))
+                path.write_bytes(path.read_text(encoding="utf-8").replace("ship/active", "bogus/active").encode("utf-8"))
 
             prepare = self.run_command(
                 sys.executable,
@@ -1284,7 +1271,7 @@ refuted
 
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             self.assertFalse(discussion.exists())
-            self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text())
+            self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
 
     def test_discussion_recovery_rejects_symlinked_archive_destination(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1306,12 +1293,12 @@ refuted
                 "schema": "gsd-path/discussion-archive/v1",
                 "archive": str(archive.resolve()),
                 "files": {
-                    name: (discussion / name).read_text()
+                    name: (discussion / name).read_text(encoding="utf-8")
                     for name in archive_milestone.DISCUSSION_FILES
                 },
             }
-            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
-                json.dumps(payload) + "\n"
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_bytes(
+                (json.dumps(payload) + "\n").encode("utf-8")
             )
 
             with self.assertRaises(archive_milestone.ArchiveError):
@@ -1339,15 +1326,15 @@ refuted
                 "schema": "gsd-path/discussion-archive/v1",
                 "archive": str(archive.resolve()),
                 "files": {
-                    name: (discussion / name).read_text()
+                    name: (discussion / name).read_text(encoding="utf-8")
                     for name in archive_milestone.DISCUSSION_FILES
                 },
             }
-            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_text(
-                json.dumps(payload) + "\n"
+            (repo / ".project" / archive_milestone.DISCUSSION_TRANSACTION_NAME).write_bytes(
+                (json.dumps(payload) + "\n").encode("utf-8")
             )
             outside = repo / "outside-record.md"
-            outside.write_text("outside sentinel\n")
+            outside.write_bytes("outside sentinel\n".encode("utf-8"))
             temporary = archive / "discuss" / ".DIALOGUE.md.gsd-path-tmp"
             temporary.symlink_to(outside)
 
@@ -1355,10 +1342,10 @@ refuted
                 repo / ".project", archive
             )
 
-            self.assertEqual(outside.read_text(), "outside sentinel\n")
+            self.assertEqual(outside.read_text(encoding="utf-8"), "outside sentinel\n")
             self.assertFalse((archive / "discuss" / "DIALOGUE.md").is_symlink())
             self.assertIn(
-                "### D002", (archive / "discuss" / "DIALOGUE.md").read_text()
+                "### D002", (archive / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8")
             )
 
     def test_ship_accepts_active_lessons_file(self) -> None:
@@ -1366,8 +1353,8 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
-            (repo / ".project" / "LESSONS.md").write_text(
-                "# Lessons\n\n- 001-demo — verify commands must fail on skipped work\n"
+            (repo / ".project" / "LESSONS.md").write_bytes(
+                "# Lessons\n\n- 001-demo — verify commands must fail on skipped work\n".encode("utf-8")
             )
             self.mark_shipped(repo)
             self.write_manifest(archive)
@@ -1416,12 +1403,12 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
-            (repo / ".project" / "CHARTER.md").write_text("# Charter\n")
-            (repo / ".project" / "ROADMAP.md").write_text(
-                "# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n"
+            (repo / ".project" / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+            (repo / ".project" / "ROADMAP.md").write_bytes(
+                "# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n".encode("utf-8")
             )
-            (repo / ".project" / "SYNTHESIS.md").write_text(
-                "# Synthesis\n\n## Settled\n\n- program decision\n"
+            (repo / ".project" / "SYNTHESIS.md").write_bytes(
+                "# Synthesis\n\n## Settled\n\n- program decision\n".encode("utf-8")
             )
             self.mark_shipped(repo)
             self.write_manifest(archive)
@@ -1448,16 +1435,16 @@ refuted
                 repo = Path(temporary_directory)
                 self.make_repo(repo)
                 project = repo / ".project"
-                (project / "CHARTER.md").write_text("# Charter\n")
+                (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
                 if case == "unchanged":
-                    (project / "ROADMAP.md").write_text("# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n")
+                    (project / "ROADMAP.md").write_bytes("# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: .project/archive/001-demo\n".encode("utf-8"))
                     self.git(repo, "add", ".project/CHARTER.md", ".project/ROADMAP.md")
                     self.git(repo, "commit", "-q", "-m", "program metadata")
                     self.restamp_final_review(repo)
                 archive = self.prepare_archive(repo)
                 if case != "missing" and not (project / "ROADMAP.md").exists():
                     pointer = ".project/archive/999-wrong" if case == "wrong" else ".project/archive/001-demo"
-                    (project / "ROADMAP.md").write_text(f"# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: {pointer}\n")
+                    (project / "ROADMAP.md").write_bytes(f"# Roadmap\n\n### M001 — demo\n\nStatus: shipped\nArchive: {pointer}\n".encode("utf-8"))
                 self.mark_shipped(repo)
                 self.write_manifest(archive)
                 self.git(repo, "add", ".project")
@@ -1473,8 +1460,8 @@ refuted
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            (repo / ".project" / "REPOSITORY.md").write_text(
-                "# Repository Binding\n\nKind: new-github\n"
+            (repo / ".project" / "REPOSITORY.md").write_bytes(
+                "# Repository Binding\n\nKind: new-github\n".encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
@@ -1532,7 +1519,7 @@ refuted
 
             active_research = repo / ".project" / "research"
             (active_research / "DOCS-AUDIT.md").unlink()
-            (active_research / ".DOCS-AUDIT.md.gsd-path-tmp").write_text("partial\n")
+            (active_research / ".DOCS-AUDIT.md.gsd-path-tmp").write_bytes("partial\n".encode("utf-8"))
 
             retry = self.run_command(
                 sys.executable,
@@ -1580,8 +1567,8 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace("pipeline: gsd-path/v2", "pipeline: legacy/v1")
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("pipeline: gsd-path/v2", "pipeline: legacy/v1").encode("utf-8")
             )
 
             prepare = self.run_command(
@@ -1603,7 +1590,7 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(state_path.read_text().replace("phase: ship", "phase: build"))
+            state_path.write_bytes(state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: build").encode("utf-8"))
 
             prepare = self.run_command(
                 sys.executable,
@@ -1664,10 +1651,10 @@ refuted
             archive = repo / json.loads(prepare.stdout)["archive"]
 
             state_path = repo / ".project" / "STATE.md"
-            state = state_path.read_text().replace("phase: ship", "phase: shipped")
-            state_path.write_text(state.replace("status: active", "status: done"))
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
             self.write_manifest(archive)
-            (repo / "product.txt").write_text("must not ship in the archive commit\n")
+            (repo / "product.txt").write_bytes("must not ship in the archive commit\n".encode("utf-8"))
             self.git(repo, "add", ".project", "product.txt")
             ship = self.commit_ship(repo, archive)
             self.assertEqual(ship.returncode, 0, ship.stderr)
@@ -1702,9 +1689,9 @@ refuted
             archive = repo / json.loads(prepare.stdout)["archive"]
 
             state_path = repo / ".project" / "STATE.md"
-            state = state_path.read_text().replace("phase: ship", "phase: shipped")
-            state_path.write_text(state.replace("status: active", "status: done"))
-            (archive / "MANIFEST.md").write_text("# Archive — 001-demo\n")
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
+            (archive / "MANIFEST.md").write_bytes("# Archive — 001-demo\n".encode("utf-8"))
             self.git(repo, "add", ".project")
             ship = self.commit_ship(repo, archive)
             self.assertEqual(ship.returncode, 0, ship.stderr)
@@ -1739,7 +1726,7 @@ refuted
             archive = repo / json.loads(prepare.stdout)["archive"]
             (archive / "intent" / "INTENT.md").unlink()
             self.write_manifest(archive)
-            (repo / ".project" / "EXTRA.md").write_text("unexpected\n")
+            (repo / ".project" / "EXTRA.md").write_bytes("unexpected\n".encode("utf-8"))
 
             preflight = self.run_command(
                 sys.executable,
@@ -1753,8 +1740,8 @@ refuted
             self.assertNotEqual(preflight.returncode, 0)
             self.assertIn("canonical", preflight.stderr)
 
-            (archive / "intent" / "INTENT.md").write_text(
-                "# Intent\n\n## Success criteria\n\n1. demo works\n"
+            (archive / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\n## Success criteria\n\n1. demo works\n".encode("utf-8")
             )
             self.write_manifest(archive)
             extra_only = self.run_command(
@@ -1797,7 +1784,7 @@ refuted
             self.assertEqual(valid.returncode, 0, valid.stderr)
 
             manifest = archive / "MANIFEST.md"
-            manifest.write_text(manifest.read_text().replace("Milestone: demo", "Milestone: wrong"))
+            manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("Milestone: demo", "Milestone: wrong").encode("utf-8"))
             invalid = self.run_command(
                 sys.executable,
                 str(ARCHIVE_SCRIPT),
@@ -1815,7 +1802,7 @@ refuted
             self.make_repo(repo, branch="gsd-path/M002")
             older = repo / ".project" / "archive" / "001-older" / "locked.md"
             older.parent.mkdir(parents=True)
-            older.write_text("read only\n")
+            older.write_bytes("read only\n".encode("utf-8"))
             self.git(repo, "add", str(older.relative_to(repo)))
             prior = self.git(repo, "commit", "-q", "-m", "older archive")
             self.assertEqual(prior.returncode, 0, prior.stderr)
@@ -1834,10 +1821,10 @@ refuted
             self.assertEqual(prepare.returncode, 0, prepare.stderr)
             archive = repo / json.loads(prepare.stdout)["archive"]
             state_path = repo / ".project" / "STATE.md"
-            state = state_path.read_text().replace("phase: ship", "phase: shipped")
-            state_path.write_text(state.replace("status: active", "status: done"))
+            state = state_path.read_text(encoding="utf-8").replace("phase: ship", "phase: shipped")
+            state_path.write_bytes(state.replace("status: active", "status: done").encode("utf-8"))
             self.write_manifest(archive)
-            older.write_text("mutated during ship\n")
+            older.write_bytes("mutated during ship\n".encode("utf-8"))
             self.git(repo, "add", ".project")
             ship = self.commit_ship(repo, archive)
             self.assertEqual(ship.returncode, 0, ship.stderr)
@@ -1910,7 +1897,7 @@ refuted
             self.assertEqual(ship.returncode, 0, ship.stderr)
             manifest_before = (archive / "MANIFEST.md").read_bytes()
             state_temporary = repo / ".project" / ".STATE.md.gsd-path-tmp"
-            state_temporary.write_text("preserve on refusal\n")
+            state_temporary.write_bytes("preserve on refusal\n".encode("utf-8"))
 
             committed_preflight = self.preflight(repo)
             self.assertNotEqual(committed_preflight.returncode, 0)
@@ -1928,7 +1915,7 @@ refuted
             self.assertNotEqual(retry.returncode, 0)
             self.assertIn("validate", retry.stderr)
             self.assertEqual((archive / "MANIFEST.md").read_bytes(), manifest_before)
-            self.assertEqual(state_temporary.read_text(), "preserve on refusal\n")
+            self.assertEqual(state_temporary.read_text(encoding="utf-8"), "preserve on refusal\n")
 
     def test_committed_target_commands_do_not_recreate_a_deleted_archive_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1971,35 +1958,35 @@ refuted
                 older = repo / ".project" / "archive" / "001-older" / "locked.md"
                 older.parent.mkdir(parents=True)
                 if status_kind == "tracked":
-                    older.write_text("original\n")
+                    older.write_bytes("original\n".encode("utf-8"))
                     self.git(repo, "add", str(older.relative_to(repo)))
                     commit = self.git(repo, "commit", "-q", "-m", "older archive")
                     self.assertEqual(commit.returncode, 0, commit.stderr)
                     reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
                     final = repo / ".project" / "review" / "FINAL.md"
-                    final_content = final.read_text()
-                    final.write_text(
+                    final_content = final.read_text(encoding="utf-8")
+                    final.write_bytes(
                         final_content.replace(
                             final_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
                             reviewed_head,
-                        )
+                        ).encode("utf-8")
                     )
                     gap = repo / ".project" / "review" / "final-gap-1.md"
-                    gap_content = gap.read_text()
-                    gap.write_text(
+                    gap_content = gap.read_text(encoding="utf-8")
+                    gap.write_bytes(
                         gap_content.replace(
                             gap_content.split("Reviewed HEAD: ", 1)[1].splitlines()[0],
                             reviewed_head,
-                        )
+                        ).encode("utf-8")
                     )
 
                 archive = self.prepare_archive(repo)
                 self.write_manifest(archive)
                 if status_kind == "ignored":
-                    (repo / ".git" / "info" / "exclude").write_text(
-                        ".project/archive/001-older/\n"
+                    (repo / ".git" / "info" / "exclude").write_bytes(
+                        ".project/archive/001-older/\n".encode("utf-8")
                     )
-                older.write_text(f"{status_kind} mutation\n")
+                older.write_bytes(f"{status_kind} mutation\n".encode("utf-8"))
 
                 preflight = self.preflight(repo)
                 self.assertNotEqual(preflight.returncode, 0)
@@ -2012,14 +1999,14 @@ refuted
                 self.make_repo(repo)
                 if directory == "discuss":
                     self.write_discussion(repo / ".project" / "discuss")
-                (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n")
+                (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
                 (repo / ".project" / directory).mkdir(exist_ok=True)
-                (repo / ".project" / directory / ".DS_Store").write_text("finder\n")
+                (repo / ".project" / directory / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
 
                 archive = self.prepare_archive(repo)
                 rendered = self.render_manifest(repo)
                 self.assertEqual(rendered.returncode, 0, rendered.stderr)
-                self.assertNotIn(".DS_Store", (archive / "MANIFEST.md").read_text())
+                self.assertNotIn(".DS_Store", (archive / "MANIFEST.md").read_text(encoding="utf-8"))
                 preflight = self.preflight(repo)
                 self.assertEqual(preflight.returncode, 0, preflight.stderr)
                 self.mark_shipped(repo)
@@ -2035,9 +2022,9 @@ refuted
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
             original = repo / ".project" / "intent" / ".DS_Store"
-            original.write_text("tracked Finder data\n")
+            original.write_bytes("tracked Finder data\n".encode("utf-8"))
             self.assertEqual(self.git(repo, "add", "-f", str(original)).returncode, 0)
 
             archive = self.prepare_archive(repo)
@@ -2045,7 +2032,7 @@ refuted
             self.assertEqual(rendered.returncode, 0, rendered.stderr)
             archived = archive / "intent" / ".DS_Store"
             self.assertTrue(archived.is_file())
-            self.assertIn("- intent/.DS_Store", (archive / "MANIFEST.md").read_text())
+            self.assertIn("- intent/.DS_Store", (archive / "MANIFEST.md").read_text(encoding="utf-8"))
             unstaged = self.preflight(repo)
             self.assertNotEqual(unstaged.returncode, 0)
             self.assertIn("ignored current archive paths", unstaged.stderr)
@@ -2059,18 +2046,18 @@ refuted
         with tempfile.TemporaryDirectory() as temporary_directory:
             outside = Path(temporary_directory) / "outside"
             outside.mkdir()
-            (outside / ".DS_Store").write_text("x")
+            (outside / ".DS_Store").write_bytes("x".encode("utf-8"))
             self.assertFalse(_common.is_ignored_junk(outside / ".DS_Store"))  # not a repository
 
             repo = Path(temporary_directory) / "repo"
             repo.mkdir()
             self.git(repo, "init", "-q")
             junk = repo / ".DS_Store"
-            junk.write_text("x")
+            junk.write_bytes("x".encode("utf-8"))
             self.assertFalse(_common.is_ignored_junk(junk))  # not ignored
-            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\nnotes.md\n")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\nnotes.md\n".encode("utf-8"))
             self.assertTrue(_common.is_ignored_junk(junk))
-            (repo / "notes.md").write_text("x")
+            (repo / "notes.md").write_bytes("x".encode("utf-8"))
             self.assertFalse(_common.is_ignored_junk(repo / "notes.md"))  # ignored, but not junk
             self.git(repo, "add", "-f", ".DS_Store")
             self.assertFalse(_common.is_ignored_junk(junk))  # tracked copies ship
@@ -2082,7 +2069,7 @@ refuted
             archive = self.prepare_archive(repo)
             self.write_manifest(archive)
             relative_archive = archive.relative_to(repo).as_posix()
-            (repo / ".git" / "info" / "exclude").write_text(f"{relative_archive}/review/FINAL.md\n")
+            (repo / ".git" / "info" / "exclude").write_bytes(f"{relative_archive}/review/FINAL.md\n".encode("utf-8"))
 
             preflight = self.preflight(repo)
             self.assertNotEqual(preflight.returncode, 0)
@@ -2101,10 +2088,10 @@ refuted
             reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
             for name in ("FINAL.md", "final-gap-1.md"):
                 artifact = repo / ".project" / "review" / name
-                content = artifact.read_text()
+                content = artifact.read_text(encoding="utf-8")
                 old_head = content.split("Reviewed HEAD: ", 1)[1].splitlines()[0]
-                artifact.write_text(content.replace(old_head, reviewed_head))
-            (repo / ".git" / "info" / "exclude").write_text(f"/{carry_path}\n")
+                artifact.write_bytes(content.replace(old_head, reviewed_head).encode("utf-8"))
+            (repo / ".git" / "info" / "exclude").write_bytes(f"/{carry_path}\n".encode("utf-8"))
 
             archive = self.prepare_archive(repo)
             self.write_manifest(archive)
@@ -2135,7 +2122,7 @@ refuted
             self.write_manifest(archive)
             active_audit = repo / ".project" / "research" / "DOCS-AUDIT.md"
             archived_audit = archive / "research" / "DOCS-AUDIT.md"
-            active_audit.write_text("different committed queue\n")
+            active_audit.write_bytes("different committed queue\n".encode("utf-8"))
             self.mark_shipped(repo)
             self.git(repo, "add", ".project")
             ship = self.commit_ship(repo, archive)
@@ -2165,8 +2152,8 @@ refuted
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace("milestone: demo", "milestone: demo-app")
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo", "milestone: demo-app").encode("utf-8")
             )
 
             prepare = self.run_command(
@@ -2182,22 +2169,22 @@ refuted
 
             self.assertNotEqual(prepare.returncode, 0)
             self.assertIn("slug", prepare.stderr)
-            self.assertIn("archive: null", state_path.read_text())
+            self.assertIn("archive: null", state_path.read_text(encoding="utf-8"))
 
     def test_prepare_normalizes_cli_slug_against_canonical_state_milestone(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace("milestone: demo", "milestone: demo-app")
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo", "milestone: demo-app").encode("utf-8")
             )
 
             archive = self.prepare_archive(repo, "Demo App")
             self.assertEqual(archive.name, "001-demo-app")
 
-            state_path.write_text(
-                state_path.read_text().replace("milestone: demo-app", "milestone: other")
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("milestone: demo-app", "milestone: other").encode("utf-8")
             )
             retry = self.run_command(
                 sys.executable,
@@ -2222,15 +2209,15 @@ refuted
                 if case == "singleton":
                     intent = project / "intent" / "INTENT.md"
                     intent.unlink()
-                    (project / "intent" / "actual.md").write_text("# Intent\n")
+                    (project / "intent" / "actual.md").write_bytes("# Intent\n".encode("utf-8"))
                     intent.symlink_to("actual.md")
                 elif case == "task":
                     task = project / "tasks" / "T001-demo.md"
                     task.unlink()
-                    (project / "tasks" / "actual.md").write_text("# Task\n")
+                    (project / "tasks" / "actual.md").write_bytes("# Task\n".encode("utf-8"))
                     task.symlink_to("actual.md")
                 else:
-                    (project / "review" / "wave-1cycle2.md").write_text("Wave verdict: pass\n")
+                    (project / "review" / "wave-1cycle2.md").write_bytes("Wave verdict: pass\n".encode("utf-8"))
 
                 prepare = self.run_command(
                     sys.executable,
@@ -2251,7 +2238,7 @@ refuted
             self.make_repo(repo)
             notes = ("wave-1.t001-checkpoint.md", "wave-1.lifecycle-notes.md")
             for name in notes:
-                (repo / ".project" / "review" / name).write_text("# Note\n\nVerdict: PASS\n")
+                (repo / ".project" / "review" / name).write_bytes("# Note\n\nVerdict: PASS\n".encode("utf-8"))
 
             archive = self.prepare_archive(repo)
 
@@ -2295,8 +2282,8 @@ refuted
         with tempfile.TemporaryDirectory() as temporary_directory:
             review = Path(temporary_directory)
             receipt = review / "wave-1.cycle1.repair-T002.json"
-            receipt.write_text(
-                json.dumps(
+            receipt.write_bytes(
+                (json.dumps(
                     {
                         "command": "repair-evidence",
                         "repair": {"task": "T002"},
@@ -2304,8 +2291,7 @@ refuted
                         "status": "ok",
                     }
                 )
-                + "\n",
-                encoding="utf-8",
+                + "\n").encode("utf-8"),
             )
 
             self.assertEqual(archive_milestone.canonical_wave_files(review), [])
@@ -2315,9 +2301,8 @@ refuted
                 [(1, 1, "T002")],
             )
 
-            receipt.write_text(
-                receipt.read_text(encoding="utf-8").replace('"wave": 1', '"wave": 2'),
-                encoding="utf-8",
+            receipt.write_bytes(
+                receipt.read_text(encoding="utf-8").replace('"wave": 1', '"wave": 2').encode("utf-8"),
             )
             with self.assertRaisesRegex(
                 archive_milestone.ArchiveError, "identity does not match"
@@ -2331,7 +2316,7 @@ refuted
             project = repo / ".project"
             original = project / "tasks/T001-demo.md"
             repair = project / "tasks/T002-repair.md"
-            repair.write_text(
+            repair.write_bytes(
                 original.read_text(encoding="utf-8")
                 .replace("id: T001", "id: T002")
                 .replace("title: demo", "title: repair")
@@ -2340,20 +2325,18 @@ refuted
                     "## Log",
                     "## Review findings\n\n### sc1\nCriterion: demo works\n"
                     "Observation 1 — canonical: failed before repair\n\n## Log",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             review = project / "review"
             cycle_one = review / "wave-1.cycle1.md"
-            cycle_one.write_text(
+            cycle_one.write_bytes(
                 cycle_one.read_text(encoding="utf-8")
                 .replace("Wave verdict: pass", "Wave verdict: blocked")
                 .replace("T001 — demo: pass", "T001 — demo: fail")
-                .replace("- ✅ demo works", "- ❌ demo works"),
-                encoding="utf-8",
+                .replace("- ✅ demo works", "- ❌ demo works").encode("utf-8"),
             )
-            (review / "wave-1.cycle1.repair-T002.json").write_text(
-                json.dumps(
+            (review / "wave-1.cycle1.repair-T002.json").write_bytes(
+                (json.dumps(
                     {
                         "command": "repair-evidence",
                         "repair": {"task": "T002"},
@@ -2361,10 +2344,9 @@ refuted
                         "status": "ok",
                     }
                 )
-                + "\n",
-                encoding="utf-8",
+                + "\n").encode("utf-8"),
             )
-            (review / "wave-1.cycle2.md").write_text(
+            (review / "wave-1.cycle2.md").write_bytes(
                 """# Review — wave 1, cycle 2
 
 Wave verdict: pass
@@ -2385,19 +2367,17 @@ Tasks reviewed: 2
 ### SC1 — demo works: pass
 
 - ✅ focused Verify passed after repair
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
 
             self.assertEqual(discussion_validate.review_cycle_counts(project), [2])
 
             (review / "wave-1.cycle2.md").unlink()
-            cycle_one.write_text(
+            cycle_one.write_bytes(
                 cycle_one.read_text(encoding="utf-8")
                 .replace("Wave verdict: blocked", "Wave verdict: pass")
                 .replace("T001 — demo: fail", "T001 — demo: pass")
-                .replace("- ❌ demo works", "- ✅ demo works"),
-                encoding="utf-8",
+                .replace("- ❌ demo works", "- ✅ demo works").encode("utf-8"),
             )
             with self.assertRaisesRegex(
                 archive_milestone.ArchiveError, "requires a later review cycle"
@@ -2456,9 +2436,8 @@ Tasks reviewed: 2
             self.make_repo(repo)
             review = repo / ".project" / "review"
             (review / "wave-1.cycle1.md").unlink()
-            (review / "wave-1.cycle1.skeptic-t001_ac1.md").write_text(
-                "# Skeptic — wave 1, cycle 1\n\n## Verdict\n\nrefuted\n",
-                encoding="utf-8",
+            (review / "wave-1.cycle1.skeptic-t001_ac1.md").write_bytes(
+                "# Skeptic — wave 1, cycle 1\n\n## Verdict\n\nrefuted\n".encode("utf-8"),
             )
 
             prepare = self.run_command(
@@ -2480,8 +2459,8 @@ Tasks reviewed: 2
             repo = Path(temporary_directory)
             self.make_repo(repo)
             plan = repo / ".project" / "plan" / "PLAN.md"
-            plan.write_text(
-                plan.read_text().replace("Review depth: full", "Review depth: deep")
+            plan.write_bytes(
+                plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep").encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
@@ -2498,14 +2477,14 @@ Tasks reviewed: 2
             self.make_repo(repo)
             project = repo / ".project"
             plan = project / "plan" / "PLAN.md"
-            plan.write_text(
-                plan.read_text().replace(
+            plan.write_bytes(
+                plan.read_text(encoding="utf-8").replace(
                     "Review depth: full", "Review depth: verify-only"
-                )
+                ).encode("utf-8")
             )
             review = project / "review" / "wave-1.cycle1.md"
-            review.write_text(
-                review.read_text().replace("Depth: full", "Depth: verify-only")
+            review.write_bytes(
+                review.read_text(encoding="utf-8").replace("Depth: full", "Depth: verify-only").encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
@@ -2518,8 +2497,8 @@ Tasks reviewed: 2
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_text(
-                "# Panel — wave 1, cycle 1\n"
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_bytes(
+                "# Panel — wave 1, cycle 1\n".encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
@@ -2533,7 +2512,7 @@ Tasks reviewed: 2
             repo = Path(temporary_directory)
             self.make_repo(repo)
             plan = repo / ".project" / "plan" / "PLAN.md"
-            plan.write_text(plan.read_text() + "\n## Config\n- review_panel: detected\n")
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
 
             prepare = self.run_command(
                 sys.executable,
@@ -2553,9 +2532,9 @@ Tasks reviewed: 2
             repo = Path(temporary_directory)
             self.make_repo(repo)
             plan = repo / ".project" / "plan" / "PLAN.md"
-            plan.write_text(
-                plan.read_text()
-                + "\n## Config\n- review_panel: off\n- review_panel: off\n"
+            plan.write_bytes(
+                (plan.read_text(encoding="utf-8")
+                + "\n## Config\n- review_panel: off\n- review_panel: off\n").encode("utf-8")
             )
 
             prepare = self.run_command(
@@ -2578,7 +2557,7 @@ Tasks reviewed: 2
             self.make_repo(repo)
             project = repo / ".project"
             plan = project / "plan" / "PLAN.md"
-            plan.write_text(plan.read_text() + "\n## Config\n- review_panel: detected\n")
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
             review = project / "review"
             self.write_panel_skip_receipt(review / "PLAN-PANEL.skipped.json")
             self.write_panel_skip_receipt(
@@ -2608,9 +2587,9 @@ Tasks reviewed: 2
             self.make_repo(repo)
             project = repo / ".project"
             plan = project / "plan" / "PLAN.md"
-            plan.write_text(plan.read_text() + "\n## Config\n- review_panel: detected\n")
-            (project / "review" / "PLAN-PANEL.skipped.json").write_text(
-                '{"status": "skipped"}\n', encoding="utf-8"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+            (project / "review" / "PLAN-PANEL.skipped.json").write_bytes(
+                '{"status": "skipped"}\n'.encode("utf-8")
             )
 
             prepare = self.run_command(
@@ -2632,12 +2611,12 @@ Tasks reviewed: 2
             repo = Path(temporary_directory)
             self.make_repo(repo)
             plan = repo / ".project" / "plan" / "PLAN.md"
-            plan.write_text(plan.read_text() + "\n## Config\n- review_panel: detected\n")
-            (repo / ".project" / "review" / "PLAN-PANEL.md").write_text(
-                "# Plan panel\n\nActionable: 0\n"
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\n## Config\n- review_panel: detected\n").encode("utf-8"))
+            (repo / ".project" / "review" / "PLAN-PANEL.md").write_bytes(
+                "# Plan panel\n\nActionable: 0\n".encode("utf-8")
             )
-            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_text(
-                "# Panel — wave 1, cycle 1\n"
+            (repo / ".project" / "review" / "wave-1.cycle1.panel.md").write_bytes(
+                "# Panel — wave 1, cycle 1\n".encode("utf-8")
             )
 
             archive = self.prepare_archive(repo)
@@ -2654,7 +2633,7 @@ Tasks reviewed: 2
             (archive / "plan").mkdir()
             (archive / "tasks").mkdir()
             (archive / "review").mkdir()
-            (archive / "plan" / "PLAN.md").write_text(
+            (archive / "plan" / "PLAN.md").write_bytes(
                 """# Plan
 
 ## Wave 1 — demo
@@ -2664,12 +2643,12 @@ Tasks reviewed: 2
 | T001 | demo | — | demo.py |
 
 Review depth: deep
-"""
+""".encode("utf-8")
             )
-            (archive / "tasks" / "T001-demo.md").write_text(
-                "---\nid: T001\ntitle: demo\nwave: 1\n---\n# Task\n"
+            (archive / "tasks" / "T001-demo.md").write_bytes(
+                "---\nid: T001\ntitle: demo\nwave: 1\n---\n# Task\n".encode("utf-8")
             )
-            (archive / "review" / "wave-1.cycle1.contract.md").write_text(
+            (archive / "review" / "wave-1.cycle1.contract.md").write_bytes(
                 """# Review — wave 1, cycle 1
 
 Wave verdict: pass
@@ -2681,9 +2660,9 @@ Tasks reviewed: 1
 ## T001 — demo: pass
 
 - ✅ demo works — contract evidence passed
-"""
+""".encode("utf-8")
             )
-            (archive / "review" / "wave-1.cycle1.adversarial.md").write_text(
+            (archive / "review" / "wave-1.cycle1.adversarial.md").write_bytes(
                 """# Review — wave 1, cycle 1
 
 Wave verdict: pass
@@ -2695,7 +2674,7 @@ Tasks reviewed: 1
 ## T001 — demo: pass
 
 - ✅ demo works — adversarial evidence passed
-"""
+""".encode("utf-8")
             )
 
             with self.assertRaisesRegex(archive_milestone.ArchiveError, "review depth"):
@@ -2707,7 +2686,7 @@ Tasks reviewed: 1
             (archive / "plan").mkdir()
             (archive / "tasks").mkdir()
             (archive / "review").mkdir()
-            (archive / "plan" / "PLAN.md").write_text(
+            (archive / "plan" / "PLAN.md").write_bytes(
                 """# Plan
 
 ## Wave 1 — first
@@ -2721,16 +2700,16 @@ Tasks reviewed: 1
 | Task | Title | Deps | Files |
 |------|-------|------|-------|
 | T002 | second task | T001 | second.py |
-"""
+""".encode("utf-8")
             )
-            (archive / "tasks" / "T001-first.md").write_text(
-                "---\nid: T001\ntitle: first task\nwave: 1\n---\n"
+            (archive / "tasks" / "T001-first.md").write_bytes(
+                "---\nid: T001\ntitle: first task\nwave: 1\n---\n".encode("utf-8")
             )
-            (archive / "tasks" / "T002-second.md").write_text(
-                "---\nid: T002\ntitle: second task\nwave: 2\n---\n"
+            (archive / "tasks" / "T002-second.md").write_bytes(
+                "---\nid: T002\ntitle: second task\nwave: 2\n---\n".encode("utf-8")
             )
             for wave in (1, 2):
-                (archive / "review" / f"wave-{wave}.cycle1.md").write_text(
+                (archive / "review" / f"wave-{wave}.cycle1.md").write_bytes(
                     f"""# Review — wave {wave}, cycle 1
 
 Wave verdict: pass
@@ -2741,7 +2720,7 @@ Tasks reviewed: 1
 ## T002 — second task: pass
 
 - ✅ second task works — focused evidence passed
-"""
+""".encode("utf-8")
                 )
 
             with self.assertRaisesRegex(
@@ -2760,20 +2739,20 @@ Tasks reviewed: 1
                 if case == "cycle-gap":
                     cycle_two = archive / "review" / "wave-1.cycle2.md"
                     wave.rename(cycle_two)
-                    cycle_two.write_text(
-                        "# Review — wave 1, cycle 2\n\nWave verdict: pass\nCycle: 2\n"
+                    cycle_two.write_bytes(
+                        "# Review — wave 1, cycle 2\n\nWave verdict: pass\nCycle: 2\n".encode("utf-8")
                     )
                 elif case == "last-blocked":
-                    wave.write_text(wave.read_text().replace("Wave verdict: pass", "Wave verdict: blocked"))
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("Wave verdict: pass", "Wave verdict: blocked").encode("utf-8"))
                 elif case == "wrong-heading":
-                    wave.write_text(wave.read_text().replace("wave 1, cycle 1", "wave 2, cycle 1"))
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("wave 1, cycle 1", "wave 2, cycle 1").encode("utf-8"))
                 elif case == "wrong-cycle":
-                    wave.write_text(wave.read_text().replace("Cycle: 1", "Cycle: 2"))
+                    wave.write_bytes(wave.read_text(encoding="utf-8").replace("Cycle: 1", "Cycle: 2").encode("utf-8"))
                 self.write_manifest(archive)
                 if case in {"manifest-count", "cycle-gap"}:
                     manifest = archive / "MANIFEST.md"
-                    manifest.write_text(
-                        manifest.read_text().replace("Review cycles used: 1", "Review cycles used: 2")
+                    manifest.write_bytes(
+                        manifest.read_text(encoding="utf-8").replace("Review cycles used: 1", "Review cycles used: 2").encode("utf-8")
                     )
 
                 preflight = self.preflight(repo)
@@ -2796,20 +2775,20 @@ Tasks reviewed: 1
                 manifest = archive / "MANIFEST.md"
                 final = archive / "review" / "FINAL.md"
                 if case == "blocked-final":
-                    final.write_text(final.read_text().replace("Overall verdict: pass", "Overall verdict: blocked"))
+                    final.write_bytes(final.read_text(encoding="utf-8").replace("Overall verdict: pass", "Overall verdict: blocked").encode("utf-8"))
                 elif case == "wrong-evidence":
-                    manifest.write_text(
-                        manifest.read_text().replace(
+                    manifest.write_bytes(
+                        manifest.read_text(encoding="utf-8").replace(
                             "| demo works | met | tests |",
                             "| demo works | met | wrong |",
-                        )
+                        ).encode("utf-8")
                     )
                 elif case == "empty-notes":
-                    manifest.write_text(manifest.read_text().replace("\n- none\n", "\n"))
+                    manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("\n- none\n", "\n").encode("utf-8"))
                 elif case == "placeholder-note":
-                    manifest.write_text(manifest.read_text().replace("- none", "- <note>"))
+                    manifest.write_bytes(manifest.read_text(encoding="utf-8").replace("- none", "- <note>").encode("utf-8"))
                 else:
-                    manifest.write_text(manifest.read_text() + "\n<!-- <unfinished> -->\n")
+                    manifest.write_bytes((manifest.read_text(encoding="utf-8") + "\n<!-- <unfinished> -->\n").encode("utf-8"))
 
                 preflight = self.preflight(repo)
                 self.assertNotEqual(preflight.returncode, 0)
@@ -2838,30 +2817,30 @@ Tasks reviewed: 1
                 if case == "missing":
                     gap.unlink()
                 elif case == "symlink":
-                    content = gap.read_text()
+                    content = gap.read_text(encoding="utf-8")
                     gap.unlink()
-                    (archive / "review" / "gap-target.md").write_text(content)
+                    (archive / "review" / "gap-target.md").write_bytes(content.encode("utf-8"))
                     gap.symlink_to("gap-target.md")
                 elif case == "number":
                     gap.rename(archive / "review" / "final-gap-2.md")
                 elif case == "heading":
-                    gap.write_text(gap.read_text().replace("Gap Review — 1", "Gap Review — 2"))
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Gap Review — 1", "Gap Review — 2").encode("utf-8"))
                 elif case == "head":
-                    reviewed = gap.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
-                    gap.write_text(gap.read_text().replace(reviewed, "0" * 40))
+                    reviewed = gap.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace(reviewed, "0" * 40).encode("utf-8"))
                 elif case == "risk":
-                    gap.write_text(gap.read_text().replace("Risk: project Verify command", "Risk: <risk>"))
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Risk: project Verify command", "Risk: <risk>").encode("utf-8"))
                 elif case == "waves":
-                    gap.write_text(gap.read_text().replace("Waves checked: 1\n", ""))
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Waves checked: 1\n", "").encode("utf-8"))
                 elif case == "fix":
-                    gap.write_text(
-                        gap.read_text().replace(
+                    gap.write_bytes(
+                        gap.read_text(encoding="utf-8").replace(
                             "- **Fix direction**: none",
                             "- **Fix direction**: change the implementation",
-                        )
+                        ).encode("utf-8")
                     )
                 else:
-                    gap.write_text(gap.read_text().replace("Gap verdict: pass", "Gap verdict: blocked"))
+                    gap.write_bytes(gap.read_text(encoding="utf-8").replace("Gap verdict: pass", "Gap verdict: blocked").encode("utf-8"))
                 self.write_manifest(archive)
 
                 preflight = self.preflight(repo)
@@ -2874,8 +2853,8 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             gap = archive / "review" / "final-gap-1.md"
-            reviewed_head = gap.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
-            gap.write_text(
+            reviewed_head = gap.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+            gap.write_bytes(
                 f"""# Gap Review — 1: project Verify command
 
 Reviewed HEAD: {reviewed_head}
@@ -2893,7 +2872,7 @@ Waves checked: 1
 
 - **Found**: No checked result was recorded.
 - **Fix direction**: none
-"""
+""".encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -2907,18 +2886,18 @@ Waves checked: 1
             repo = Path(temporary_directory)
             self.make_repo(repo)
             intent = repo / ".project/intent/INTENT.md"
-            intent.write_text(intent.read_text().replace("# Intent", "# Intent\n\nSurfaces: Demo CLI — `run.py`"))
+            intent.write_bytes(intent.read_text(encoding="utf-8").replace("# Intent", "# Intent\n\nSurfaces: Demo CLI — `run.py`").encode("utf-8"))
             archive = self.prepare_archive(repo)
             final = archive / "review/FINAL.md"
-            original = final.read_text()
+            original = final.read_text(encoding="utf-8")
             observed = next(line for line in original.splitlines() if line.startswith("- **Observed**:"))
             evidence = original.replace(observed, '- **Observed**: stderr contained "injected <stage> failure"; all recorded cases passed.\n- **Surface**: Demo CLI — `run.py')
-            final.write_text(evidence)
+            final.write_bytes(evidence.encode("utf-8"))
             rendered = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
             self.assertEqual(rendered.returncode, 0, rendered.stderr)
             for value in ("<record observation>", "`<record observation>`", "'null'"):
                 with self.subTest(value=value):
-                    final.write_text(evidence.replace('stderr contained "injected <stage> failure"; all recorded cases passed.', value))
+                    final.write_bytes(evidence.replace('stderr contained "injected <stage> failure"; all recorded cases passed.', value).encode("utf-8"))
                     rejected = self.run_command(sys.executable, str(ARCHIVE_SCRIPT), "render-manifest", "--repo", str(repo), cwd=repo)
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn("surface Observed", rejected.stderr)
@@ -2929,10 +2908,10 @@ Waves checked: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             gap = archive / "review" / "final-gap-1.md"
-            gap.write_text(
-                gap.read_text().replace(
+            gap.write_bytes(
+                gap.read_text(encoding="utf-8").replace(
                     "Risk: project Verify command", "Risk: release packaging"
-                )
+                ).encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -2946,8 +2925,8 @@ Waves checked: 1
             repo = Path(temporary_directory)
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
-            (archive / "tasks" / "review-notes.md").write_text(
-                "not a task artifact\n"
+            (archive / "tasks" / "review-notes.md").write_bytes(
+                "not a task artifact\n".encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -2962,7 +2941,7 @@ Waves checked: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             wave = archive / "review" / "wave-1.cycle1.md"
-            wave.write_text(
+            wave.write_bytes(
                 """# Review — wave 1, cycle 1
 
 Wave verdict: pass
@@ -2971,7 +2950,7 @@ Depth: full
 Tasks reviewed: 1
 
 ## T001 — demo: pass
-"""
+""".encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -2986,10 +2965,10 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             wave = archive / "review" / "wave-1.cycle1.md"
-            wave.write_text(
-                wave.read_text().replace(
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
                     "- ✅ demo works — focused Verify passed", "- ✅ none"
-                )
+                ).encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -3062,11 +3041,11 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             wave = archive / "review" / "wave-1.cycle1.md"
-            wave.write_text(
-                wave.read_text().replace(
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
                     "- ✅ demo works — focused Verify passed",
                     "- ✅ demo works — validated Result<T> in 120ms < 200ms",
-                )
+                ).encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -3079,18 +3058,18 @@ Tasks reviewed: 1
             repo = Path(temporary_directory)
             self.make_repo(repo)
             final = repo / ".project/review/FINAL.md"
-            final.write_text(
-                final.read_text().replace(
+            final.write_bytes(
+                final.read_text(encoding="utf-8").replace(
                     "- **Observed**: focused tests passed",
                     "- **Observed**: `Record<ApprovalPolicyV1, { stage: ScheduleSweepStage; safeNextAction: string }>`",
-                )
+                ).encode("utf-8")
             )
             wave = repo / ".project/review/wave-1.cycle1.md"
-            wave.write_text(
-                wave.read_text().replace(
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
                     "- ✅ demo works — focused Verify passed",
                     "- ✅ demo works — `Queues unavailable: <stored reason>`",
-                )
+                ).encode("utf-8")
             )
             archive = self.prepare_archive(repo)
             self.write_manifest(archive)
@@ -3105,8 +3084,8 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             wave = archive / "review" / "wave-1.cycle1.md"
-            wave.write_text(
-                wave.read_text().replace("- ✅ focused Verify passed in tests\n", "")
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace("- ✅ focused Verify passed in tests\n", "").encode("utf-8")
             )
             self.write_manifest(archive)
 
@@ -3121,7 +3100,7 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             wave = archive / "review" / "wave-1.cycle1.md"
-            wave.write_text(wave.read_text().replace("T001 — demo", "T999 — demo"))
+            wave.write_bytes(wave.read_text(encoding="utf-8").replace("T001 — demo", "T999 — demo").encode("utf-8"))
             self.write_manifest(archive)
 
             preflight = self.preflight(repo)
@@ -3135,14 +3114,14 @@ Tasks reviewed: 1
             self.make_repo(repo)
             archive = self.prepare_archive(repo)
             final = archive / "review" / "FINAL.md"
-            final.write_text(final.read_text().replace("**Reference**: tests", "**Reference**: none"))
+            final.write_bytes(final.read_text(encoding="utf-8").replace("**Reference**: tests", "**Reference**: none").encode("utf-8"))
             self.write_manifest(archive)
             manifest = archive / "MANIFEST.md"
-            manifest.write_text(
-                manifest.read_text().replace(
+            manifest.write_bytes(
+                manifest.read_text(encoding="utf-8").replace(
                     "| demo works | met | tests |",
                     "| demo works | met | python -m unittest |",
-                )
+                ).encode("utf-8")
             )
 
             preflight = self.preflight(repo)
@@ -3156,8 +3135,8 @@ Tasks reviewed: 1
                 # prepare refuses a stale review, so drift the archived copy afterwards.
                 archive = self.prepare_archive(repo)
                 final = archive / "review" / "FINAL.md"
-                reviewed_head = final.read_text().split("Reviewed HEAD: ", 1)[1].splitlines()[0]
-                final.write_text(final.read_text().replace(reviewed_head, "0" * 40))
+                reviewed_head = final.read_text(encoding="utf-8").split("Reviewed HEAD: ", 1)[1].splitlines()[0]
+                final.write_bytes(final.read_text(encoding="utf-8").replace(reviewed_head, "0" * 40).encode("utf-8"))
                 self.write_manifest(archive)
                 if command == "preflight":
                     result = self.preflight(repo)
@@ -3188,7 +3167,7 @@ Tasks reviewed: 1
             self.git(repo, "add", ".project")
             ship = self.commit_ship(repo, archive)
             self.assertEqual(ship.returncode, 0, ship.stderr)
-            (repo / "feature.py").write_text("print('product work')\n")
+            (repo / "feature.py").write_bytes("print('product work')\n".encode("utf-8"))
             self.git(repo, "add", "feature.py")
             product = self.git(repo, "commit", "-q", "-m", "product work after shipping")
             self.assertEqual(product.returncode, 0, product.stderr)
@@ -3219,7 +3198,7 @@ Tasks reviewed: 1
             self.assertEqual(ship.returncode, 0, ship.stderr)
 
             plan = archive / "plan" / "PLAN.md"
-            plan.write_text(plan.read_text() + "\nPost-ship edit.\n")
+            plan.write_bytes((plan.read_text(encoding="utf-8") + "\nPost-ship edit.\n").encode("utf-8"))
             self.git(repo, "add", ".project")
             tamper = self.git(repo, "commit", "-q", "-m", "edit archived plan")
             self.assertEqual(tamper.returncode, 0, tamper.stderr)
@@ -3243,18 +3222,18 @@ Tasks reviewed: 1
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
             self.make_repo(repo)
-            (repo / ".project" / "intent" / "INTENT.md").write_text(
-                "# Intent\n\n## Success criteria\n\n1. latency budget\n"
+            (repo / ".project" / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\n## Success criteria\n\n1. latency budget\n".encode("utf-8")
             )
             wave = repo / ".project" / "review" / "wave-1.cycle1.md"
-            wave.write_text(
-                wave.read_text().replace(
+            wave.write_bytes(
+                wave.read_text(encoding="utf-8").replace(
                     "### SC1 — demo works: pass",
                     "### SC1 — latency budget: pass",
-                )
+                ).encode("utf-8")
             )
             reviewed_head = self.git(repo, "rev-parse", "HEAD").stdout.strip()
-            (repo / ".project" / "review" / "FINAL.md").write_text(
+            (repo / ".project" / "review" / "FINAL.md").write_bytes(
                 f"""# Final Review — demo
 
 Reviewed HEAD: {reviewed_head}
@@ -3270,7 +3249,7 @@ Overall verdict: pass
 - **Reference**: none
 - **Finding**: none
 - **Fix direction**: none
-"""
+""".encode("utf-8")
             )
             archive = self.prepare_archive(repo)
             contents = sorted(
@@ -3279,7 +3258,7 @@ Overall verdict: pass
                 if path.is_file() and path.name != "MANIFEST.md"
             )
             listed_contents = "\n".join(f"- {path}" for path in contents)
-            (archive / "MANIFEST.md").write_text(
+            (archive / "MANIFEST.md").write_bytes(
                 f"""# Archive — {archive.name}
 
 Milestone: demo
@@ -3301,7 +3280,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 ## Notes
 
 - none
-"""
+""".encode("utf-8")
             )
 
             preflight = self.preflight(repo)
@@ -3336,8 +3315,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             checkout = self.git(root, "checkout", "-q", "-b", branch)
             self.assertEqual(checkout.returncode, 0, checkout.stderr)
         state_path = root / ".project" / "STATE.md"
-        state_path.write_text(
-            state_path.read_text().replace("branch: gsd-path/M001", f"branch: {branch}")
+        state_path.write_bytes(
+            state_path.read_text(encoding="utf-8").replace("branch: gsd-path/M001", f"branch: {branch}").encode("utf-8")
         )
 
     def make_publishable_bound_repo(self, root: Path, remote: Path) -> None:
@@ -3362,8 +3341,8 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
         checkout = self.git(root, "checkout", "-q", "-b", "gsd-path/M001")
         self.assertEqual(checkout.returncode, 0, checkout.stderr)
         state_path = root / ".project" / "STATE.md"
-        state_path.write_text(
-            state_path.read_text().replace("branch: main", "branch: gsd-path/M001")
+        state_path.write_bytes(
+            state_path.read_text(encoding="utf-8").replace("branch: main", "branch: gsd-path/M001").encode("utf-8")
         )
 
     def ship_bound(self, repo: Path) -> tuple:
@@ -3413,14 +3392,13 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
     def enable_pull_request_integration(self, repo: Path) -> None:
         state = repo / ".project" / "STATE.md"
-        state.write_text(
+        state.write_bytes(
             state.read_text(encoding="utf-8").replace(
                 "archive: null\n",
                 "archive: null\n"
                 "integration_default: pull-request\n"
                 "integration: pull-request\n",
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
 
     def is_associated_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
@@ -4836,23 +4814,23 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
 
     def reject_remote_ref(self, remote: Path, ref: str) -> Path:
         hook = remote / "hooks" / "pre-receive"
-        hook.write_text(
+        hook.write_bytes(
             "#!/bin/sh\n"
             "while read old new updated_ref; do\n"
             f'  if [ "$updated_ref" = "{ref}" ]; then\n'
             "    echo rejected-for-test >&2\n"
             "    exit 1\n"
             "  fi\n"
-            "done\n"
+            "done\n".encode("utf-8")
         )
         hook.chmod(0o755)
         return hook
 
     def install_commit_guard(self, repo: Path) -> None:
         hook = repo / ".git" / "hooks" / "commit-msg"
-        hook.write_text(
+        hook.write_bytes(
             "#!/bin/sh\n"
-            f'exec "{sys.executable}" "{GIT_GUARD_SCRIPT}" commit-msg "$1"\n'
+            f'exec "{sys.executable}" "{GIT_GUARD_SCRIPT}" commit-msg "$1"\n'.encode("utf-8")
         )
         hook.chmod(0o755)
 
@@ -4862,7 +4840,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             repo = root / "primary"
             repo.mkdir()
             self.make_publishable_bound_repo(repo, root / "origin.git")
-            (repo / "src/demo.py").write_text("value = 'integration'\n")
+            (repo / "src/demo.py").write_bytes("value = 'integration'\n".encode("utf-8"))
             self.git(repo, "add", "src/demo.py")
             changed = self.git(repo, "commit", "-qm", "fixture product change")
             self.assertEqual(changed.returncode, 0, changed.stderr)
@@ -4883,7 +4861,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.assertEqual(self.git(repo, "show", f"{merge}:src/demo.py").stdout,
                                  "value = 'integration'\n")
                 self.git(repo, "checkout", "-qb", "ordinary", ship_sha)
-                (repo / "src/demo.py").write_text("value = 'forged'\n")
+                (repo / "src/demo.py").write_bytes("value = 'forged'\n".encode("utf-8"))
                 self.git(repo, "add", "src/demo.py")
                 forged = self.git(repo, "commit", "-qm",
                                   pipeline_git.integrate_subject(archive_name, "main"))
@@ -5124,7 +5102,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     and arguments[0:2] == ("push", "origin")
                     and arguments[-1].endswith(":refs/heads/main")
                 ):
-                    (other / "remote-only.txt").write_text("advanced\n")
+                    (other / "remote-only.txt").write_bytes("advanced\n".encode("utf-8"))
                     self.git(other, "add", "remote-only.txt")
                     committed = self.git(other, "commit", "-q", "-m", "advance main")
                     self.assertEqual(committed.returncode, 0, committed.stderr)
@@ -5183,7 +5161,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.assertEqual(cloned.returncode, 0, cloned.stderr)
             self.git(other, "config", "user.name", "Validation")
             self.git(other, "config", "user.email", "validation@example.invalid")
-            (other / ".project" / "STATE.md").write_text("remote-only state\n")
+            (other / ".project" / "STATE.md").write_bytes("remote-only state\n".encode("utf-8"))
             self.git(other, "add", ".project/STATE.md")
             committed = self.git(other, "commit", "-q", "-m", "diverge main")
             self.assertEqual(committed.returncode, 0, committed.stderr)
@@ -5321,7 +5299,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 sys.executable, "-B", str(GIT_GUARD_SCRIPT.with_name("install.py")),
                 "--hooks-init", "--claude", "--project", str(repo), cwd=PROJECT_ROOT)
             self.assertEqual(installed.returncode, 0, installed.stderr)
-            (repo / "ordinary.txt").write_text("manual change\n")
+            (repo / "ordinary.txt").write_bytes("manual change\n".encode("utf-8"))
             self.git(repo, "add", "ordinary.txt")
 
             def check(expected):
@@ -5356,7 +5334,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             check("unverified")
             self.git(repo, "update-ref", tag, tag_object)
             manifest = repo / ".project" / "archive" / archive_name / "MANIFEST.md"
-            manifest.write_text(manifest.read_text() + "\nmanual archive change\n")
+            manifest.write_bytes((manifest.read_text(encoding="utf-8") + "\nmanual archive change\n").encode("utf-8"))
             check("unverified")
 
     def test_validate_integrated_rejects_duplicate_canonical_merges(self) -> None:
@@ -5435,7 +5413,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             archive_name, ship_sha = self.ship_bound(repo)
             base = self.git(repo, "rev-parse", "refs/remotes/origin/main").stdout.strip()
             self.git(repo, "checkout", "-q", "-b", "decoy", base)
-            (repo / "decoy.txt").write_text("decoy\n")
+            (repo / "decoy.txt").write_bytes("decoy\n".encode("utf-8"))
             self.git(repo, "add", "decoy.txt")
             decoy = self.git(repo, "commit", "-q", "-m", "decoy product work")
             self.assertEqual(decoy.returncode, 0, decoy.stderr)
@@ -5472,7 +5450,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             self.git(repo, "config", "user.email", "validation@example.invalid")
 
             def dated_commit(filename: str, message: str, date: str) -> str:
-                (repo / filename).write_text(f"{message}\n")
+                (repo / filename).write_bytes(f"{message}\n".encode("utf-8"))
                 self.git(repo, "add", filename)
                 env = dict(os.environ, GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date)
                 committed = subprocess.run(
@@ -5606,7 +5584,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 self.write_manifest(archive)
                 self.mark_shipped(repo)
                 state_path = repo / ".project" / "STATE.md"
-                state_path.write_text(mutate(state_path.read_text()))
+                state_path.write_bytes(mutate(state_path.read_text(encoding="utf-8")).encode("utf-8"))
                 self.git(repo, "add", ".project")
                 ship = self.commit_ship(repo, archive)
                 self.assertEqual(ship.returncode, 0, ship.stderr)
@@ -5944,13 +5922,13 @@ raise SystemExit(archive_milestone.main(["validate", "--repo", sys.argv[1]]))
             self.assertEqual(cloned.returncode, 0, cloned.stderr)
             self.git(clone, "config", "user.name", "Validation")
             self.git(clone, "config", "user.email", "validation@example.invalid")
-            (clone / "README").write_text("main\n")
+            (clone / "README").write_bytes("main\n".encode("utf-8"))
             self.git(clone, "add", "README")
             self.git(clone, "commit", "-q", "-m", "seed main")
             pushed = self.git(clone, "push", "-q", "-u", "origin", "main")
             self.assertEqual(pushed.returncode, 0, pushed.stderr)
             self.git(clone, "checkout", "-q", "-b", "gsd-path/M001")
-            (clone / "work.txt").write_text("work\n")
+            (clone / "work.txt").write_bytes("work\n".encode("utf-8"))
             self.git(clone, "add", "work.txt")
             self.git(clone, "commit", "-q", "-m", "bound work")
             self.git(clone, "push", "-q", "-u", "origin", "gsd-path/M001")
@@ -6007,7 +5985,7 @@ raise SystemExit(archive_milestone.main(["validate", "--repo", sys.argv[1]]))
         for directory in ("intent", "research", "plan", "tasks", "review"):
             (project / directory).mkdir(parents=True, exist_ok=True)
 
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             f"""---
 pipeline: gsd-path/v2
 project: demo
@@ -6022,17 +6000,17 @@ archive: null
 
 ## Log
 - 2026-08-01 — build — wave 1 {status}
-"""
+""".encode("utf-8")
         )
-        (project / "CHARTER.md").write_text("# Charter\n")
-        (project / "ROADMAP.md").write_text(
-            "# Roadmap\n\n### M001 — demo\n\nStatus: active\n"
+        (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+        (project / "ROADMAP.md").write_bytes(
+            "# Roadmap\n\n### M001 — demo\n\nStatus: active\n".encode("utf-8")
         )
-        (project / "intent" / "INTENT.md").write_text("# Intent\n")
-        (project / "research" / "SYNTHESIS.md").write_text("# Synthesis\n")
-        (project / "plan" / "PLAN.md").write_text("# Plan\n\n## Wave 1 — demo\n")
-        (project / "tasks" / "T001-demo.md").write_text("# Task\n")
-        (project / "review" / "wave-1.cycle1.md").write_text(
+        (project / "intent" / "INTENT.md").write_bytes("# Intent\n".encode("utf-8"))
+        (project / "research" / "SYNTHESIS.md").write_bytes("# Synthesis\n".encode("utf-8"))
+        (project / "plan" / "PLAN.md").write_bytes("# Plan\n\n## Wave 1 — demo\n".encode("utf-8"))
+        (project / "tasks" / "T001-demo.md").write_bytes("# Task\n".encode("utf-8"))
+        (project / "review" / "wave-1.cycle1.md").write_bytes(
             """# Review — wave 1, cycle 1
 
 Wave verdict: blocked
@@ -6043,7 +6021,7 @@ Tasks reviewed: 1
 ## T001 — demo: fail
 
 - ❌ demo broken — focused Verify failed
-"""
+""".encode("utf-8")
         )
 
         self.git(root, "add", ".project")
@@ -6095,7 +6073,7 @@ Tasks reviewed: 1
             self.assertFalse((archive / "review" / "FINAL.md").exists())
             self.assertFalse((project / "discuss").exists())
 
-            manifest = (archive / "MANIFEST.md").read_text()
+            manifest = (archive / "MANIFEST.md").read_text(encoding="utf-8")
             self.assertIn("# Archive — 001-demo", manifest)
             self.assertIn("Milestone: demo", manifest)
             self.assertRegex(manifest, r"(?m)^Abandoned: \d{4}-\d{2}-\d{2}$")
@@ -6112,17 +6090,17 @@ Tasks reviewed: 1
                 active,
                 ["CHARTER.md", "LESSONS.md", "ROADMAP.md", "STATE.md", "archive"],
             )
-            state = (project / "STATE.md").read_text()
+            state = (project / "STATE.md").read_text(encoding="utf-8")
             self.assertIn("phase: roadmap", state)
             self.assertIn("status: active", state)
             self.assertIn("milestone: null", state)
             self.assertIn("archive: null", state)
-            roadmap = (project / "ROADMAP.md").read_text()
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
             self.assertIn("Status: abandoned", roadmap)
             self.assertIn("Archive: .project/archive/001-demo", roadmap)
             self.assertIn(
                 "- 001-demo — abandoned: User ruled: stop this milestone",
-                (project / "LESSONS.md").read_text(),
+                (project / "LESSONS.md").read_text(encoding="utf-8"),
             )
             self.assertEqual(
                 self.git(repo, "log", "-1", "--format=%s").stdout.strip(),
@@ -6138,7 +6116,7 @@ Tasks reviewed: 1
             repo = Path(temporary_directory)
             self.make_build_repo(repo)
             review = repo / ".project" / "review"
-            (review / "wave-1.cycle1.adversarial.md").write_text("# Adversarial lens\n")
+            (review / "wave-1.cycle1.adversarial.md").write_bytes("# Adversarial lens\n".encode("utf-8"))
 
             result = self.run_abandon(repo)
 
@@ -6185,10 +6163,10 @@ Tasks reviewed: 1
             archive.mkdir(parents=True)
             shutil.move(str(project / "intent"), str(archive / "intent"))
             state_path = project / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace(
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace(
                     "archive: null", "archive: .project/archive/001-demo"
-                )
+                ).encode("utf-8")
             )
 
             result = self.run_abandon(repo)
@@ -6204,8 +6182,8 @@ Tasks reviewed: 1
             self.assertTrue((archive / "plan" / "PLAN.md").is_file())
             self.assertTrue((archive / "MANIFEST.md").is_file())
             self.assertFalse((project / "plan").exists())
-            self.assertIn("phase: roadmap", state_path.read_text())
-            self.assertIn("archive: null", state_path.read_text())
+            self.assertIn("phase: roadmap", state_path.read_text(encoding="utf-8"))
+            self.assertIn("archive: null", state_path.read_text(encoding="utf-8"))
 
     def test_abandon_resumes_after_archive_before_state_transition(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -6223,7 +6201,7 @@ Tasks reviewed: 1
 
             journal = archive_milestone.abandon_journal_path(repo)
             self.assertTrue(journal.is_file())
-            state = (repo / ".project" / "STATE.md").read_text()
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
             self.assertIn("phase: build", state)
             self.assertIn("archive: .project/archive/001-demo", state)
 
@@ -6231,7 +6209,7 @@ Tasks reviewed: 1
 
             self.assertEqual(retry.returncode, 0, retry.stderr)
             self.assertFalse(journal.exists())
-            self.assertIn("phase: roadmap", (repo / ".project" / "STATE.md").read_text())
+            self.assertIn("phase: roadmap", (repo / ".project" / "STATE.md").read_text(encoding="utf-8"))
 
     def test_abandon_resumes_after_state_transition_before_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -6249,7 +6227,7 @@ Tasks reviewed: 1
 
             journal = archive_milestone.abandon_journal_path(repo)
             self.assertTrue(journal.is_file())
-            state = (repo / ".project" / "STATE.md").read_text()
+            state = (repo / ".project" / "STATE.md").read_text(encoding="utf-8")
             self.assertIn("phase: roadmap", state)
             self.assertIn("archive: null", state)
 
@@ -6287,10 +6265,10 @@ Tasks reviewed: 1
                 with self.assertRaises(archive_milestone.ArchiveError):
                     archive_milestone.abandon(repo, "demo", "User ruled: stop")
             manifest = repo / ".project" / "archive" / "001-demo" / "MANIFEST.md"
-            manifest.write_text(
-                manifest.read_text().replace(
+            manifest.write_bytes(
+                manifest.read_text(encoding="utf-8").replace(
                     "Reason: User ruled: stop", "Reason: different ruling"
-                )
+                ).encode("utf-8")
             )
 
             retry = self.run_abandon(repo)
@@ -6346,9 +6324,9 @@ Tasks reviewed: 1
             repo = Path(temporary_directory)
             self.make_build_repo(repo)
             roadmap = repo / ".project" / "ROADMAP.md"
-            roadmap.write_text(
-                roadmap.read_text()
-                + "\n### M000 — invalid\n\nStatus: pending\nArchive: null\n"
+            roadmap.write_bytes(
+                (roadmap.read_text(encoding="utf-8")
+                + "\n### M000 — invalid\n\nStatus: pending\nArchive: null\n").encode("utf-8")
             )
             before = self.snapshot_worktree(repo)
 
@@ -6363,8 +6341,8 @@ Tasks reviewed: 1
             repo = Path(temporary_directory)
             self.make_build_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace("phase: build", "phase: plan")
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace("phase: build", "phase: plan").encode("utf-8")
             )
 
             result = self.run_abandon(repo)
@@ -6400,10 +6378,10 @@ Tasks reviewed: 1
             repo = Path(temporary_directory)
             self.make_build_repo(repo)
             state_path = repo / ".project" / "STATE.md"
-            state_path.write_text(
-                state_path.read_text().replace(
+            state_path.write_bytes(
+                state_path.read_text(encoding="utf-8").replace(
                     "archive: null", "archive: .project/archive/001-other"
-                )
+                ).encode("utf-8")
             )
 
             result = self.run_abandon(repo)
@@ -6421,7 +6399,7 @@ Tasks reviewed: 1
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = (
                 repo / ".project" / "archive" / "001-demo" / "MANIFEST.md"
-            ).read_text()
+            ).read_text(encoding="utf-8")
             reason_lines = [
                 line for line in manifest.splitlines() if line.startswith("Reason:")
             ]

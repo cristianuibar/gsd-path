@@ -67,7 +67,7 @@ class CheckDocsAuditTests(unittest.TestCase):
                      ".claude/skills/gsd-path/SKILL.md"):
             path = self.repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("x\n", encoding="utf-8")
+            path.write_bytes("x\n".encode("utf-8"))
         subprocess.run(["git", "add", "-A", "-f"], cwd=self.repo, check=True)
         self.write(AUDIT.format(verified=1))
 
@@ -77,9 +77,8 @@ class CheckDocsAuditTests(unittest.TestCase):
     def write(self, text, path=check_docs_audit.DEFAULT_AUDIT):
         path = self.repo / path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            text.replace("Repo root: /repo", f"Repo root: {self.repo.resolve()}"),
-            encoding="utf-8",
+        path.write_bytes(
+            text.replace("Repo root: /repo", f"Repo root: {self.repo.resolve()}").encode("utf-8"),
         )
 
     def run_gate(self, *args):
@@ -177,7 +176,7 @@ class CheckDocsAuditTests(unittest.TestCase):
             with self.subTest(flags=flags, expected=expected):
                 self.write(audit)
                 self.write(prior, "prior-audit.txt")
-                (self.repo / "changed.txt").write_text("\n".join(flags[2:]) + "\n", encoding="utf-8")
+                (self.repo / "changed.txt").write_bytes(("\n".join(flags[2:]) + "\n").encode("utf-8"))
                 args = []
                 if "--prior-audit" in flags:
                     args += ["--prior-audit", str(self.repo / "prior-audit.txt")]
@@ -197,9 +196,9 @@ class CheckDocsAuditTests(unittest.TestCase):
         self.assertEqual(aligned, [".project/intent/INTENT.md", "CONTRIBUTING.md", "README.md"])
 
     def test_inventory_command_includes_untracked_non_ignored_markdown(self):
-        (self.repo / "NOTES.md").write_text("notes\n", encoding="utf-8")
-        (self.repo / ".gitignore").write_text("IGNORED.md\n", encoding="utf-8")
-        (self.repo / "IGNORED.md").write_text("ignored\n", encoding="utf-8")
+        (self.repo / "NOTES.md").write_bytes("notes\n".encode("utf-8"))
+        (self.repo / ".gitignore").write_bytes("IGNORED.md\n".encode("utf-8"))
+        (self.repo / "IGNORED.md").write_bytes("ignored\n".encode("utf-8"))
 
         code, out, err = self.run_gate("--emit-inventory")
 
@@ -212,14 +211,14 @@ class CheckDocsAuditTests(unittest.TestCase):
                      '.agents/skills/pathology/SKILL.md', 'docs/path.md'):
             path = self.repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text('A documented claim.\n')
+            path.write_bytes('A documented claim.\n'.encode("utf-8"))
         code, out, err = self.run_gate('--emit-inventory')
         self.assertEqual(code, 0, err)
         self.assertEqual(out.splitlines(), ['.agents/skills/pathology/SKILL.md',
                                           'CONTRIBUTING.md', 'README.md', 'docs/path.md'])
 
     def test_explicit_inventory_wins(self):
-        (self.repo / "inventory.txt").write_text("README.md\nCONTRIBUTING.md\nDOCS.md\n", encoding="utf-8")
+        (self.repo / "inventory.txt").write_bytes("README.md\nCONTRIBUTING.md\nDOCS.md\n".encode("utf-8"))
         code, _, err = self.run_gate("--inventory", str(self.repo / "inventory.txt"))
         self.assertEqual(code, 1)
         self.assertIn("not audited: DOCS.md", err)

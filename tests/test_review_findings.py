@@ -120,7 +120,7 @@ Re-ran the verify in the sidecar.
 
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_bytes(text.encode("utf-8"))
 
 
 def lens_text(cycle=1, depth="deep", lens="contract", verdict="blocked", t001_fails=None,
@@ -402,7 +402,7 @@ class CapAndConfigTest(unittest.TestCase):
     def test_config_typo_is_rejected_by_key(self):
         fixture = Fixture(self)
         plan = fixture.project / "plan" / "PLAN.md"
-        plan.write_text(plan.read_text().replace("finding_skeptics: on", "finding_sceptics: on"))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("finding_skeptics: on", "finding_sceptics: on").encode("utf-8"))
         code, result = fixture.run()
         self.assertEqual(code, 2)
         self.assertIn("finding_sceptics", result["error"])

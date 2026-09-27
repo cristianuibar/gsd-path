@@ -60,7 +60,7 @@ class BindChildTests(unittest.TestCase):
     def record(self, run, lines):
         run_dir = self.root / "quick" / run
         run_dir.mkdir(parents=True)
-        (run_dir / "events.jsonl").write_text("".join(json.dumps({"elapsed_seconds": 1.0, "raw": line}) + "\n" for line in lines))
+        (run_dir / "events.jsonl").write_bytes("".join(json.dumps({"elapsed_seconds": 1.0, "raw": line}) + "\n" for line in lines).encode("utf-8"))
 
     def test_binds_completed_child_by_description(self):
         self.record("run-1", [STEP_START, TASK_COMPLETED, TEXT, STEP_FINISH])

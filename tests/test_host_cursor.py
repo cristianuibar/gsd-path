@@ -61,7 +61,7 @@ class BindChildTests(unittest.TestCase):
     def record(self, lines, run="run-20260906T000000000000Z"):
         events = self.run_root / "quick" / run / "events.jsonl"
         events.parent.mkdir(parents=True)
-        events.write_text("".join(json.dumps({"elapsed_seconds": i, "raw": line}) + "\n" for i, line in enumerate(lines)))
+        events.write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": line}) + "\n" for i, line in enumerate(lines)).encode("utf-8"))
 
     def test_binds_completed_task_child(self):
         self.record([INIT, READ_COMPLETED, TASK_STARTED, TASK_COMPLETED, RESULT])
@@ -98,7 +98,7 @@ class CommandAndSpecTests(unittest.TestCase):
     def test_command_places_prompt_in_argv(self):
         with tempfile.TemporaryDirectory() as d:
             prompt = Path(d) / "prompt.txt"
-            prompt.write_text("Reply with exactly: ok")
+            prompt.write_bytes("Reply with exactly: ok".encode("utf-8"))
             self.assertEqual(command(prompt), ["cursor-agent", "-p", "--output-format", "stream-json", "--force", "--trust",
                                                "Reply with exactly: ok"])
             self.assertEqual(command(prompt, SESSION)[6:8], ["--resume", SESSION])

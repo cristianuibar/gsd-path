@@ -47,7 +47,7 @@ class DiscussionRecordTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
         project = root / ".project"
         project.mkdir()
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             """---
 pipeline: gsd-path/v2
 project: demo
@@ -57,8 +57,7 @@ status: active
 branch: gsd-path/M001
 archive: null
 ---
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
 
     def test_discussion_available_in_roadmap_phase(self) -> None:
@@ -66,11 +65,10 @@ archive: null
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state = repo / ".project" / "STATE.md"
-            state.write_text(
+            state.write_bytes(
                 state.read_text(encoding="utf-8").replace(
                     "phase: plan", "phase: roadmap"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             pending = self.command(repo, "pending")
             self.assertEqual(pending.returncode, 0, pending.stderr)
@@ -80,11 +78,10 @@ archive: null
             repo = Path(temporary_directory)
             self.make_repo(repo)
             state = repo / ".project" / "STATE.md"
-            state.write_text(
+            state.write_bytes(
                 state.read_text(encoding="utf-8").replace(
                     "branch: gsd-path/M001", "branch: main"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             prepared = self.command(repo, "prepare")
@@ -118,7 +115,7 @@ archive: null
             self.assertEqual(json.loads(pending.stdout)["pending"][0]["answer"], "A001")
             self.assertIn(
                 "### Why",
-                (repo / ".project" / "discuss" / "DIALOGUE.md").read_text(),
+                (repo / ".project" / "discuss" / "DIALOGUE.md").read_text(encoding="utf-8"),
             )
 
             forged = self.dispose_payload(
@@ -163,7 +160,7 @@ archive: null
         }
         payload.update(overrides)
         path = repo / name
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        path.write_bytes(json.dumps(payload).encode("utf-8"))
         return path
 
     def dispose_payload(self, repo: Path, name: str, **overrides) -> Path:
@@ -177,7 +174,7 @@ archive: null
         }
         payload.update(overrides)
         path = repo / name
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        path.write_bytes(json.dumps(payload).encode("utf-8"))
         return path
 
     def test_continuation_supersedes_only_undisposed_answers(self) -> None:
@@ -210,7 +207,7 @@ archive: null
             )
             self.assertEqual(third.returncode, 0, third.stderr)
 
-            answers = (repo / ".project" / "discuss" / "ANSWERS.md").read_text()
+            answers = (repo / ".project" / "discuss" / "ANSWERS.md").read_text(encoding="utf-8")
             self.assertIn("- **Turn**: D002\n- **Supersedes**: none", answers)
             self.assertIn("- **Turn**: D003\n- **Supersedes**: A002", answers)
 
@@ -286,14 +283,14 @@ archive: null
 
             transaction = project / discussion_records.APPEND_TRANSACTION
             self.assertTrue(transaction.is_file())
-            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text())
-            self.assertNotIn("## Answer A001", (discussion / "ANSWERS.md").read_text())
+            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text(encoding="utf-8"))
+            self.assertNotIn("## Answer A001", (discussion / "ANSWERS.md").read_text(encoding="utf-8"))
 
             discussion_records.finish_append(project, discussion)
 
             self.assertFalse(transaction.exists())
-            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text())
-            self.assertIn("## Answer A001", (discussion / "ANSWERS.md").read_text())
+            self.assertIn("### D001", (discussion / "DIALOGUE.md").read_text(encoding="utf-8"))
+            self.assertIn("## Answer A001", (discussion / "ANSWERS.md").read_text(encoding="utf-8"))
             discussion_records.validate_or_empty(discussion)
 
     def test_append_reports_every_invalid_payload_field(self) -> None:
@@ -301,15 +298,14 @@ archive: null
             repo = Path(temporary_directory)
             self.make_repo(repo)
             payload = repo / "turn.json"
-            payload.write_text(
+            payload.write_bytes(
                 json.dumps(
                     {
                         "topic": "scope",
                         "conclusion": "two\nlines",
                         "reasoning": "two\rlines",
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             appended = self.command(repo, "append", payload)
@@ -344,7 +340,7 @@ archive: null
                         del payload["thread"]
                     else:
                         payload["thread"] = thread
-                    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+                    payload_path.write_bytes(json.dumps(payload).encode("utf-8"))
 
                     appended = self.command(repo, "append", payload_path)
 
@@ -366,21 +362,21 @@ archive: null
             self.assertEqual(prepared.returncode, 0, prepared.stderr)
             discussion = repo / ".project" / "discuss"
             files = {
-                name: (discussion / name).read_text()
+                name: (discussion / name).read_text(encoding="utf-8")
                 for name in discussion_records.FILES
             }
             shutil.rmtree(discussion)
             outside = repo / "outside-discuss"
             outside.mkdir()
             for name in discussion_records.FILES:
-                (outside / name).write_text(f"sentinel {name}\n")
+                (outside / name).write_bytes(f"sentinel {name}\n".encode("utf-8"))
             discussion.symlink_to(outside, target_is_directory=True)
             transaction = repo / ".project" / discussion_records.APPEND_TRANSACTION
-            transaction.write_text(
-                json.dumps(
+            transaction.write_bytes(
+                (json.dumps(
                     {"schema": "gsd-path/discussion-append/v1", "files": files}
                 )
-                + "\n"
+                + "\n").encode("utf-8")
             )
             before = {
                 name: (outside / name).read_bytes()

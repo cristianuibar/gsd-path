@@ -102,7 +102,7 @@ def bind_child(run_root, child_id):
     completed = []
     for path in threads:
         try:
-            thread = json.loads(path.read_text())
+            thread = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
         uses, results = {}, {}

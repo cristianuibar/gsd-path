@@ -89,7 +89,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 root / "skills" / "gsd-path-inspect" / "templates" / "codebase.md"
             )
             bundled_contract.unlink()
-            inspect_resource.write_text("stale inspect resource\n")
+            inspect_resource.write_bytes("stale inspect resource\n".encode("utf-8"))
 
             missing = self.run_sync(root, "--check")
             self.assertNotEqual(missing.returncode, 0)
@@ -144,14 +144,14 @@ class SyncSkillResourcesTests(unittest.TestCase):
                 root / "skills" / "gsd-path" / "references" / "dispatch.md"
             )
             shared_dispatch = root / "platforms" / "shared-agents" / "dispatch.md"
-            canonical_dispatch.write_text("stale shared dispatch\n")
+            canonical_dispatch.write_bytes("stale shared dispatch\n".encode("utf-8"))
             stale_shared = self.run_sync(root, "--check")
             self.assertNotEqual(stale_shared.returncode, 0)
             repaired_shared = self.run_sync(root)
             self.assertEqual(repaired_shared.returncode, 0, repaired_shared.stderr)
             self.assertEqual(shared_dispatch.read_bytes(), canonical_dispatch.read_bytes())
 
-            generated.write_text("corrupt\n")
+            generated.write_bytes("corrupt\n".encode("utf-8"))
             corrupt = self.run_sync(root, "--check")
             self.assertNotEqual(corrupt.returncode, 0)
 
@@ -179,7 +179,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
             canonical = root / "skills" / "gsd-path" / "references" / "coder.md"
             generated = root / "skills" / "gsd-path-build" / "references" / "coder.md"
-            generated.write_text("edited the generated copy by mistake\n")
+            generated.write_bytes("edited the generated copy by mistake\n".encode("utf-8"))
 
             check = self.run_sync(root, "--check")
             self.assertNotEqual(check.returncode, 0)
@@ -194,7 +194,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
             clean = self.run_sync(root, "--check")
             self.assertEqual(clean.returncode, 0, clean.stderr)
 
-            generated.write_text("stale but older\n")
+            generated.write_bytes("stale but older\n".encode("utf-8"))
             old = canonical.stat().st_mtime - 10
             os.utime(generated, (old, old))
             stale = self.run_sync(root, "--check")
@@ -228,7 +228,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
 
         link_pattern = re.compile(r"\[[^]]+\]\(([^)#]+)(?:#[^)]*)?\)")
         for skill_directory in skill_directories:
-            skill_text = (skill_directory / "SKILL.md").read_text()
+            skill_text = (skill_directory / "SKILL.md").read_text(encoding="utf-8")
             for linked_path in link_pattern.findall(skill_text):
                 if "://" in linked_path or linked_path.startswith("#"):
                     continue
@@ -239,23 +239,23 @@ class SyncSkillResourcesTests(unittest.TestCase):
                     f"link escapes {skill_directory.name}: {linked_path}",
                 )
 
-        state_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "state.md").read_text()
+        state_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "state.md").read_text(encoding="utf-8")
         state_fields, error = _frontmatter(state_template)
         self.assertIsNone(error)
         self.assertEqual(state_fields["pipeline"], "gsd-path/v2")
         for key in ("milestone", "branch", "archive"):
             self.assertEqual(state_fields[key], "null")
-        task_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "task.md").read_text()
+        task_template = (PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "task.md").read_text(encoding="utf-8")
         task_fields, error = _frontmatter(task_template)
         self.assertIsNone(error)
         for key in ("base", "worktree", "task_branch"):
             self.assertEqual(task_fields[key], "null")
         final_review = (
             PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "final-review.md"
-        ).read_text()
+        ).read_text(encoding="utf-8")
         gap_review = (
             PROJECT_ROOT / "skills" / "gsd-path" / "templates" / "gap-review.md"
-        ).read_text()
+        ).read_text(encoding="utf-8")
         self.assertIn("Reviewed HEAD: <full SHA>", final_review)
         self.assertIn("Reviewed HEAD: <full SHA>", gap_review)
 
@@ -305,7 +305,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
             repo = Path(temporary_directory)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 """---
 pipeline: gsd-path/v2
 project: demo
@@ -315,8 +315,7 @@ status: active
 branch: gsd-path/M001
 archive: null
 ---
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
 
             for skill_directory in sorted((PROJECT_ROOT / "skills").glob("gsd-path*")):

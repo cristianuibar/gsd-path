@@ -147,10 +147,10 @@ class KillTreeTests(unittest.TestCase):
             process = _common.popen_group([sys.executable, "-c", script])
             try:
                 deadline = time.monotonic() + 30
-                while not pid_file.exists() or not pid_file.read_text():
+                while not pid_file.exists() or not pid_file.read_text(encoding="utf-8"):
                     self.assertLess(time.monotonic(), deadline)
                     time.sleep(0.05)
-                grandchild = int(pid_file.read_text())
+                grandchild = int(pid_file.read_text(encoding="utf-8"))
                 self.assertTrue(_common.process_alive(grandchild))
                 _common.kill_tree(process)
                 process.wait(30)
@@ -249,7 +249,7 @@ class GitOutputEncodingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            (repo / "café.md").write_text("x", encoding="utf-8")
+            (repo / "café.md").write_bytes("x".encode("utf-8"))
             result = _common.run_git(repo, "-c", "core.quotepath=false", "ls-files", "--others", "-z")
             self.assertEqual(result.stdout.split("\0")[0], "café.md")
 

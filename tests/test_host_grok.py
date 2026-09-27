@@ -83,7 +83,7 @@ class BindChildTests(unittest.TestCase):
 
     def record(self, events, run="run-20260907T030630000000Z"):
         run_dir = self.run_root / "quick" / run; run_dir.mkdir(parents=True)
-        (run_dir / "events.jsonl").write_text("".join(json.dumps({"elapsed_seconds": i, "raw": raw}) + "\n" for i, raw in enumerate(lines(events))))
+        (run_dir / "events.jsonl").write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": raw}) + "\n" for i, raw in enumerate(lines(events))).encode("utf-8"))
 
     def test_binds_completed_background_child_by_description(self):
         self.record(HEAD + [COMPLETION] + TAIL)
@@ -138,7 +138,7 @@ class BindChildTests(unittest.TestCase):
     def test_transcript_evidence_when_session_dir_exists(self):
         self.record(HEAD + [COMPLETION] + TAIL)
         parent = grok.session_dir(CWD, SESSION); parent.mkdir(parents=True); (parent.parent / SUBAGENT).mkdir()
-        (parent / "resources_state.json").write_text(json.dumps({"state": {"grok_build.ReportedTaskCompletions": {"reported": [SUBAGENT]}}}))
+        (parent / "resources_state.json").write_bytes(json.dumps({"state": {"grok_build.ReportedTaskCompletions": {"reported": [SUBAGENT]}}}).encode("utf-8"))
         transcript = grok.bind_child(self.run_root, "build_probe")["transcript"]
         self.assertEqual(transcript["session_dir"], str(parent))
         self.assertEqual(transcript["child_session_dir"], str(parent.parent / SUBAGENT))

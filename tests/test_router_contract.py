@@ -50,10 +50,9 @@ class RouterContractTests(unittest.TestCase):
             )
             project = repo / ".project"
             (project / "intent").mkdir(parents=True)
-            (project / "STATE.md").write_text(state_text(phase, status), encoding="utf-8")
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — demo\n\nLane: quick\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(state_text(phase, status).encode("utf-8"))
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — demo\n\nLane: quick\n".encode("utf-8"),
             )
             return pipeline_state.route_state(repo)["route"]
 

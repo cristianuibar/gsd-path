@@ -18,11 +18,11 @@ class FeatureEvaluationTests(unittest.TestCase):
             command(["git", "clone", "--quiet", "--no-hardlinks", str(ROOT), str(candidate)], root)
             destination = root / "evaluation"
             result = evaluation.prepare(destination, candidate, ["program", "greenfield", "abandon"])
-            program_prompt = (destination / 'program/prompt.txt').read_text()
-            greenfield_prompt = (destination / 'greenfield/prompt.txt').read_text()
+            program_prompt = (destination / 'program/prompt.txt').read_text(encoding="utf-8")
+            greenfield_prompt = (destination / 'greenfield/prompt.txt').read_text(encoding="utf-8")
             self.assertIn('It must observe lookahead', program_prompt)
             self.assertNotIn('It must observe lookahead', greenfield_prompt)
-            abandon_prompt = (destination / 'abandon/prompt.txt').read_text()
+            abandon_prompt = (destination / 'abandon/prompt.txt').read_text(encoding="utf-8")
             self.assertIn('two-milestone', abandon_prompt)
             self.assertNotIn('three-milestone', abandon_prompt)
             repo = destination / "program/repo"
@@ -67,17 +67,17 @@ except (ValueError, IndexError) as error:
 '''
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
-            for name in ('ledger.py', 'reports.py'): (repo / name).write_text(source)
+            for name in ('ledger.py', 'reports.py'): (repo / name).write_bytes(source.encode("utf-8"))
             self.assertEqual(evaluation.evaluate_program(repo)['verdict'], 'pass')
             unsorted = source.replace("        rows.sort(key=lambda r:r['name'])", "").replace("sorted(rows,key=lambda r:r['name'])", "rows")
-            for name in ('ledger.py', 'reports.py'): (repo / name).write_text(unsorted)
+            for name in ('ledger.py', 'reports.py'): (repo / name).write_bytes(unsorted.encode("utf-8"))
             result = evaluation.evaluate_program(repo)
             self.assertEqual(result['verdict'], 'fail')
             for action in ('list', 'csv'):
                 self.assertTrue(any(not check['pass'] and check.get('command', [None, None])[1] == action
                                     for check in result['checks']))
-            for name in ('ledger.py', 'reports.py'): (repo / name).write_text(source)
-            (repo / 'reports.py').write_text(source.replace("r['name'].startswith(args[1])", 'True'))
+            for name in ('ledger.py', 'reports.py'): (repo / name).write_bytes(source.encode("utf-8"))
+            (repo / 'reports.py').write_bytes(source.replace("r['name'].startswith(args[1])", 'True').encode("utf-8"))
             self.assertEqual(evaluation.evaluate_program(repo)['verdict'], 'fail')
 
     def test_result_recorder_detects_subtest_failure_and_skip(self):
@@ -96,30 +96,30 @@ except (ValueError, IndexError) as error:
     def test_native_review_requires_live_evidence_and_invalidates_changed_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'manifest.json').write_text(json.dumps({'candidate': 'abc', 'scenarios': ['program']}))
+            (root / 'manifest.json').write_bytes(json.dumps({'candidate': 'abc', 'scenarios': ['program']}).encode("utf-8"))
             arm = root / 'program'
             arm.mkdir()
             evidence = arm / 'captures.jsonl'
-            evidence.write_text(json.dumps({'timestamp': '2026-09-05T10:00:00+00:00'}) + '\n')
+            evidence.write_bytes((json.dumps({'timestamp': '2026-09-05T10:00:00+00:00'}) + '\n').encode("utf-8"))
             with self.assertRaisesRegex(ValueError, 'native run'):
                 evaluation.record_review(root, 'lookahead', 'pass', [evidence], 'Evaluator checked the canonical receipts')
             run = arm / 'run-example'
             run.mkdir()
-            (run / 'run.json').write_text(json.dumps({'exit_code': 0, 'elapsed_seconds': 1}))
-            (run / 'events.jsonl').write_text(json.dumps({'raw': json.dumps({'type': 'thread.started', 'thread_id': 'fixture'})})+'\n')
+            (run / 'run.json').write_bytes(json.dumps({'exit_code': 0, 'elapsed_seconds': 1}).encode("utf-8"))
+            (run / 'events.jsonl').write_bytes((json.dumps({'raw': json.dumps({'type': 'thread.started', 'thread_id': 'fixture'})})+'\n').encode("utf-8"))
             # The assessment is explicitly an operator judgment, never an automatic helper verdict.
             evaluation.record_review(root, 'lookahead', 'unverifiable', [evidence], 'Missing promotion')
             self.assertEqual(evaluation.report(root)['features']['lookahead']['native'], 'unverifiable')
-            evidence.write_text(evidence.read_text() + json.dumps({'timestamp': '2026-09-05T11:00:00+00:00'}) + '\n')
+            evidence.write_bytes((evidence.read_text(encoding="utf-8") + json.dumps({'timestamp': '2026-09-05T11:00:00+00:00'}) + '\n').encode("utf-8"))
             self.assertEqual(evaluation.report(root)['features']['lookahead']['native'], 'stale-review')
 
     def test_report_cannot_pass_lookahead_without_observed_promotions(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'manifest.json').write_text(json.dumps({'candidate': 'abc', 'scenarios': ['program']}))
+            (root / 'manifest.json').write_bytes(json.dumps({'candidate': 'abc', 'scenarios': ['program']}).encode("utf-8"))
             (root / 'program').mkdir()
-            (root / 'reviews.jsonl').write_text(json.dumps({
-                'candidate': 'abc', 'feature': 'lookahead', 'verdict': 'pass', 'evidence': []}) + '\n')
+            (root / 'reviews.jsonl').write_bytes((json.dumps({
+                'candidate': 'abc', 'feature': 'lookahead', 'verdict': 'pass', 'evidence': []}) + '\n').encode("utf-8"))
             report = evaluation.report(root)
             self.assertNotEqual(report['features']['lookahead']['native'], 'pass')
             self.assertEqual(report['verdict'], 'incomplete')
@@ -128,14 +128,14 @@ except (ValueError, IndexError) as error:
         from tests.test_evaluate_codex import GOOD_COUNTER
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'manifest.json').write_text(json.dumps({'candidate': 'abc', 'scenarios': ['quick']}))
+            (root / 'manifest.json').write_bytes(json.dumps({'candidate': 'abc', 'scenarios': ['quick']}).encode("utf-8"))
             repo = root / 'quick/repo'
             repo.mkdir(parents=True)
             script = repo / 'count.py'
             (repo / 'counter').mkdir()
             implementation = repo / 'counter/main.py'
-            implementation.write_text(GOOD_COUNTER)
-            script.write_text('from counter import main')
+            implementation.write_bytes(GOOD_COUNTER.encode("utf-8"))
+            script.write_bytes('from counter import main'.encode("utf-8"))
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(evaluation.main(['accept', '--directory', str(root), '--scenario', 'quick']), 0)
             self.assertEqual(evaluation.report(root)['scenarios']['quick']['product'], 'pass')
@@ -144,7 +144,7 @@ except (ValueError, IndexError) as error:
             for path in (script, implementation, repo / 'counter/settings.json'):
                 with self.subTest(path=path.relative_to(repo)):
                     original = path.read_bytes() if path.exists() else None
-                    path.write_text("changed")
+                    path.write_bytes("changed".encode("utf-8"))
                     self.assertEqual(evaluation.report(root)['scenarios']['quick']['product'], 'stale')
                     if original is None:
                         path.unlink()
@@ -160,12 +160,12 @@ except (ValueError, IndexError) as error:
             plugin = root / 'plugin'
             command(['git', 'clone', '--quiet', str(ROOT), str(plugin)], root)
             revision = command(['git', 'rev-parse', 'HEAD'], plugin)
-            (root / 'manifest.json').write_text(json.dumps({'candidate': revision, 'scenarios': []}))
+            (root / 'manifest.json').write_bytes(json.dumps({'candidate': revision, 'scenarios': []}).encode("utf-8"))
             saved = {'candidate': revision, 'exit_code': 0, 'tests': {'cached': 'pass'}}
-            (root / 'automated.json').write_text(json.dumps(saved))
+            (root / 'automated.json').write_bytes(json.dumps(saved).encode("utf-8"))
             self.assertEqual(evaluation.check(root), saved)
             self.assertFalse((root / 'automated-command.log').exists())
-            (plugin / 'changed.txt').write_text('changed')
+            (plugin / 'changed.txt').write_bytes('changed'.encode("utf-8"))
             with self.assertRaisesRegex(ValueError, 'candidate changed'):
                 evaluation.check(root)
 

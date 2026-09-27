@@ -95,7 +95,7 @@ def _transcript_evidence(cwd, session_id, subagent_id):
     state = parent / "resources_state.json"
     if state.is_file():
         try:
-            evidence["reported_completions"] = json.loads(state.read_text())["state"]["grok_build.ReportedTaskCompletions"]["reported"]
+            evidence["reported_completions"] = json.loads(state.read_text(encoding="utf-8"))["state"]["grok_build.ReportedTaskCompletions"]["reported"]
         except (ValueError, KeyError, TypeError):
             pass
     return evidence
@@ -107,7 +107,7 @@ def bind_child(run_root, child_id):
     run_root = Path(run_root)
     attempts, session = {}, None
     for events in sorted(run_root.glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):

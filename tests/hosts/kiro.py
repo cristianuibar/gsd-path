@@ -80,7 +80,7 @@ def _session_store(parent, tool_call_id):
     children = []
     for meta in sorted(SESSION_ROOT.glob("*.json")):
         try:
-            d = json.loads(meta.read_text())
+            d = json.loads(meta.read_text(encoding="utf-8"))
         except ValueError:
             continue
         if d.get("parent_session_id") == parent:
@@ -89,7 +89,7 @@ def _session_store(parent, tool_call_id):
         out["child_sessions"] = children
     transcript = SESSION_ROOT / f"{parent}.jsonl"
     if transcript.exists():
-        for line in transcript.read_text().splitlines():
+        for line in transcript.read_text(encoding="utf-8").splitlines():
             try:
                 row = json.loads(line)
             except ValueError:
@@ -108,7 +108,7 @@ def bind_child(run_root, child_id):
     """Bind the crew/subagent tool_call whose task name is the logical task name to its completed update."""
     attempts = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError):

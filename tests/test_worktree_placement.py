@@ -37,7 +37,7 @@ class WorktreePlacementTests(unittest.TestCase):
             verify = isolation.isolate_verify(self.repo, self.base, "review")
             sidecar = Path(verify["worktree"])
             self.assertEqual(sidecar.parent.parent, path.parent.parent)
-            (sidecar / "generated.txt").write_text("review output")
+            (sidecar / "generated.txt").write_bytes("review output".encode("utf-8"))
             isolation.clean_verify(self.repo, sidecar, self.base, verify["branch"])
             self.assertFalse((sidecar / "generated.txt").exists())
             isolation.retire(self.repo, sidecar, verify["branch"], False)
@@ -88,7 +88,7 @@ class WorktreePlacementTests(unittest.TestCase):
     def test_invalid_receipt_never_reselects_workspace(self):
         isolation.isolate_verify(self.repo, self.base, "review")
         receipt, = (self.repo / ".git/gsd-path/workspaces").glob("*.json")
-        receipt.write_text("null")
+        receipt.write_bytes("null".encode("utf-8"))
         with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.root / "changed")}):
             with self.assertRaisesRegex(isolation.IsolationError, "invalid worktree placement receipt"):
                 isolation.isolate_verify(self.repo, self.base, "another")
@@ -116,7 +116,7 @@ class WorktreePlacementTests(unittest.TestCase):
 
     def test_runtime_package_creates_managed_sidecars(self):
         source = Path(__file__).resolve().parents[1]
-        manifest = json.loads((source / "scripts/skill-resources.json").read_text())
+        manifest = json.loads((source / "scripts/skill-resources.json").read_text(encoding="utf-8"))
         runtime = self.root / "runtime"
         runtime.mkdir()
         for name in install.PROJECT_RUNTIME_SCRIPTS:

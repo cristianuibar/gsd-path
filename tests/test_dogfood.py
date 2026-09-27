@@ -14,18 +14,18 @@ class DogfoodContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            (repo / "README.md").write_text(dogfood.FIXTURE_README)
-            (repo / "CONTRIBUTING.md").write_text("Contribute here.\n")
-            (repo / "count.py").write_text(dogfood.FIXTURE_SCRIPT)
+            (repo / "README.md").write_bytes(dogfood.FIXTURE_README.encode("utf-8"))
+            (repo / "CONTRIBUTING.md").write_bytes("Contribute here.\n".encode("utf-8"))
+            (repo / "count.py").write_bytes(dogfood.FIXTURE_SCRIPT.encode("utf-8"))
             audit = repo / ".project/research/DOCS-AUDIT.md"
             audit.parent.mkdir(parents=True)
             wrong = AUDIT.format(verified=1).replace("Repo root: /repo", f"Repo root: {repo}")
-            audit.write_text(wrong)
+            audit.write_bytes(wrong.encode("utf-8"))
             self.assertFalse(all(ok for _, ok, _ in dogfood.check_audit(repo)))
             correct = wrong.replace("| stale | 1 |", "| stale | 0 |").replace("| aspirational | 0 |", "| aspirational | 1 |")
             correct = correct.replace("| feature | stale |", "| feature | aspirational |")
             correct = correct.replace("| stale | fix-doc |", "| aspirational | fix-doc |").replace("app.py", "count.py")
-            audit.write_text(correct)
+            audit.write_bytes(correct.encode("utf-8"))
             results = dogfood.check_audit(repo)
             self.assertTrue(all(ok for _, ok, _ in results), results)
 

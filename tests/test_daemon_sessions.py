@@ -46,7 +46,7 @@ class SessionParseTests(unittest.TestCase):
 
     def test_codex_records_model_agent_tokens_and_duration(self) -> None:
         path = self.base / "rollout.jsonl"
-        path.write_text(codex_rollout(self.root), encoding="utf-8")
+        path.write_bytes(codex_rollout(self.root).encode("utf-8"))
         cwd, records = sessions.parse_session(path)
         self.assertEqual(cwd, self.root)
         self.assertEqual(len(records), 2)
@@ -60,7 +60,7 @@ class SessionParseTests(unittest.TestCase):
 
     def test_claude_records_cache_creation_as_input_and_marks_subagents(self) -> None:
         path = self.base / "transcript.jsonl"
-        path.write_text(claude_transcript(self.root + "/sub"), encoding="utf-8")
+        path.write_bytes(claude_transcript(self.root + "/sub").encode("utf-8"))
         cwd, records = sessions.parse_session(path)
         self.assertEqual(cwd, self.root + "/sub")
         self.assertEqual([r["tokens_in"] for r in records], [100, 5])
@@ -86,11 +86,11 @@ class SessionIndexTests(unittest.TestCase):
         (self.base / "proj").mkdir()
         self.codex = self.base / "codex" / "2026" / "09" / "10"
         self.codex.mkdir(parents=True)
-        (self.codex / "a.jsonl").write_text(codex_rollout(self.root), encoding="utf-8")
-        (self.codex / "other.jsonl").write_text(codex_rollout(str(self.base / "elsewhere")), encoding="utf-8")
+        (self.codex / "a.jsonl").write_bytes(codex_rollout(self.root).encode("utf-8"))
+        (self.codex / "other.jsonl").write_bytes(codex_rollout(str(self.base / "elsewhere")).encode("utf-8"))
         self.claude = self.base / "claude" / "-proj"
         self.claude.mkdir(parents=True)
-        (self.claude / "t.jsonl").write_text(claude_transcript(self.root + "/worktree"), encoding="utf-8")
+        (self.claude / "t.jsonl").write_bytes(claude_transcript(self.root + "/worktree").encode("utf-8"))
         self.index = sessions.SessionIndex([str(self.base / "codex"), str(self.base / "claude")],
                                            prices={"gpt-6-astra": {"input": 1.0, "cached": 0.1, "output": 10.0}})
 
@@ -155,7 +155,7 @@ class SessionIndexTests(unittest.TestCase):
             sessions._read_head_cwd = original
         self.assertEqual(len(second.records_for(self.root)), 4)
         # A corrupt cache is ignored, not fatal.
-        cache.write_text("{not json", encoding="utf-8")
+        cache.write_bytes("{not json".encode("utf-8"))
         third = sessions.SessionIndex([str(self.base / "codex")], cache_path=cache)
         third.scan([self.root])
         self.assertEqual(len(third.records_for(self.root)), 2)
@@ -165,7 +165,7 @@ class SessionIndexTests(unittest.TestCase):
             with self.subTest(change=change):
                 path = self.codex / "a.jsonl"
                 content = codex_rollout(self.root)
-                path.write_text(" " * len(content) if change == "mtime" else "", encoding="utf-8")
+                path.write_bytes((" " * len(content) if change == "mtime" else "").encode("utf-8"))
                 index = sessions.SessionIndex([str(self.codex)])
                 with mock.patch.object(sessions, "_read_head_cwd", wraps=sessions._read_head_cwd) as read:
                     index.scan([self.root])
@@ -174,7 +174,7 @@ class SessionIndexTests(unittest.TestCase):
                     index.scan([self.root])
                     read.assert_not_called()
                     before = path.stat()
-                    path.write_text(content, encoding="utf-8")
+                    path.write_bytes(content.encode("utf-8"))
                     mtime = before.st_mtime_ns + 1_000_000_000 if change == "mtime" else before.st_mtime_ns
                     os.utime(path, ns=(before.st_atime_ns, mtime))
                     index.scan([self.root])
@@ -185,13 +185,13 @@ class SessionIndexTests(unittest.TestCase):
         cache = self.base / "sessions-index.json"
         path = self.codex / "a.jsonl"
         other = self.codex / "other.jsonl"
-        cache.write_text(json.dumps({str(path): None, str(other): str(self.base / "elsewhere")}), encoding="utf-8")
+        cache.write_bytes(json.dumps({str(path): None, str(other): str(self.base / "elsewhere")}).encode("utf-8"))
         index = sessions.SessionIndex([str(self.codex)], cache_path=cache)
         with mock.patch.object(sessions, "_read_head_cwd", wraps=sessions._read_head_cwd) as read:
             index.scan([self.root])
             read.assert_called_once_with(path)
         self.assertEqual(len(index.records_for(self.root)), 2)
-        self.assertEqual(json.loads(cache.read_text())[str(path)], self.root)
+        self.assertEqual(json.loads(cache.read_text(encoding="utf-8"))[str(path)], self.root)
 
     def test_spend_is_none_without_records(self) -> None:
         self.index.scan([str(self.base / "nothing")])

@@ -47,7 +47,7 @@ SUBAGENT_FIELDS = ("agentName", "model", "durationMs", "totalTokens", "totalTool
 
 
 def command(prompt_path, resume=None):
-    args = ["copilot", "-p", Path(prompt_path).read_text(), "--allow-all", "--no-ask-user", "--output-format", "json"]
+    args = ["copilot", "-p", Path(prompt_path).read_text(encoding="utf-8"), "--allow-all", "--no-ask-user", "--output-format", "json"]
     if resume:
         args.append(f"--resume={resume}")
     return args
@@ -96,7 +96,7 @@ def transcript_for(session_id):
 def _sources(run_root):
     """Yield (source, event) from the recorded stdout streams and each run's session transcript."""
     for events in sorted(run_root.glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):
@@ -105,7 +105,7 @@ def _sources(run_root):
                 yield events.parent.name, ev
     for run_json in sorted(run_root.glob("quick/run-*/run.json")):
         try:
-            session = json.loads(run_json.read_text()).get("session_id")
+            session = json.loads(run_json.read_text(encoding="utf-8")).get("session_id")
         except ValueError:
             continue
         if not session:
@@ -114,7 +114,7 @@ def _sources(run_root):
             transcript = transcript_for(session)
         except LookupError:
             continue
-        for ev in _events(transcript.read_text().splitlines()):
+        for ev in _events(transcript.read_text(encoding="utf-8").splitlines()):
             yield f"session-state/{session}", ev
 
 

@@ -30,20 +30,20 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         git(self.reference, "config", "commit.gpgsign", "false")
         archive = self.reference / self.archive
         archive.mkdir(parents=True)
-        (archive / "record.txt").write_text("archived\n")
+        (archive / "record.txt").write_bytes("archived\n".encode("utf-8"))
         guard = self.reference / self.guard
         guard.parent.mkdir()
-        guard.write_text(
+        guard.write_bytes(
             "import subprocess, sys\n"
             "changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True)\n"
             "if any(p.startswith('.project/archive/') for p in changed.splitlines()):\n"
             "    sys.stderr.write('archive is read-only\\n')\n"
-            "    sys.exit(1)\n"
+            "    sys.exit(1)\n".encode("utf-8")
         )
         git(self.reference, "add", ".")
         git(self.reference, "commit", "-qm", "fixture")
         hook = self.reference / self.hook
-        hook.write_text("#!/bin/sh\nexec python3 .gsd-path/git_guard.py\n")
+        hook.write_bytes("#!/bin/sh\nexec python3 .gsd-path/git_guard.py\n".encode("utf-8"))
         hook.chmod(0o755)
         self.fixture = self.root / "fixture"
         for relative in (self.guard, self.hook):
@@ -81,7 +81,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
 
     def test_optional_fixture_commit_msg_requires_executability(self):
         hook = self.fixture / ".git/hooks/commit-msg"
-        hook.write_text("#!/bin/sh\nexit 0\n")
+        hook.write_bytes("#!/bin/sh\nexit 0\n".encode("utf-8"))
         for mode, executable, verdict in ((0o644, False, "fail"), (0o755, True, "pass")):
             with self.subTest(mode=mode):
                 hook.chmod(mode)
@@ -100,7 +100,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
 
     def test_nonexecutable_commit_msg_stays_inert(self):
         hook = self.reference / ".git/hooks/commit-msg"
-        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.write_bytes("#!/bin/sh\nexit 1\n".encode("utf-8"))
         hook.chmod(0o644)
         result = self.check_hooks(self.reference)
         self.assertEqual("fail", result["git_hooks"])
@@ -115,8 +115,8 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         for changed, mismatches in cases:
             with self.subTest(changed=changed):
                 for relative, replacement in replacements.items():
-                    original = (self.reference / relative).read_text()
-                    (self.fixture / relative).write_text(replacement if relative in changed else original)
+                    original = (self.reference / relative).read_text(encoding="utf-8")
+                    (self.fixture / relative).write_bytes((replacement if relative in changed else original).encode("utf-8"))
                 result = self.check_hooks(self.fixture, self.reference)
                 self.assertEqual("fail", result["git_hooks"])
                 self.assertEqual(mismatches, result["hash_mismatches"])

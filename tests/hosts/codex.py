@@ -58,7 +58,7 @@ def bind_child(run_root, child_id):
     run_root = Path(run_root)
     threads = set()
     for events in run_root.glob("quick/run-*/events.jsonl"):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError):
@@ -71,7 +71,7 @@ def bind_child(run_root, child_id):
     transcript = transcript_for(thread)
     attempts = {}
     list_calls = set()
-    for line in transcript.read_text().splitlines():
+    for line in transcript.read_text(encoding="utf-8").splitlines():
         try:
             p = json.loads(line).get("payload", {})
         except ValueError:

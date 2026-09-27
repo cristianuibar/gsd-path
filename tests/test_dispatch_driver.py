@@ -167,19 +167,19 @@ class DispatchDriverTests(unittest.TestCase):
                                      deps=deps_t002, wave=wave_t002)
         if wave_t002 != 1:
             plan = root / ".project/plan/PLAN.md"
-            text = plan.read_text().replace(
+            text = plan.read_text(encoding="utf-8").replace(
                 "| T002 | Demo task T002 | — | tests/test_app.py |\n", "")
             text = text.replace(
                 "\n## Intent coverage",
                 f"\n## Wave {wave_t002} — demo tests\n\nGoal: Prove the demo tests.\n"
                 "Review depth: full\n\n| Task | Title | Deps | Files |\n|------|-------|------|-------|\n"
                 "| T002 | Demo task T002 | — | tests/test_app.py |\n\n## Intent coverage", 1)
-            plan.write_text(text)
+            plan.write_bytes(text.encode("utf-8"))
         handoffs.write_state(root, *state)
-        (root / "fake_coder.py").write_text(FAKE_CODER)
-        (root / "fake_reviewer.py").write_text(FAKE_REVIEWER)
-        (root / "fake_panelist.py").write_text(FAKE_PANELIST)
-        (root / "fake_skeptic.py").write_text(FAKE_SKEPTIC)
+        (root / "fake_coder.py").write_bytes(FAKE_CODER.encode("utf-8"))
+        (root / "fake_reviewer.py").write_bytes(FAKE_REVIEWER.encode("utf-8"))
+        (root / "fake_panelist.py").write_bytes(FAKE_PANELIST.encode("utf-8"))
+        (root / "fake_skeptic.py").write_bytes(FAKE_SKEPTIC.encode("utf-8"))
         run_git(root, "add", ".")
         run_git(root, "commit", "-m", "fixture")
         return self.head(root)
@@ -231,13 +231,13 @@ class DispatchDriverTests(unittest.TestCase):
 
     def set_deep_review_with_skeptics(self, root: Path) -> None:
         plan = root / ".project/plan/PLAN.md"
-        text = plan.read_text().replace("Review depth: full", "Review depth: deep", 1)
-        plan.write_text(text.replace("- review_panel: off", "- review_panel: off\n- finding_skeptics: on", 1))
+        text = plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep", 1)
+        plan.write_bytes(text.replace("- review_panel: off", "- review_panel: off\n- finding_skeptics: on", 1).encode("utf-8"))
         run_git(root, "commit", "-qam", "plan: deep review with skeptics")
 
     def set_panel(self, root: Path, value: str) -> None:
         plan = root / ".project/plan/PLAN.md"
-        plan.write_text(plan.read_text().replace("- review_panel: off", f"- review_panel: {value}", 1))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("- review_panel: off", f"- review_panel: {value}", 1).encode("utf-8"))
         run_git(root, "commit", "-qam", f"plan: review panel {value}")
 
     def subjects(self, root: Path) -> list:
@@ -277,11 +277,11 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         # Only a landing whose parent is the recorded base proves the verified tree.
-        ledger = (root / ".project/build/verify-ledger.jsonl").read_text().splitlines()
+        ledger = (root / ".project/build/verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(ledger), 1)
         self.assertEqual([item["ledger"] for item in receipt["landed"]], [True, False])
         for task in ("T001", "T002"):
-            text = (root / f".project/tasks/{task}-demo.md").read_text()
+            text = (root / f".project/tasks/{task}-demo.md").read_text(encoding="utf-8")
             self.assertIn("status: done", text)
             self.assertIn("orchestrator Verify (isolate gsd-path-task/", text)
         dispatches = self.driver(root, "status")["dispatches"]
@@ -295,7 +295,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001", "T002"])
         self.assertTrue(all(item["mode"] == "serial" for item in receipt["landed"]))
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
-        text = (root / ".project/tasks/T001-demo.md").read_text()
+        text = (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8")
         self.assertIn("orchestrator Verify (sidecar gsd-path-verify/task-t001-verify): pass", text)
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
 
@@ -319,7 +319,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60")
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001", "T002"])
-        text = (root / ".project/tasks/T001-demo.md").read_text()
+        text = (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8")
         self.assertIn("NEEDS-ORCHESTRATOR: which greeting?", text)
         self.assertIn("Orchestrator answer: hello — INTENT SC1", text)
         self.assertIn("status: done", text)
@@ -349,9 +349,9 @@ class DispatchDriverTests(unittest.TestCase):
         task = root / ".project/tasks/T001-demo.md"
         self.assertEqual(self.round(root, "--wait", "60", mode="question")["status"], "question")
         record = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/state.json"
-        state = json.loads(record.read_text())
+        state = json.loads(record.read_text(encoding="utf-8"))
         state["outcome"] = "redispatched"
-        record.write_text(json.dumps(state))
+        record.write_bytes(json.dumps(state).encode("utf-8"))
         before = task.read_bytes()
         receipt = self.round(root)
         self.assertEqual(receipt["status"], "blocked", receipt)
@@ -367,13 +367,13 @@ class DispatchDriverTests(unittest.TestCase):
         record = attempt / "state.json"
         state = {"task_id": "T001", "worktree": str(root), "pid": 123,
                  "command": [sys.executable, "-c", "raise SystemExit(7)"]}
-        record.write_text(json.dumps(state))
+        record.write_bytes(json.dumps(state).encode("utf-8"))
         before = record.read_bytes()
-        (attempt / "brief.md").write_text("brief")
+        (attempt / "brief.md").write_bytes("brief".encode("utf-8"))
         subprocess.run([sys.executable, "-B", str(SCRIPT), "_child", "--state", str(record)],
                        check=True, capture_output=True)
         self.assertEqual(record.read_bytes(), before)
-        completion = json.loads((attempt / "exit.json").read_text())
+        completion = json.loads((attempt / "exit.json").read_text(encoding="utf-8"))
         self.assertEqual(completion["exit_code"], 7)
         self.assertFalse(completion["timed_out"])
         self.assertTrue(completion["finished_at"])
@@ -391,7 +391,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["blocked"][0]["execution"]["exit_code"], 1)
         self.assertEqual(self.head(root), head)
         self.assertNotIn("gsd-path-verify/task-t001-verify", self.branches(root))
-        text = (root / ".project/tasks/T001-demo.md").read_text()
+        text = (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8")
         self.assertIn("orchestrator Verify (sidecar gsd-path-verify/task-t001-verify): fail", text)
         again = self.round(root, mode="badverify")
         self.assertEqual(again["status"], "blocked", again)
@@ -410,7 +410,7 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         head = self.fixture(root, wave_t002=2)
         note = root / ".project/review-note.md"
-        note.write_text("Pending bookkeeping\n")
+        note.write_bytes("Pending bookkeeping\n".encode("utf-8"))
         receipt = self.round(root, wave=2)
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertEqual(receipt["blocked"][0]["reason"],
@@ -428,7 +428,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual(receipt["wave"], 1)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
-        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text())
+        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
         repeated = self.round(root, "--wait", "60")
         self.assertEqual(repeated["status"], "done", repeated)
         self.assertEqual(repeated["wave"], 1)
@@ -450,8 +450,8 @@ class DispatchDriverTests(unittest.TestCase):
     def test_finish_lands_a_task_dispatched_by_hand_from_its_frontmatter(self) -> None:
         root = self.root
         self.fixture(root, deps_t002="[T001]")
-        (root / ".gitignore").write_text("*.env\n")
-        (root / "config.env").write_text("GREETING=hello\n")
+        (root / ".gitignore").write_bytes("*.env\n".encode("utf-8"))
+        (root / "config.env").write_bytes("GREETING=hello\n".encode("utf-8"))
         run_git(root, "add", ".gitignore")
         run_git(root, "add", "-f", "config.env")
         run_git(root, "commit", "-m", "track ignored configuration")
@@ -464,7 +464,7 @@ class DispatchDriverTests(unittest.TestCase):
                         "--agent", "build_t001", "--task-file", ".project/tasks/T001-demo.md"],
                        check=True, capture_output=True)
         (root / "src").mkdir()
-        (root / "src/app.py").write_text("print('hello')\n")
+        (root / "src/app.py").write_bytes("print('hello')\n".encode("utf-8"))
         expected_paths = run_git(root, "ls-files").stdout.splitlines() + ["src/app.py"]
         expected = {path: (root / path).read_bytes() for path in expected_paths}
         verify = dispatch_driver.run_verify
@@ -485,7 +485,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertTrue(Path(receipt["landed"][0]["verify"]["evidence"]).is_file())
         self.assertEqual(self.subjects(root)[0], "T001: Demo task T001")
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
-        self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text())
+        self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8"))
 
     def test_finish_lands_natively_dispatched_parallel_tasks_from_their_isolates(self) -> None:
         root = self.root
@@ -501,10 +501,10 @@ class DispatchDriverTests(unittest.TestCase):
                             "activate-task", "--repo", str(worktree), "--base", head, "--task-id", task_id,
                             "--agent", f"build_{task_id.lower()}", "--task-file", task_file,
                             "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
-            declared = re.search(r"^files:\n  - (.+)$", (worktree / task_file).read_text(), re.M).group(1)
+            declared = re.search(r"^files:\n  - (.+)$", (worktree / task_file).read_text(encoding="utf-8"), re.M).group(1)
             (worktree / declared).parent.mkdir(parents=True, exist_ok=True)
-            (worktree / declared).write_text("print('hello')\n")
-        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text())
+            (worktree / declared).write_bytes("print('hello')\n".encode("utf-8"))
+        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
         first = self.driver(root, "finish", "--task-id", "T001")
         second = self.driver(root, "finish", "--task-id", "T002")
         self.assertEqual(first["status"], "landed", first)
@@ -529,7 +529,7 @@ class DispatchDriverTests(unittest.TestCase):
                         "--task-id", "T001", "--agent", "build_t001", "--task-file", ".project/tasks/T001-demo.md",
                         "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
         (worktree / "src").mkdir()
-        (worktree / "src/app.py").write_text("print('hello')\n")
+        (worktree / "src/app.py").write_bytes("print('hello')\n".encode("utf-8"))
         subprocess.run([*isolation_cli, "deactivate-task", "--repo", str(worktree), "--task-id", "T001",
                         "--task-branch", isolate["task_branch"]], check=True, capture_output=True)
         receipt = self.driver(root, "finish", "--task-id", "T001")
@@ -537,7 +537,7 @@ class DispatchDriverTests(unittest.TestCase):
                                    "status": "blocked"})
         self.assertEqual(self.head(root), head)
         self.assertTrue(worktree.is_dir())
-        self.assertNotIn("orchestrator Verify", (worktree / ".project/tasks/T001-demo.md").read_text())
+        self.assertNotIn("orchestrator Verify", (worktree / ".project/tasks/T001-demo.md").read_text(encoding="utf-8"))
 
     def test_resume_after_in_flight_does_not_cross_the_wave_boundary(self) -> None:
         root = self.root
@@ -549,7 +549,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["wave"], 1)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
         self.assertEqual(receipt["dispatched"], [])
-        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text())
+        self.assertIn("status: pending", (root / ".project/tasks/T002-demo.md").read_text(encoding="utf-8"))
 
     def test_second_question_after_an_answer_is_still_a_question(self) -> None:
         root = self.root
@@ -562,7 +562,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "question", receipt)
         self.assertIn("which file?", receipt["questions"][0]["question"])
         self.assertEqual(self.driver(root, "status")["dispatches"][0]["attempt"], 2)
-        self.assertIn("Orchestrator answer: hello", task.read_text())
+        self.assertIn("Orchestrator answer: hello", task.read_text(encoding="utf-8"))
 
     def test_finish_recovers_a_retired_parallel_landing_without_repeating_verify(self) -> None:
         root = self.root
@@ -573,17 +573,17 @@ class DispatchDriverTests(unittest.TestCase):
         landing = next(item for item in receipt["landed"] if item["task"] == "T001")
         self.assertEqual(landing["mode"], "parallel")
         record = root / ".git/gsd-path/dispatch/gsd-path-M001/T001/attempt-1/state.json"
-        state = json.loads(record.read_text())
+        state = json.loads(record.read_text(encoding="utf-8"))
         self.assertFalse(Path(state["worktree"]).exists())
         state["outcome"] = None
-        record.write_text(json.dumps(state))
+        record.write_bytes(json.dumps(state).encode("utf-8"))
         before = task.read_bytes()
         head = self.head(root)
         receipt = self.driver(root, "finish", "--task-id", "T001")
         self.assertEqual(receipt["status"], "landed", receipt)
         self.assertEqual(receipt["landed"],
                          [{"task": "T001", "commit": landing["commit"], "recovered": True}])
-        persisted = json.loads(record.read_text())
+        persisted = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual(persisted["outcome"], "landed")
         self.assertEqual(persisted["commit"], landing["commit"])
         self.assertEqual(task.read_bytes(), before)
@@ -614,12 +614,12 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", receipt)
         # Simulate an interruption after land but before the record was updated.
         records = list((root / ".git/gsd-path/dispatch/gsd-path-M001/T001").glob("attempt-*/state.json"))
-        state = json.loads(records[0].read_text())
+        state = json.loads(records[0].read_text(encoding="utf-8"))
         state["outcome"] = None
-        records[0].write_text(json.dumps(state))
+        records[0].write_bytes(json.dumps(state).encode("utf-8"))
         receipt = self.round(root, "--wait", "60", mode="slow")
         self.assertEqual(receipt["status"], "done", receipt)
-        self.assertEqual(json.loads(records[0].read_text())["outcome"], "landed")
+        self.assertEqual(json.loads(records[0].read_text(encoding="utf-8"))["outcome"], "landed")
 
     def reset_after_failed_serial_attempt(self, root: Path) -> None:
         """Stand in for the parent's documented retry: discard the rejected patch, task back to pending."""
@@ -635,7 +635,7 @@ class DispatchDriverTests(unittest.TestCase):
                         "--repo", str(root), "--base", head, "--task-id", "T001", "--agent", "build_t001",
                         "--task-file", ".project/tasks/T001-demo.md"], check=True, capture_output=True)
         (root / "src").mkdir(exist_ok=True)
-        (root / "src/app.py").write_text("print('hello')\n")
+        (root / "src/app.py").write_bytes("print('hello')\n".encode("utf-8"))
         return head
 
     def test_finish_lands_a_native_retry_after_a_blocked_driver_attempt(self) -> None:
@@ -651,7 +651,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.driver(root, "finish", "--task-id", "T001")
         self.assertEqual(receipt["status"], "landed", receipt)
         self.assertEqual(self.subjects(root)[0], "T001: Demo task T001")
-        self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text())
+        self.assertIn("status: done", (root / ".project/tasks/T001-demo.md").read_text(encoding="utf-8"))
 
     def test_finish_refuses_a_blocked_record_at_the_same_base(self) -> None:
         root = self.root
@@ -697,7 +697,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertIn("token budget admit", receipt["blocked"][0]["reason"])
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001"])
-        ledger = json.loads((root / ".git/gsd-path/budget/gsd-path-M001.json").read_text())
+        ledger = json.loads((root / ".git/gsd-path/budget/gsd-path-M001.json").read_text(encoding="utf-8"))
         self.assertEqual([row["output_tokens"] for row in ledger["observations"].values()], [3])
         # A wider session limit on the same ledger is refused: the policy is fixed per milestone.
         receipt = self.round(root, "--wait", "60", "--task-limit", "3", "--session-limit", "30",
@@ -716,7 +716,7 @@ class DispatchDriverTests(unittest.TestCase):
                 receipt = self.round(root, "--wait", "60", mode="claudejson")
             self.assertEqual(receipt["status"], "blocked", receipt)
             self.assertIn("token budget admit", receipt["blocked"][0]["reason"])
-            fields, _ = dispatch_driver.isolation.task_frontmatter(task_path.read_text())
+            fields, _ = dispatch_driver.isolation.task_frontmatter(task_path.read_text(encoding="utf-8"))
             self.assertEqual(fields["status"], "pending")
             self.assertEqual(task_path.read_bytes(), before)
             self.assertFalse((dispatch_driver.records_root(root) / "T002").exists())
@@ -780,7 +780,7 @@ class DispatchDriverTests(unittest.TestCase):
             time.sleep(0.1)
         receipt = self.driver(root, "finish", "--task-id", "T001")
         self.assertEqual(receipt["status"], "landed", receipt)
-        ledger = json.loads(dispatch_driver.budget_ledger(root).read_text())
+        ledger = json.loads(dispatch_driver.budget_ledger(root).read_text(encoding="utf-8"))
         self.assertEqual(list(ledger["observations"].values()),
                          [{"task": "T001", "output_tokens": 3}])
 
@@ -793,7 +793,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60", mode="badverify")
         self.assertEqual(receipt["status"], "blocked", receipt)
         records = dispatch_driver.records_root(root)
-        origins = [json.loads(path.read_text())["origin"]
+        origins = [json.loads(path.read_text(encoding="utf-8"))["origin"]
                    for path in sorted((records / "T001").glob("attempt-*/state.json"))]
         self.assertEqual(origins, ["dispatch", "question"])
         self.assertEqual(dispatch_driver.attempts_used(records, "T001"), 1)
@@ -819,7 +819,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = json.loads(completed.stdout)
         evidence = root / ".project/build/evidence.json"
         self.assertEqual(Path(receipt["steps"][-1]["evidence"]).resolve(), evidence.resolve())
-        proof = json.loads(evidence.read_text())
+        proof = json.loads(evidence.read_text(encoding="utf-8"))
         self.assertEqual(proof, receipt["steps"][0]["result"])
         self.assertEqual(sorted(entry["task"]["id"] for entry in proof["tasks"]), ["T001", "T002"])
 
@@ -835,7 +835,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["lenses"]["canonical"]["verdict"], "pass")
         self.assertFalse(receipt["panel_required"])
         review = root / ".project/review/wave-1.cycle1.md"
-        self.assertIn("Wave verdict: pass", review.read_text())
+        self.assertIn("Wave verdict: pass", review.read_text(encoding="utf-8"))
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
         self.assertEqual(run_git(root, "status", "--porcelain").stdout, "")
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
@@ -862,21 +862,21 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         self.fixture(root)
         plan = root / ".project/plan/PLAN.md"
-        plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep", 1).encode("utf-8"))
         run_git(root, "commit", "-qam", "plan: deep review")
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         receipt = self.review(root, "--wait", "60")
         self.assertEqual(receipt["status"], "pass", receipt)
         self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
         for lens in ("contract", "adversarial"):
-            self.assertIn(f"Lens: {lens}", (root / f".project/review/wave-1.cycle1.{lens}.md").read_text())
+            self.assertIn(f"Lens: {lens}", (root / f".project/review/wave-1.cycle1.{lens}.md").read_text(encoding="utf-8"))
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
 
     def test_review_resumes_only_missing_deep_lens(self) -> None:
         root = self.root
         self.fixture(root)
         plan = root / ".project/plan/PLAN.md"
-        plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep", 1).encode("utf-8"))
         run_git(root, "commit", "-qam", "plan: deep review")
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         options = argparse.Namespace(project_dir=".project", wave=1, cycle=1, wait=None,
@@ -902,7 +902,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.review(root, "--wait", "60")
         self.assertEqual(receipt["status"], "pass", receipt)
         self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
-        self.assertEqual(json.loads(contract_path.read_text())["pid"], contract_pid)
+        self.assertEqual(json.loads(contract_path.read_text(encoding="utf-8"))["pid"], contract_pid)
         self.assertEqual(len(list(contract_path.parent.parent.glob("attempt-*"))), 1)
         self.assertEqual(self.branches(root), ["gsd-path/M001"])
 
@@ -919,7 +919,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertFalse(receipt["blocked"])
         self.assertIsNone(receipt["checkpoint"])
         canonical = root / state["relative"]
-        canonical.write_text(canonical.read_text() + "changed after validation\n")
+        canonical.write_bytes((canonical.read_text(encoding="utf-8") + "changed after validation\n").encode("utf-8"))
         dispatch_driver.update_state(state, outcome=None, cleanup_complete=False)
         receipt = self.review(root, "--wait", "60")
         self.assertEqual(receipt["status"], "blocked", receipt)
@@ -931,7 +931,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         intent = root / ".project/intent/INTENT.md"
-        intent.write_text(intent.read_text() + "Additional acceptance criterion.\n")
+        intent.write_bytes((intent.read_text(encoding="utf-8") + "Additional acceptance criterion.\n").encode("utf-8"))
         for committed in (False, True):
             with self.subTest(committed=committed):
                 if committed:
@@ -959,7 +959,7 @@ class DispatchDriverTests(unittest.TestCase):
 
         def change_inputs_and_conclude():
             intent = root / ".project/intent/INTENT.md"
-            intent.write_text(intent.read_text() + "Additional acceptance criterion.\n")
+            intent.write_bytes((intent.read_text(encoding="utf-8") + "Additional acceptance criterion.\n").encode("utf-8"))
             conclude()
 
         with mock.patch.object(review, "conclude", side_effect=change_inputs_and_conclude):
@@ -993,7 +993,7 @@ class DispatchDriverTests(unittest.TestCase):
         for mutation in ("edit", "delete"):
             with self.subTest(mutation=mutation):
                 if mutation == "edit":
-                    canonical.write_text(canonical.read_text() + "Changed after collection.\n")
+                    canonical.write_bytes((canonical.read_text(encoding="utf-8") + "Changed after collection.\n").encode("utf-8"))
                 else:
                     canonical.unlink()
                 receipt = self.review(root, "--wait", "60")
@@ -1013,7 +1013,7 @@ class DispatchDriverTests(unittest.TestCase):
                 root.mkdir()
                 self.fixture(root)
                 plan = root / ".project/plan/PLAN.md"
-                plan.write_text(plan.read_text().replace("Review depth: full", "Review depth: deep", 1))
+                plan.write_bytes(plan.read_text(encoding="utf-8").replace("Review depth: full", "Review depth: deep", 1).encode("utf-8"))
                 run_git(root, "commit", "-qam", "plan: deep review")
                 self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
                 head = self.head(root)
@@ -1064,9 +1064,9 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         self.fixture(root, wave_t002=2)
         plan = root / ".project/plan/PLAN.md"
-        text = plan.read_text()
+        text = plan.read_text(encoding="utf-8")
         head_block = text.index("## Wave 2")
-        plan.write_text(text[:head_block] + text[head_block:].replace("Review depth: full", "Review depth: verify-only", 1))
+        plan.write_bytes((text[:head_block] + text[head_block:].replace("Review depth: full", "Review depth: verify-only", 1)).encode("utf-8"))
         run_git(root, "commit", "-qam", "plan: verify-only wave 2")
         receipt = self.review(root, wave=2)
         self.assertEqual(receipt["status"], "not-applicable")
@@ -1129,14 +1129,14 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual([item["task"] for item in receipt["created"]], ["T003"])
         self.assertEqual(receipt["created"][0]["deps"], ["T001"])
         self.assertEqual(receipt["created"][0]["files"], ["src/app.py"])
-        text = (root / receipt["created"][0]["path"]).read_text()
+        text = (root / receipt["created"][0]["path"]).read_text(encoding="utf-8")
         self.assertIn("Criterion: The demo command prints hello.", text)
         self.assertIn("— found: wrong output, src/app.py:1", text)
         self.assertEqual(text.count("1. The demo command prints hello."), 1)
         self.assertNotIn("2. The demo command prints hello.", text)
         self.assertEqual(dispatch_driver._common.task_verify_command(text), "set -e\n(\npython3 src/app.py\n)")
         self.assertEqual(receipt["plan_wave"], 2)
-        self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", (root / ".project/plan/PLAN.md").read_text())
+        self.assertIn("## Wave 2 — fix wave 1 cycle 1 review findings", (root / ".project/plan/PLAN.md").read_text(encoding="utf-8"))
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review and fix tasks")
         head = self.head(root)
         plan = (root / ".project/plan/PLAN.md").read_bytes()
@@ -1152,14 +1152,14 @@ class DispatchDriverTests(unittest.TestCase):
         end = original.index("## Intent coverage", start)
         for damaged in (original[:start] + original[end:],
                         "\n".join(line for line in original.split("\n") if not line.startswith("| T003 |"))):
-            plan_path.write_text(damaged)
+            plan_path.write_bytes(damaged.encode("utf-8"))
             repair = root / receipt["created"][0]["path"]
-            repair.write_text(repair.read_text() + "- 2026-09-07 — repair inventory interrupted\n")
+            repair.write_bytes((repair.read_text(encoding="utf-8") + "- 2026-09-07 — repair inventory interrupted\n").encode("utf-8"))
             repaired = self.driver(root, "fix-tasks", "--wave", "1", "--cycle", "1")
             self.assertEqual(repaired["status"], "created", repaired)
             self.assertEqual(repaired["created"], [])
             self.assertEqual([item["task"] for item in repaired["existing"]], ["T003"])
-            self.assertEqual(plan_path.read_text(), original)
+            self.assertEqual(plan_path.read_text(encoding="utf-8"), original)
             self.assertEqual([step["exit_code"] for step in repaired["steps"]
                               if step["script"] == "check_task_briefs.py"], [0])
             self.assertIsNotNone(repaired["checkpoint"])
@@ -1168,13 +1168,13 @@ class DispatchDriverTests(unittest.TestCase):
         again = self.round(root, "--wait", "60", wave=2)
         self.assertEqual(again["status"], "done", again)
         self.assertEqual([item["task"] for item in again["landed"]], ["T003"])
-        self.assertIn("status: done", (root / receipt["created"][0]["path"]).read_text())
+        self.assertIn("status: done", (root / receipt["created"][0]["path"]).read_text(encoding="utf-8"))
 
     def test_fix_tasks_resumes_after_only_first_batch_was_written(self) -> None:
         root = self.root
         self.fixture(root)
         reviewer = root / "fake_reviewer.py"
-        reviewer.write_text(reviewer.read_text().replace(' and task == tasks[0]', ''))
+        reviewer.write_bytes(reviewer.read_text(encoding="utf-8").replace(' and task == tasks[0]', '').encode("utf-8"))
         run_git(root, "commit", "-qam", "fixture: block both tasks")
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
@@ -1207,7 +1207,7 @@ class DispatchDriverTests(unittest.TestCase):
         relative = ".project/review/wave-1.cycle1.skeptic-t001_ac1.md"
         staged = Path(sidecar["worktree"]) / relative
         staged.parent.mkdir(parents=True, exist_ok=True)
-        staged.write_text("validated skeptic output")
+        staged.write_bytes("validated skeptic output".encode("utf-8"))
         record = self.root / ".project/collection-state.json"
         state = {**sidecar, "relative": relative, "exit_code": 0, "_path": str(record)}
         dispatch_driver.save_state(record, state)
@@ -1227,7 +1227,7 @@ class DispatchDriverTests(unittest.TestCase):
                                      lambda path: self.fail("resume must use persisted validation"))
         self.assertEqual(state["outcome"], "collected")
         self.assertEqual(state["verdict"], "refuted")
-        self.assertEqual((self.root / relative).read_text(), "validated skeptic output")
+        self.assertEqual((self.root / relative).read_text(encoding="utf-8"), "validated skeptic output")
         self.assertFalse(Path(sidecar["worktree"]).exists())
         self.assertEqual(receipt["steps"][0]["script"], "isolation.py collect-artifact")
 
@@ -1247,7 +1247,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual({key: item["verdict"] for key, item in receipt["skeptics"].items()},
                          {locator: "stands" for locator in locators})
         for locator in locators:
-            text = (root / f".project/review/wave-1.cycle1.skeptic-{locator}.md").read_text()
+            text = (root / f".project/review/wave-1.cycle1.skeptic-{locator}.md").read_text(encoding="utf-8")
             self.assertIn(f"- Criterion locator: {locator}", text)
         self.assertEqual(receipt["findings"]["skeptic_groups"], [])
         self.assertEqual(sorted(receipt["findings"]["fix_groups"]), sorted(locators))
@@ -1293,14 +1293,14 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual(self.state(root), "build/active")
         self.assertIn("build: start milestone", self.subjects(root))
-        self.assertIn("build started", (root / ".project/STATE.md").read_text())
+        self.assertIn("build started", (root / ".project/STATE.md").read_text(encoding="utf-8"))
 
     def test_round_records_build_blocked_when_recovery_blocks(self) -> None:
         root = self.root
         head = self.fixture(root)
         task = next((root / ".project/tasks").glob("T001*.md"))  # done by hand, no landing commit
-        task.write_text(task.read_text().replace("status: pending", "status: done", 1)
-                        .replace("agent: null", "agent: fake", 1).replace("base: null", f"base: {head}", 1))
+        task.write_bytes(task.read_text(encoding="utf-8").replace("status: pending", "status: done", 1)
+                        .replace("agent: null", "agent: fake", 1).replace("base: null", f"base: {head}", 1).encode("utf-8"))
         run_git(root, "commit", "-qam", "task: T001 marked done outside land")
         receipt = self.round(root, "--wait", "60")
         self.assertEqual(receipt["status"], "blocked", receipt)
@@ -1420,7 +1420,7 @@ class DispatchDriverTests(unittest.TestCase):
         root = self.root
         self.fixture(root)
         task = next((root / ".project/tasks").glob("T001-*.md"))
-        task.write_text(task.read_text().replace("python3 src/app.py", "python3 src/app.py # check A"))
+        task.write_bytes(task.read_text(encoding="utf-8").replace("python3 src/app.py", "python3 src/app.py # check A").encode("utf-8"))
         run_git(root, "commit", "-qam", "fixture: trailing verify comment")
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60", verdict="blocked")["status"], "blocked")
@@ -1432,14 +1432,14 @@ class DispatchDriverTests(unittest.TestCase):
         with mock.patch.object(dispatch_driver.review_findings, "compute", return_value=findings):
             receipt = dispatch_driver.fix_tasks(root, options)
         self.assertEqual(receipt["status"], "created", receipt)
-        command = dispatch_driver._common.task_verify_command((root / receipt["created"][0]["path"]).read_text())
+        command = dispatch_driver._common.task_verify_command((root / receipt["created"][0]["path"]).read_text(encoding="utf-8"))
         texts = dispatch_driver.contracts._task_texts(root, ".project")
         self.assertEqual(command.splitlines(), ["set -e", *[line for source in ("T001", "T002") for line in
             ("(", dispatch_driver._common.task_verify_command(texts[source]), ")")]])
         # A source Verify ending in `exit 0` ends only its own subshell; the next one still runs.
         probe = subprocess.run(["bash", "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
         self.assertEqual(probe.returncode, 7)
-        (root / "tests/test_app.py").write_text("raise SystemExit(7)\n")
+        (root / "tests/test_app.py").write_bytes("raise SystemExit(7)\n".encode("utf-8"))
         result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 7, result)
         options.cycle = 2
@@ -1478,7 +1478,7 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
         self.assertEqual(receipt["status"], "skipped", receipt)
         skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
-        self.assertEqual(json.loads(skipped.read_text())["status"], "skipped")
+        self.assertEqual(json.loads(skipped.read_text(encoding="utf-8"))["status"], "skipped")
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
 
     def test_panel_blocks_when_inputs_changed_after_the_review_base(self) -> None:
@@ -1505,7 +1505,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
         saved = json.dumps({"status": "skipped", "mode": "detected", "selected": []})
-        skipped.write_text(saved)
+        skipped.write_bytes(saved.encode("utf-8"))
         with (root / ".project/intent/INTENT.md").open("a") as handle:
             handle.write("\n7. An unreviewed criterion.\n")
         run_git(root, "add", ".project/intent/INTENT.md")
@@ -1517,7 +1517,7 @@ class DispatchDriverTests(unittest.TestCase):
                          "inputs changed after the review base; run a new cycle")
         self.assertIsNone(receipt.get("checkpoint"))
         self.assertEqual(self.head(root), head)
-        self.assertEqual(skipped.read_text(), saved)
+        self.assertEqual(skipped.read_text(encoding="utf-8"), saved)
 
     def test_panel_rejects_a_null_skipped_receipt(self) -> None:
         root = self.root
@@ -1527,14 +1527,14 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         head = self.head(root)
         skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
-        skipped.write_text("null")
+        skipped.write_bytes("null".encode("utf-8"))
         receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertEqual(receipt["blocked"][0]["reason"],
                          "panel skipped receipt exists but is not a skipped receipt")
         self.assertIsNone(receipt.get("checkpoint"))
         self.assertEqual(self.head(root), head)
-        self.assertEqual(skipped.read_text(), "null")
+        self.assertEqual(skipped.read_text(encoding="utf-8"), "null")
 
     def test_panel_reuses_a_valid_skipped_receipt_after_an_interrupted_checkpoint(self) -> None:
         root = self.root
@@ -1543,7 +1543,7 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         skipped = root / ".project/review/wave-1.cycle1.panel.skipped.json"
-        skipped.write_text(json.dumps({"status": "skipped", "mode": "detected", "selected": []}))
+        skipped.write_bytes(json.dumps({"status": "skipped", "mode": "detected", "selected": []}).encode("utf-8"))
         receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
         self.assertEqual(receipt["status"], "skipped", receipt)
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")

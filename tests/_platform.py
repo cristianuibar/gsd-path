@@ -21,7 +21,7 @@ def can_symlink() -> bool:
     """Whether this process may create symlinks (Windows needs Developer Mode or admin)."""
     with tempfile.TemporaryDirectory() as directory:
         target = Path(directory) / "target"
-        target.write_text("", encoding="utf-8")
+        target.write_bytes("".encode("utf-8"))
         try:
             (Path(directory) / "link").symlink_to(target)
         except (OSError, NotImplementedError):
@@ -62,11 +62,11 @@ def fake_cli(bin_dir: Path, name: str, python_source: str) -> Path:
     bin_dir.mkdir(parents=True, exist_ok=True)
     if not WINDOWS:
         path = bin_dir / name
-        path.write_text(f"#!{sys.executable}\n{python_source}", encoding="utf-8")
+        path.write_bytes(f"#!{sys.executable}\n{python_source}".encode("utf-8"))
         path.chmod(0o755)
         return path
     body = bin_dir / f"{name}.py"
-    body.write_text(python_source, encoding="utf-8")
+    body.write_bytes(python_source.encode("utf-8"))
     shim = bin_dir / f"{name}.cmd"
     shim.write_bytes(f'@"{sys.executable}" "%~dp0{name}.py" %*\r\n'.encode("utf-8"))
     return shim

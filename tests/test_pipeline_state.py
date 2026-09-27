@@ -86,14 +86,13 @@ def repo_with_collect_journal(
     run_git(root, "init", "-b", "gsd-path/M001", str(repo))
     project = repo / ".project"
     project.mkdir()
-    (project / "STATE.md").write_text(
+    (project / "STATE.md").write_bytes(
         state_text(
             milestone="first",
             phase="build",
             status="active",
             branch="gsd-path/M001",
-        ),
-        encoding="utf-8",
+        ).encode("utf-8"),
     )
     run_git(repo, "add", ".project/STATE.md")
     run_git(
@@ -112,7 +111,7 @@ def repo_with_collect_journal(
         common = repo / common
     receipt = common / "gsd-path" / "collect-artifact" / "receipt.json"
     receipt.parent.mkdir(parents=True)
-    receipt.write_text(
+    receipt.write_bytes(
         json.dumps(
             {
                 "schema": "gsd-path/collect-artifact/v1",
@@ -131,8 +130,7 @@ def repo_with_collect_journal(
                 "sha256": "a" * 64,
                 "stage": stage,
             }
-        ),
-        encoding="utf-8",
+        ).encode("utf-8"),
     )
     return repo
 
@@ -175,13 +173,12 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path-task/T001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     phase="build",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             with mock.patch.object(
                 pipeline_state, "authorized_task_worktree", return_value=True
@@ -205,7 +202,7 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
 
             state, _, _ = pipeline_state.load_state(repo)
 
@@ -218,12 +215,11 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     integration_default="pull-request",
                     integration="pull-request",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             state, _, _ = pipeline_state.load_state(repo)
@@ -237,9 +233,8 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(integration_default="pull-request"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(integration_default="pull-request").encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -254,14 +249,13 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             configured = pipeline_state.configure_integration(
@@ -283,7 +277,7 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state = project / "STATE.md"
-            state.write_text(state_text(milestone="null", phase="define", status="active"), encoding="utf-8")
+            state.write_bytes(state_text(milestone="null", phase="define", status="active").encode("utf-8"))
             for bad in ("ship", "intent,intent", "plan,"):
                 with self.subTest(grant=bad), self.assertRaisesRegex(pipeline_state.PipelineStateError, "distinct"):
                     pipeline_state.pre_approve(repo, bad, None)
@@ -292,7 +286,7 @@ class PipelineStateTests(unittest.TestCase):
 
             pipeline_state.pre_approve(repo, "intent", None)
             pipeline_state.pre_approve(repo, None, "intent")
-            self.assertTrue(state.read_text().endswith("— define — pre-authorized approval: intent\n"))
+            self.assertTrue(state.read_text(encoding="utf-8").endswith("— define — pre-authorized approval: intent\n"))
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "does not grant plan"):
                 pipeline_state.pre_approve(repo, None, "plan")
 
@@ -304,7 +298,7 @@ class PipelineStateTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "before milestone intent approval"):
                 pipeline_state.pre_approve(repo, "intent,plan", None)
-            state.write_text(state.read_text().replace("status: done", "status: active"), encoding="utf-8")
+            state.write_bytes(state.read_text(encoding="utf-8").replace("status: done", "status: active").encode("utf-8"))
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "used or out of scope"):
                 pipeline_state.pre_approve(repo, None, "intent")
 
@@ -314,14 +308,13 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             pipeline_state.configure_integration(repo, "milestone", "pull-request")
@@ -343,15 +336,14 @@ class PipelineStateTests(unittest.TestCase):
                 archive = (
                     ".project/archive/001-first/" if phase == "shipped" else "null"
                 )
-                (project / "STATE.md").write_text(
+                (project / "STATE.md").write_bytes(
                     state_text(
                         milestone="first",
                         phase=phase,
                         status=status,
                         branch="gsd-path/M001",
                         archive=archive,
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
 
                 with self.assertRaisesRegex(
@@ -369,13 +361,12 @@ class PipelineStateTests(unittest.TestCase):
             next_project = repo / ".project" / "next"
             next_project.mkdir(parents=True)
             state_path = next_project / "STATE.md"
-            state_path.write_text(
+            state_path.write_bytes(
                 state_text(
                     milestone="second",
                     phase="plan",
                     status="active",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -398,7 +389,7 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
@@ -406,8 +397,7 @@ class PipelineStateTests(unittest.TestCase):
                     branch="gsd-path/M001",
                     integration_default="direct",
                     integration="direct",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -433,7 +423,7 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
 
             validated = pipeline_state.validate_state(repo)
             routed = pipeline_state.route_state(repo)
@@ -447,7 +437,7 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
 
             status = pipeline_state.status_state(repo)
 
@@ -479,10 +469,10 @@ class PipelineStateTests(unittest.TestCase):
             fixture.make_repo(repo)
             run_git(repo, "checkout", "-b", "gsd-path/M001")
             state = repo / ".project/STATE.md"
-            state.write_text(state_text(phase="define", status="done", branch="gsd-path/M001"))
+            state.write_bytes(state_text(phase="define", status="done", branch="gsd-path/M001").encode("utf-8"))
             intent = repo / ".project/intent/INTENT.md"
             intent.parent.mkdir()
-            intent.write_text("# Intent\n\nLane: standard\n")
+            intent.write_bytes("# Intent\n\nLane: standard\n".encode("utf-8"))
             prepared = fixture.command(repo, "prepare")
             self.assertEqual(prepared.returncode, 0, prepared.stderr)
             appended = fixture.command(repo, "append", fixture.turn_payload(repo, "turn.json"))
@@ -504,10 +494,10 @@ class PipelineStateTests(unittest.TestCase):
                     )
                 self.assertEqual(state.read_bytes(), before)
 
-            state.write_text(state_text(phase="decide", status="done", branch="gsd-path/M001"))
+            state.write_bytes(state_text(phase="decide", status="done", branch="gsd-path/M001").encode("utf-8"))
             synthesis = repo / ".project/research/SYNTHESIS.md"
             synthesis.parent.mkdir(exist_ok=True)
-            synthesis.write_text(SETTLED_SYNTHESIS)
+            synthesis.write_bytes(SETTLED_SYNTHESIS.encode("utf-8"))
             result = pipeline_state.route_state(repo)
             self.assertEqual(result["route"]["action"], "run-phase")
             self.assertEqual(result["route"]["phase"], "plan")
@@ -528,18 +518,16 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             (project / "intent").mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
                     status="done",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — first\n\nLane: quick\n",
-                encoding="utf-8",
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: plan done")
@@ -566,19 +554,18 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             (project / "intent").mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(milestone="first", branch="gsd-path/M001"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", branch="gsd-path/M001").encode("utf-8"),
             )
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — first\n\nLane: quick\n", encoding="utf-8"
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8")
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: published ancestor")
             published = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             run_git(repo, "remote", "add", "origin", str(origin))
             run_git(repo, "push", "-u", "origin", "gsd-path/M001")
-            (repo / "later.txt").write_text("later\n", encoding="utf-8")
+            (repo / "later.txt").write_bytes("later\n".encode("utf-8"))
             run_git(repo, "add", "later.txt")
             run_git(repo, "commit", "-m", "fixture: later remote tip")
             run_git(repo, "push", "origin", "gsd-path/M001")
@@ -613,7 +600,7 @@ class PipelineStateTests(unittest.TestCase):
                 receipt = repo / ".git/gsd-path/collect-artifact/receipt.json"
                 journal = json.loads(receipt.read_text(encoding="utf-8"))
                 journal["primary_worktree"] = primary
-                receipt.write_text(json.dumps(journal), encoding="utf-8")
+                receipt.write_bytes(json.dumps(journal).encode("utf-8"))
 
                 with self.assertRaisesRegex(
                     pipeline_state.PipelineStateError,
@@ -642,14 +629,13 @@ class PipelineStateTests(unittest.TestCase):
             run_git(root, "init", "-b", "gsd-path/M001", str(repo))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="build",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(
@@ -684,9 +670,8 @@ class PipelineStateTests(unittest.TestCase):
                 run_git(repo, "init", "-b", "main")
                 project = repo / ".project"
                 project.mkdir()
-                (project / "STATE.md").write_text(
-                    state_text(phase=phase, status="active", milestone="null"),
-                    encoding="utf-8",
+                (project / "STATE.md").write_bytes(
+                    state_text(phase=phase, status="active", milestone="null").encode("utf-8"),
                 )
 
                 routed = pipeline_state.route_state(repo)
@@ -700,7 +685,7 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             text = state_text().replace("pipeline: gsd-path/v2", "pipeline: other/v1")
-            (project / "STATE.md").write_text(text, encoding="utf-8")
+            (project / "STATE.md").write_bytes(text.encode("utf-8"))
 
             with self.assertRaisesRegex(
                 pipeline_state.PipelineStateError,
@@ -730,7 +715,7 @@ class PipelineStateTests(unittest.TestCase):
                 repo = Path(tmp)
                 project = repo / ".project"
                 project.mkdir()
-                (project / "STATE.md").write_text(content, encoding="utf-8")
+                (project / "STATE.md").write_bytes(content.encode("utf-8"))
 
                 with self.assertRaisesRegex(pipeline_state.PipelineStateError, message):
                     pipeline_state.validate_state(repo)
@@ -740,10 +725,9 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (project / "ROADMAP.md").write_text(
-                roadmap_text().replace("M002", "M000"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("M002", "M000").encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -758,10 +742,9 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (project / "ROADMAP.md").write_text(
-                roadmap_text().replace("### M002 — second", "### M002 — first"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("### M002 — second", "### M002 — first").encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -790,7 +773,7 @@ class PipelineStateTests(unittest.TestCase):
                 repo = Path(tmp)
                 next_root = repo / ".project" / "next"
                 next_root.mkdir(parents=True)
-                (next_root / "STATE.md").write_text(content, encoding="utf-8")
+                (next_root / "STATE.md").write_bytes(content.encode("utf-8"))
 
                 with self.assertRaisesRegex(
                     pipeline_state.PipelineStateError,
@@ -803,9 +786,8 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             next_root = repo / ".project" / "next"
             next_root.mkdir(parents=True)
-            (next_root / "STATE.md").write_text(
-                state_text(phase="inspect", status="active"),
-                encoding="utf-8",
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="inspect", status="active").encode("utf-8"),
             )
 
             result = pipeline_state.validate_state(repo, ".project/next")
@@ -816,14 +798,13 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             run_git(repo, "init", "-q")
-            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
             next_root = repo / ".project" / "next"
             (next_root / "intent").mkdir(parents=True)
-            (next_root / "STATE.md").write_text(
-                state_text(phase="inspect", status="active"),
-                encoding="utf-8",
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="inspect", status="active").encode("utf-8"),
             )
-            (next_root / "intent" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+            (next_root / "intent" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
 
             result = pipeline_state.validate_state(repo, ".project/next")
 
@@ -835,7 +816,7 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             next_root = repo / ".project" / "next"
             next_root.mkdir(parents=True)
-            (next_root / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (next_root / "STATE.md").write_bytes(state_text().encode("utf-8"))
 
             result = pipeline_state.route_state(repo, ".project/next")
 
@@ -849,16 +830,14 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             next_root = project / "next"
             (next_root / "intent").mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(milestone="first", phase="build", status="active", branch="gsd-path/M001"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="build", status="active", branch="gsd-path/M001").encode("utf-8"),
             )
-            (next_root / "STATE.md").write_text(
-                state_text(milestone="second", phase="define", status="done"),
-                encoding="utf-8",
+            (next_root / "STATE.md").write_bytes(
+                state_text(milestone="second", phase="define", status="done").encode("utf-8"),
             )
-            (next_root / "intent" / "INTENT.md").write_text(
-                "# Intent\n\nLane: milestone\n", encoding="utf-8"
+            (next_root / "intent" / "INTENT.md").write_bytes(
+                "# Intent\n\nLane: milestone\n".encode("utf-8")
             )
             roadmap = (
                 roadmap_text()
@@ -869,7 +848,7 @@ class PipelineStateTests(unittest.TestCase):
                     "- Which storage backend?\n",
                 )
             )
-            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+            (project / "ROADMAP.md").write_bytes(roadmap.encode("utf-8"))
 
             result = pipeline_state.route_state(repo, ".project/next")
 
@@ -886,12 +865,12 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "main")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             roadmap = roadmap_text().replace(
                 "### M002 — second\n\nGoal: second\nDepends on: [M001]\nStatus: pending",
                 "### M002 — second\n\nGoal: second\nDepends on: [M001]\nStatus: active",
             )
-            (project / "ROADMAP.md").write_text(roadmap, encoding="utf-8")
+            (project / "ROADMAP.md").write_bytes(roadmap.encode("utf-8"))
 
             result = pipeline_state.route_state(repo)
 
@@ -904,7 +883,7 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             (project / "research").mkdir(parents=True)
             state = project / "STATE.md"
-            state.write_text(state_text(phase="decide", status="active", branch="gsd-path/M001"))
+            state.write_bytes(state_text(phase="decide", status="active", branch="gsd-path/M001").encode("utf-8"))
             synthesis = project / "research/SYNTHESIS.md"
             valid = SETTLED_SYNTHESIS
             expected = {"phase": "decide", "status": "active", "branch": "gsd-path/M001", "archive": None}
@@ -913,14 +892,14 @@ class PipelineStateTests(unittest.TestCase):
                 ("decide", "done", {"phase": "plan", "status": "active"}, "planning started"),
             ):
                 with self.subTest(status=status):
-                    state.write_text(state_text(phase=phase, status=status, branch="gsd-path/M001"))
+                    state.write_bytes(state_text(phase=phase, status=status, branch="gsd-path/M001").encode("utf-8"))
                     before = state.read_bytes()
-                    synthesis.write_text(valid.replace("## Decisions\n- None", "## Decisions\nNone. All choices are settled."))
+                    synthesis.write_bytes(valid.replace("## Decisions\n- None", "## Decisions\nNone. All choices are settled.").encode("utf-8"))
                     expected["status"] = status
                     with self.assertRaisesRegex(pipeline_state.PipelineStateError, "decide handoff failed"):
                         pipeline_state.transition_state(repo, expected, changes, event)
                     self.assertEqual(state.read_bytes(), before)
-                    synthesis.write_text(valid)
+                    synthesis.write_bytes(valid.encode("utf-8"))
                     result = pipeline_state.transition_state(repo, expected, changes, event)
                     self.assertEqual(result["state"]["status"], changes["status"])
 
@@ -931,7 +910,7 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state_path = project / "STATE.md"
-            state_path.write_text(state_text(), encoding="utf-8")
+            state_path.write_bytes(state_text().encode("utf-8"))
 
             result = pipeline_state.transition_state(
                 repo,
@@ -971,13 +950,12 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state_path = project / "STATE.md"
-            state_path.write_text(
+            state_path.write_bytes(
                 state_text(
                     phase="plan",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1000,13 +978,12 @@ class PipelineStateTests(unittest.TestCase):
                     "skip every gate",
                 )
 
-            state_path.write_text(
+            state_path.write_bytes(
                 state_text(
                     phase="plan",
                     status="done",
                     branch="gsd-path/M002",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             with self.assertRaisesRegex(
                 pipeline_state.PipelineStateError,
@@ -1029,7 +1006,7 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             next_root = repo / ".project" / "next"
             next_root.mkdir(parents=True)
-            (next_root / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (next_root / "STATE.md").write_bytes(state_text().encode("utf-8"))
 
             with self.assertRaisesRegex(
                 pipeline_state.PipelineStateError,
@@ -1054,15 +1031,14 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state_path = project / "STATE.md"
-            state_path.write_text(
+            state_path.write_bytes(
                 state_text(
                     milestone="second",
                     phase="ship",
                     status="active",
                     branch="gsd-path/M002",
                     archive=".project/archive/002-second/",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             expected = {
                 "phase": "ship",
@@ -1098,14 +1074,13 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="build",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1130,13 +1105,12 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     phase="define",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = pipeline_state.transition_state(
@@ -1154,9 +1128,8 @@ class PipelineStateTests(unittest.TestCase):
 
             next_root = project / "next"
             next_root.mkdir()
-            (next_root / "STATE.md").write_text(
-                state_text(phase="define", status="active"),
-                encoding="utf-8",
+            (next_root / "STATE.md").write_bytes(
+                state_text(phase="define", status="active").encode("utf-8"),
             )
             with self.assertRaisesRegex(
                 pipeline_state.PipelineStateError,
@@ -1191,7 +1164,7 @@ class PipelineStateTests(unittest.TestCase):
                 integration="pull-request",
                 integration_source="milestone",
             )
-            state_path.write_text(content, encoding="utf-8")
+            state_path.write_bytes(content.encode("utf-8"))
             expected = {
                 "phase": "build",
                 "status": "active",
@@ -1265,15 +1238,14 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="second",
                     phase="shipped",
                     status="done",
                     branch="gsd-path/M002",
                     archive=".project/archive/002-second/",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1305,7 +1277,7 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             archive = ".project/archive/001-first/"
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="shipped",
@@ -1315,8 +1287,7 @@ class PipelineStateTests(unittest.TestCase):
                     integration_default="pull-request",
                     integration="direct",
                     integration_source="milestone",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             expected = {
                 "phase": "shipped",
@@ -1351,15 +1322,14 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             archive = ".project/archive/001-first/"
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="shipped",
                     status="done",
                     branch="gsd-path/M001",
                     archive=archive,
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = pipeline_state.transition_state(
@@ -1391,14 +1361,13 @@ class PipelineStateTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state_path = project / "STATE.md"
-            state_path.write_text(
+            state_path.write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
                     status="done",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             expected = {
                 "phase": "plan",
@@ -1469,7 +1438,7 @@ class PipelineStateTests(unittest.TestCase):
                 project = repo / ".project"
                 project.mkdir()
                 state_path = project / "STATE.md"
-                state_path.write_text(content, encoding="utf-8")
+                state_path.write_bytes(content.encode("utf-8"))
 
                 with self.assertRaisesRegex(
                     pipeline_state.PipelineStateError,
@@ -1501,7 +1470,7 @@ class PipelineStateTests(unittest.TestCase):
                     branch="gsd-path/M001",
                 )
                 state_path = project / "STATE.md"
-                state_path.write_text(content, encoding="utf-8")
+                state_path.write_bytes(content.encode("utf-8"))
                 command = [
                     sys.executable,
                     str(Path(pipeline_state.__file__).resolve()),
@@ -1554,36 +1523,33 @@ class PipelineStateTests(unittest.TestCase):
         project.mkdir()
         phase = "plan" if kind == "plan" else "roadmap"
         milestone = "first" if kind == "plan" else "null"
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             state_text(
                 milestone=milestone,
                 phase=phase,
                 status="active",
                 branch="gsd-path/M001",
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         run_git(repo, "add", ".project/STATE.md")
         run_git(repo, "commit", "-m", "fixture: approval base")
         expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
         if kind == "plan":
             (project / "tasks").mkdir()
-            (project / "tasks" / "T001-new.md").write_text(
+            (project / "tasks" / "T001-new.md").write_bytes(
                 TASK_TEMPLATE.format(
                     task_id="T001", files_block="  - newpkg/app.py",
                     context="Create the requested module.", approach="Implement the module.",
                     contract="- None", verify="python3 newpkg/app.py",
-                ), encoding="utf-8",
+                ).encode("utf-8"),
             )
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"),
-                encoding="utf-8",
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8"),
             )
         else:
-            (project / "ROADMAP.md").write_text(
-                roadmap_text().replace("Status: shipped", "Status: pending", 1),
-                encoding="utf-8",
+            (project / "ROADMAP.md").write_bytes(
+                roadmap_text().replace("Status: shipped", "Status: pending", 1).encode("utf-8"),
             )
         return repo, expected_head
 
@@ -1601,9 +1567,8 @@ class PipelineStateTests(unittest.TestCase):
             ):
                 state_checkpoint.defer_approval(repo, "roadmap", patch=True)
 
-            (repo / ".project" / "REPOSITORY.md").write_text(
-                "Kind: new-github\nRemote: https://github.com/o/r\n",
-                encoding="utf-8",
+            (repo / ".project" / "REPOSITORY.md").write_bytes(
+                "Kind: new-github\nRemote: https://github.com/o/r\n".encode("utf-8"),
             )
             result = state_checkpoint.defer_approval(repo, "plan")
 
@@ -1633,13 +1598,11 @@ class PipelineStateTests(unittest.TestCase):
                 repo = Path(tmp)
                 project = repo / ".project"
                 project.mkdir()
-                (project / "STATE.md").write_text(
-                    state_text(milestone=milestone, phase=kind, status="active"),
-                    encoding="utf-8",
+                (project / "STATE.md").write_bytes(
+                    state_text(milestone=milestone, phase=kind, status="active").encode("utf-8"),
                 )
-                (project / "ROADMAP.md").write_text(
-                    roadmap_text().replace("Status: shipped", "Status: pending", 1),
-                    encoding="utf-8",
+                (project / "ROADMAP.md").write_bytes(
+                    roadmap_text().replace("Status: shipped", "Status: pending", 1).encode("utf-8"),
                 )
                 command = [
                     sys.executable,
@@ -1689,9 +1652,8 @@ class PipelineStateTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(milestone="null", phase="roadmap", status="active", branch="gsd-path/M001"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="null", phase="roadmap", status="active", branch="gsd-path/M001").encode("utf-8"),
             )
 
             result = pipeline_state.transition_state(
@@ -1719,7 +1681,7 @@ class PipelineStateTests(unittest.TestCase):
             with self.subTest(patch=patch), tempfile.TemporaryDirectory() as tmp:
                 repo, head = self._approval_repo(tmp, "plan")
                 task = repo / ".project/tasks/T001-new.md"
-                task.write_text(task.read_text().replace("newpkg/app.py", "../outside.py"))
+                task.write_bytes(task.read_text(encoding="utf-8").replace("newpkg/app.py", "../outside.py").encode("utf-8"))
                 state = repo / ".project/STATE.md"
                 before = state.read_bytes()
                 with self.assertRaisesRegex(pipeline_state.PipelineStateError, "task brief.*validation|must not contain"):
@@ -1765,8 +1727,8 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "config", "user.name", "GSD Path Test")
             run_git(repo, "config", "user.email", "test@example.com")
             (repo / "src").mkdir()
-            (repo / "src" / "legacy.ts").write_text("export {}\n", encoding="utf-8")
-            (repo / "src" / "helper.ts").write_text("export {}\n", encoding="utf-8")
+            (repo / "src" / "legacy.ts").write_bytes("export {}\n".encode("utf-8"))
+            (repo / "src" / "helper.ts").write_bytes("export {}\n".encode("utf-8"))
             run_git(repo, "add", "src/legacy.ts", "src/helper.ts")
             run_git(repo, "commit", "-m", "historical product")
             historical = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -1776,22 +1738,20 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "commit", "-m", "remove historical product")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first",
                     phase="plan",
                     status="active",
                     branch="gsd-path/M001",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"),
-                encoding="utf-8",
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8"),
             )
             (project / "tasks").mkdir()
             t001 = TASK_TEMPLATE.format(
@@ -1812,8 +1772,8 @@ class PipelineStateTests(unittest.TestCase):
                 contract="- None",
                 verify="python3 src/other.py",
             ).replace("deps: []", "deps: [T001]")
-            (project / "tasks" / "T001-legacy.md").write_text(t001, encoding="utf-8")
-            (project / "tasks" / "T002-other.md").write_text(t002, encoding="utf-8")
+            (project / "tasks" / "T001-legacy.md").write_bytes(t001.encode("utf-8"))
+            (project / "tasks" / "T002-other.md").write_bytes(t002.encode("utf-8"))
 
             result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
 
@@ -1823,7 +1783,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
             junk = repo / ".project" / ".inspect-inventory.tmp"
-            junk.write_text("junk\n", encoding="utf-8")
+            junk.write_bytes("junk\n".encode("utf-8"))
 
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "unsupported .project artifacts"):
                 state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
@@ -1922,9 +1882,8 @@ class PipelineStateTests(unittest.TestCase):
                         "plan",
                         expected_head,
                     )
-            (repo / ".project" / "plan" / "PLAN.md").write_text(
-                "# Changed after approval preparation\n",
-                encoding="utf-8",
+            (repo / ".project" / "plan" / "PLAN.md").write_bytes(
+                "# Changed after approval preparation\n".encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1936,7 +1895,7 @@ class PipelineStateTests(unittest.TestCase):
     def test_resume_approval_ignores_ignored_ds_store_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")
-            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
             with mock.patch.object(
                 state_checkpoint,
                 "isolation_checkpoint",
@@ -1944,7 +1903,7 @@ class PipelineStateTests(unittest.TestCase):
             ):
                 with self.assertRaises(pipeline_state.PipelineStateError):
                     state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
-            (repo / ".project" / "plan" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+            (repo / ".project" / "plan" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
 
             state_checkpoint.resume_checkpoint(repo)
 
@@ -2009,31 +1968,29 @@ class PipelineStateTests(unittest.TestCase):
         (project / "next" / "tasks").mkdir(parents=True)
         (project / "next" / "plan").mkdir()
         (project / "next" / "review").mkdir()
-        (repo / "app.py").write_text("approved = True\n", encoding="utf-8")
+        (repo / "app.py").write_bytes("approved = True\n".encode("utf-8"))
         run_git(repo, "add", "app.py")
         run_git(repo, "commit", "-m", "fixture: milestone base")
         run_git(repo, "switch", "-c", "gsd-path/M001")
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             state_text(
                 milestone="first",
                 phase="build",
                 status="active",
                 branch="gsd-path/M001",
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
-        (project / "ROADMAP.md").write_text(roadmap_text(), encoding="utf-8")
-        (project / "next" / "STATE.md").write_text(
+        (project / "ROADMAP.md").write_bytes(roadmap_text().encode("utf-8"))
+        (project / "next" / "STATE.md").write_bytes(
             state_text(
                 project=next_project,
                 phase=next_phase,
                 status="active" if next_phase == "plan" and next_status == "done" else next_status,
                 integration_default="pull-request" if pull_request else None,
                 integration="pull-request" if pull_request else None,
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
-        (project / "next" / "tasks" / "T001-base.md").write_text(
+        (project / "next" / "tasks" / "T001-base.md").write_bytes(
             TASK_TEMPLATE.format(
                 task_id="T001",
                 files_block="  - src/base.py",
@@ -2041,20 +1998,17 @@ class PipelineStateTests(unittest.TestCase):
                 approach="Implement the base.",
                 contract="- None",
                 verify="python3 src/base.py",
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         task = task_text()
         if context_repo_example:
             task = task.replace("Change the app.", "Change the app.\n\nrepo: web", 1)
-        (project / "next" / "tasks" / "T002-change-app.md").write_text(task, encoding="utf-8")
-        (project / "next" / "plan" / "PLAN.md").write_text(
-            PLAN_WAVE.format(title="second"),
-            encoding="utf-8",
+        (project / "next" / "tasks" / "T002-change-app.md").write_bytes(task.encode("utf-8"))
+        (project / "next" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="second").encode("utf-8"),
         )
-        (project / "next" / "review" / "PLAN-PANEL.md").write_text(
-            "# Plan review panel\n\nStatus: ready\n",
-            encoding="utf-8",
+        (project / "next" / "review" / "PLAN-PANEL.md").write_bytes(
+            "# Plan review panel\n\nStatus: ready\n".encode("utf-8"),
         )
         if next_phase == "plan" and next_status == "done":
             approval_base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -2066,18 +2020,16 @@ class PipelineStateTests(unittest.TestCase):
             )
             if duplicate_approval:
                 plan_path = project / "next" / "plan" / "PLAN.md"
-                plan_path.write_text("# Plan — second revision\n", encoding="utf-8")
+                plan_path.write_bytes("# Plan — second revision\n".encode("utf-8"))
                 # A matching approval must checkpoint the complete task set.
                 for task_path in (project / "next" / "tasks").glob("*.md"):
-                    task_path.write_text(
-                        task_path.read_text(encoding="utf-8") + "\n## Revision\n\n- approved again\n",
-                        encoding="utf-8",
+                    task_path.write_bytes(
+                        (task_path.read_text(encoding="utf-8") + "\n## Revision\n\n- approved again\n").encode("utf-8"),
                     )
                 next_state_path = project / "next" / "STATE.md"
-                next_state_path.write_text(
-                    next_state_path.read_text(encoding="utf-8")
-                    + "- 2026-08-23 — plan — duplicate approval\n",
-                    encoding="utf-8",
+                next_state_path.write_bytes(
+                    (next_state_path.read_text(encoding="utf-8")
+                    + "- 2026-08-23 — plan — duplicate approval\n").encode("utf-8"),
                 )
                 run_git(repo, "add", ".project/next")
                 run_git(
@@ -2092,31 +2044,30 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: lookahead phase")
         if drift:
-            (repo / "app.py").write_text("approved = False\n", encoding="utf-8")
+            (repo / "app.py").write_bytes("approved = False\n".encode("utf-8"))
         if delete_declared:
             (repo / "app.py").unlink()
         if mutate_plan:
-            (project / "next" / "plan" / "PLAN.md").write_text(
-                "# Plan — changed after approval\n",
-                encoding="utf-8",
+            (project / "next" / "plan" / "PLAN.md").write_bytes(
+                "# Plan — changed after approval\n".encode("utf-8"),
             )
         task_path = project / "next" / "tasks" / "T002-change-app.md"
         if member_task:
-            task_path.write_text(
-                task_path.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
-                encoding="utf-8",
+            task_path.write_bytes(
+                task_path.read_text(encoding="utf-8")
+                .replace("files:", "repo: web\nfiles:", 1)
+                .encode("utf-8")
             )
         if mutate_task:
-            task_path.write_text(
+            task_path.write_bytes(
                 task_path.read_text(encoding="utf-8").replace(
                     "  - app.py\n",
                     "  - replacement.py\n",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
         if remove_task:
             task_path.unlink()
-        (project / "STATE.md").write_text(
+        (project / "STATE.md").write_bytes(
             state_text(
                 milestone="first",
                 phase="shipped",
@@ -2125,8 +2076,7 @@ class PipelineStateTests(unittest.TestCase):
                 archive=".project/archive/001-first/",
                 integration_default="pull-request" if pull_request else None,
                 integration="pull-request" if pull_request else None,
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         run_git(repo, "add", "-A", "--", ".project", "app.py")
         run_git(
@@ -2255,7 +2205,7 @@ class PipelineStateTests(unittest.TestCase):
                     "stage": "switched",
                 },
             )
-            (repo / "scratch.txt").write_text("dirty\n", encoding="utf-8")
+            (repo / "scratch.txt").write_bytes("dirty\n".encode("utf-8"))
 
             routed = pipeline_state.route_state(repo)
             status = pipeline_state.status_state(repo)
@@ -2269,7 +2219,7 @@ class PipelineStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, landing = self._promotion_repo(tmp, drift=False)
             run_git(repo, "switch", "main")
-            (repo / "after-landing.txt").write_text("later\n", encoding="utf-8")
+            (repo / "after-landing.txt").write_bytes("later\n".encode("utf-8"))
             run_git(repo, "add", "after-landing.txt")
             run_git(repo, "commit", "-m", "product: after milestone landing")
             base = run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -2532,10 +2482,10 @@ class PipelineStateTests(unittest.TestCase):
             prior = repo / ".project" / "next"
             (prior / "plan").mkdir(parents=True)
             (prior / "tasks").mkdir()
-            (prior / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (prior / "plan" / "PLAN.md").write_text("# Plan — second\n", encoding="utf-8")
-            (prior / "tasks" / "T002-change-app.md").write_text(task_text(), encoding="utf-8")
-            (repo / "app.py").write_text("base = True\n", encoding="utf-8")
+            (prior / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (prior / "plan" / "PLAN.md").write_bytes("# Plan — second\n".encode("utf-8"))
+            (prior / "tasks" / "T002-change-app.md").write_bytes(task_text().encode("utf-8"))
+            (repo / "app.py").write_bytes("base = True\n".encode("utf-8"))
             run_git(repo, "add", ".")
             run_git(
                 repo,
@@ -2552,9 +2502,9 @@ class PipelineStateTests(unittest.TestCase):
             current = repo / ".project" / "next"
             (current / "plan").mkdir(parents=True)
             (current / "tasks").mkdir()
-            (current / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (current / "plan" / "PLAN.md").write_text("# Plan — second\n", encoding="utf-8")
-            (current / "tasks" / "T002-change-app.md").write_text(task_text(), encoding="utf-8")
+            (current / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (current / "plan" / "PLAN.md").write_bytes("# Plan — second\n".encode("utf-8"))
+            (current / "tasks" / "T002-change-app.md").write_bytes(task_text().encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: unapproved current lookahead")
             run_git(repo, "switch", "main")
@@ -2580,14 +2530,13 @@ class PipelineStateTests(unittest.TestCase):
             repo, integrate = self._promotion_repo(tmp, drift=False)
             project = repo / ".project"
             shutil.rmtree(project / "next")
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="second",
                     phase="plan",
                     status="done",
                     branch="gsd-path/M002",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             run_git(repo, "add", "-A", "--", ".project")
             run_git(
@@ -2726,17 +2675,16 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "CHARTER.md").write_text("# Charter\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
+            (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first", phase="ship", status="active",
                     branch="gsd-path/M001", archive=".project/archive/001-first",
-                ), encoding="utf-8",
+                ).encode("utf-8"),
             )
-            (project / "ROADMAP.md").write_text(
+            (project / "ROADMAP.md").write_bytes(
                 roadmap_text().replace("Status: shipped", "Status: active", 1)
-                .replace("Archive: .project/archive/001-first/", "Archive: null", 1),
-                encoding="utf-8",
+                .replace("Archive: .project/archive/001-first/", "Archive: null", 1).encode("utf-8"),
             )
             original = pipeline_state._atomic_write
 
@@ -2766,7 +2714,7 @@ class PipelineStateTests(unittest.TestCase):
 
             self.assertEqual(result["state"]["phase"], "shipped")
             self.assertEqual(retry["status"], "recorded")
-            roadmap = (project / "ROADMAP.md").read_text()
+            roadmap = (project / "ROADMAP.md").read_text(encoding="utf-8")
             self.assertIn("Status: shipped", roadmap)
             self.assertIn("Archive: .project/archive/001-first", roadmap)
 
@@ -2776,11 +2724,11 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     milestone="first", phase="ship", status="active",
                     branch="gsd-path/M001", archive=".project/archive/001-first",
-                ), encoding="utf-8",
+                ).encode("utf-8"),
             )
             original = pipeline_state._atomic_write
 
@@ -2800,7 +2748,7 @@ class PipelineStateTests(unittest.TestCase):
             today = date.today().isoformat()
             self.assertIn(today, journal["state_after"])
             journal["state_after"] = journal["state_after"].replace(today, "2000-01-01")
-            journal_path.write_text(json.dumps(journal), encoding="utf-8")
+            journal_path.write_bytes(json.dumps(journal).encode("utf-8"))
 
             result = pipeline_state.record_shipment(
                 repo, ".project/archive/001-first",
@@ -2819,9 +2767,8 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
             )
 
             result = pipeline_state.record_shipment(
@@ -2838,9 +2785,8 @@ class PipelineStateTests(unittest.TestCase):
             run_git(repo, "init", "-b", "gsd-path/M001")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
             )
             original = pipeline_state._atomic_write
 
@@ -2870,13 +2816,12 @@ class PipelineStateTests(unittest.TestCase):
                 run_git(repo, "init", "-b", "gsd-path/M001")
                 project = repo / ".project"
                 project.mkdir()
-                (project / "CHARTER.md").write_text("# Charter\n", encoding="utf-8")
-                (project / "STATE.md").write_text(
-                    state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first"),
-                    encoding="utf-8",
+                (project / "CHARTER.md").write_bytes("# Charter\n".encode("utf-8"))
+                (project / "STATE.md").write_bytes(
+                    state_text(milestone="first", phase="ship", status="active", branch="gsd-path/M001", archive=".project/archive/001-first").encode("utf-8"),
                 )
                 if case == "wrong":
-                    (project / "ROADMAP.md").write_text(roadmap_text(), encoding="utf-8")
+                    (project / "ROADMAP.md").write_bytes(roadmap_text().encode("utf-8"))
                 with self.assertRaises(pipeline_state.PipelineStateError):
                     pipeline_state.record_shipment(repo, ".project/archive/001-first", "archive preflight passed; shipment recorded")
 

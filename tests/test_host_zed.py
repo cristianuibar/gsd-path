@@ -96,7 +96,7 @@ class ZedBindChildTests(unittest.TestCase):
     def write_thread(self, thread, run="run-1"):
         d = self.root / "quick" / run
         d.mkdir(parents=True)
-        (d / "thread.json").write_text(json.dumps(thread))
+        (d / "thread.json").write_bytes(json.dumps(thread).encode("utf-8"))
 
     def test_binds_completed_child_by_label(self):
         self.write_thread(sample_thread())

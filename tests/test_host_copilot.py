@@ -50,7 +50,7 @@ class CommandTests(unittest.TestCase):
     def test_headless_argv_carries_prompt_text_and_json_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             prompt = Path(tmp) / "prompt.txt"
-            prompt.write_text("/gsd-path quick\nline two")
+            prompt.write_bytes("/gsd-path quick\nline two".encode("utf-8"))
             args = copilot.command(prompt)
         self.assertEqual(args[:3], ["copilot", "-p", "/gsd-path quick\nline two"])
         self.assertIn("--allow-all", args)
@@ -62,7 +62,7 @@ class CommandTests(unittest.TestCase):
     def test_resume_appends_documented_resume_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
             prompt = Path(tmp) / "prompt.txt"
-            prompt.write_text("continue")
+            prompt.write_bytes("continue".encode("utf-8"))
             args = copilot.command(prompt, resume=SESSION)
         self.assertEqual(args[-1], f"--resume={SESSION}")
 
@@ -101,14 +101,14 @@ class BindChildTests(unittest.TestCase):
     def write_run(self, stream_events, session_id=SESSION, name="run-20260906T000000000000Z"):
         run_dir = self.run_root / "quick" / name
         run_dir.mkdir(parents=True)
-        (run_dir / "events.jsonl").write_text("".join(json.dumps({"elapsed_seconds": i, "raw": json.dumps(ev)}) + "\n"
-                                                      for i, ev in enumerate(stream_events)))
-        (run_dir / "run.json").write_text(json.dumps({"host": "copilot", "session_id": session_id}))
+        (run_dir / "events.jsonl").write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": json.dumps(ev)}) + "\n"
+                                                      for i, ev in enumerate(stream_events)).encode("utf-8"))
+        (run_dir / "run.json").write_bytes(json.dumps({"host": "copilot", "session_id": session_id}).encode("utf-8"))
 
     def write_transcript(self, events, session_id=SESSION):
         path = self.home / "session-state" / session_id / "events.jsonl"
         path.parent.mkdir(parents=True)
-        path.write_text("".join(json.dumps(ev) + "\n" for ev in events))
+        path.write_bytes("".join(json.dumps(ev) + "\n" for ev in events).encode("utf-8"))
 
     def test_binds_task_call_to_completion_in_session_transcript(self):
         self.write_run([{"type": "result", "usage": {}}])

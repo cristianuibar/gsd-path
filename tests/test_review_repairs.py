@@ -27,16 +27,16 @@ class RepairEvidenceTests(unittest.TestCase):
         self.project = self.repo / ".project"
         for directory in ("tasks", "plan", "review"):
             (self.project / directory).mkdir(parents=True, exist_ok=True)
-        (self.project / "plan/PLAN.md").write_text(
-            PLAN.format(cycles=3, skeptics="off", depth="full")
-            + "\n## Wave 2 — repair\nGoal: repair the observed failure\nReview depth: full\n"
+        (self.project / "plan/PLAN.md").write_bytes(
+            (PLAN.format(cycles=3, skeptics="off", depth="full")
+            + "\n## Wave 2 — repair\nGoal: repair the observed failure\nReview depth: full\n").encode("utf-8")
         )
-        (self.repo / "count.py").write_text("print('initial')\n")
+        (self.repo / "count.py").write_bytes("print('initial')\n".encode("utf-8"))
         self.original_file = self.task("T001", "Original", 1, "", "")
         self.commit("fixture")
         self.original = self.land("T001", "Original", self.original_file, "bad")
         self.review = self.project / "review/wave-1.cycle1.md"
-        self.review.write_text("""# Review — wave 1, cycle 1
+        self.review.write_bytes("""# Review — wave 1, cycle 1
 Wave verdict: blocked
 Cycle: 1
 Depth: full
@@ -44,7 +44,7 @@ Tasks reviewed: 1
 ## T001 — Original: fail
 - ❌ Prints good — found: prints bad, count.py:1
   fix: print good
-""")
+""".encode("utf-8"))
         self.findings = """## Review findings
 
 ### t001_ac1
@@ -63,7 +63,7 @@ Prints good — found: prints bad, count.py:1 fix: print good
         text = text.replace("wave: 1", f"wave: {wave}").replace("deps: []", f"deps: [{deps}]")
         text = text.replace("status: done", "status: pending")
         text = text.replace("python3 -m unittest tests.test_demo", "python3 -B count.py")
-        path.write_text(text.replace("## Log", findings + "## Log"))
+        path.write_bytes(text.replace("## Log", findings + "## Log").encode("utf-8"))
         return path.relative_to(self.repo).as_posix()
 
     def commit(self, message):
@@ -74,7 +74,7 @@ Prints good — found: prints bad, count.py:1 fix: print good
     def land(self, task_id, title, task_file, output):
         base = run_git(self.repo, "rev-parse", "HEAD")
         isolation.activate_task(self.repo, base, task_id, "coder", task_file, None)
-        (self.repo / "count.py").write_text(f"print({output!r})\n")
+        (self.repo / "count.py").write_bytes(f"print({output!r})\n".encode("utf-8"))
         result = subprocess.run([sys.executable, "-B", "count.py"], cwd=self.repo,
                                 capture_output=True, text=True, check=True)
         commit = isolation.land(self.repo, self.repo, base, task_id, title,
@@ -131,20 +131,20 @@ Prints good — found: prints bad, count.py:1 fix: print good
                 self.setUp()
                 path = self.repo / self.repair_file
                 if fault == "dependency":
-                    path.write_text(path.read_text().replace("deps: [T001]", "deps: []"))
+                    path.write_bytes(path.read_text(encoding="utf-8").replace("deps: [T001]", "deps: []").encode("utf-8"))
                 elif fault == "finding":
-                    path.write_text(path.read_text().replace("### t001_ac1", "### t001_ac9"))
+                    path.write_bytes(path.read_text(encoding="utf-8").replace("### t001_ac1", "### t001_ac9").encode("utf-8"))
                 elif fault == "intervening":
-                    (self.repo / "count.py").write_text("print('unrelated')\n")
+                    (self.repo / "count.py").write_bytes("print('unrelated')\n".encode("utf-8"))
                 self.finish_repair()
                 if fault == "ledger":
                     (self.repo / _common.VERIFY_LEDGER_PATH).unlink()
                 elif fault == "report":
-                    self.review.write_text(self.review.read_text().replace("prints bad", "prints worse"))
+                    self.review.write_bytes(self.review.read_text(encoding="utf-8").replace("prints bad", "prints worse").encode("utf-8"))
                 elif fault == "task":
-                    path.write_text(path.read_text().replace("Prints good", "Anything passes"))
+                    path.write_bytes(path.read_text(encoding="utf-8").replace("Prints good", "Anything passes").encode("utf-8"))
                 elif fault == "later-product":
-                    (self.repo / "count.py").write_text("print('later unrelated change')\n")
+                    (self.repo / "count.py").write_bytes("print('later unrelated change')\n".encode("utf-8"))
                 result, evidence = self.cli()
                 self.assertEqual(result.returncode, 2)
                 self.assertEqual(evidence.get("status"), "error", result.stderr or evidence)

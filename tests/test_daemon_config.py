@@ -65,15 +65,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(loaded.parents, ["/tmp/from-explicit"])
 
     def test_malformed_json_returns_defaults(self) -> None:
-        self.path.write_text("{not json", encoding="utf-8")
+        self.path.write_bytes("{not json".encode("utf-8"))
         self.assertEqual(Config.load(self.path), Config())
 
     def test_non_dict_json_returns_defaults(self) -> None:
-        self.path.write_text("[1, 2, 3]", encoding="utf-8")
+        self.path.write_bytes("[1, 2, 3]".encode("utf-8"))
         self.assertEqual(Config.load(self.path), Config())
 
     def test_partial_json_keeps_defaults(self) -> None:
-        self.path.write_text(json.dumps({"parents": [self.tmp.name]}), encoding="utf-8")
+        self.path.write_bytes(json.dumps({"parents": [self.tmp.name]}).encode("utf-8"))
         loaded = Config.load(self.path)
         self.assertEqual(loaded.parents, [os.path.abspath(self.tmp.name)])
         self.assertEqual(loaded.max_depth, 6)

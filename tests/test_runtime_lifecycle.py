@@ -31,7 +31,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.git("init", "-b", "main")
         self.git("config", "user.name", "Runtime test")
         self.git("config", "user.email", "runtime@example.invalid")
-        (self.repo / "README.md").write_text("fixture\n")
+        (self.repo / "README.md").write_bytes("fixture\n".encode("utf-8"))
         self.git("add", ".")
         self.git("commit", "-m", "fixture")
 
@@ -45,7 +45,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         install.install(SOURCE, [], project=self.repo, migrate_legacy=False)
 
     def pin(self):
-        return json.loads((self.repo / ".gsd-path/runtime.json").read_text())
+        return json.loads((self.repo / ".gsd-path/runtime.json").read_text(encoding="utf-8"))
 
     def runtime_command(self, option, source=SOURCE):
         return subprocess.run(
@@ -59,8 +59,8 @@ class RuntimeLifecycleTests(unittest.TestCase):
         shutil.copytree(SOURCE / "scripts", source / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(SOURCE / "package.json", source / "package.json")
         isolation = source / "scripts/isolation.py"
-        isolation.write_text(isolation.read_text().replace("class IsolationError(RuntimeError):",
-                             "raise RuntimeError('selected isolation runtime')\n\nclass IsolationError(RuntimeError):"))
+        isolation.write_bytes(isolation.read_text(encoding="utf-8").replace("class IsolationError(RuntimeError):",
+                             "raise RuntimeError('selected isolation runtime')\n\nclass IsolationError(RuntimeError):").encode("utf-8"))
         self.provision()
         install.runtime_store.operate(source, self.repo, "upgrade")
         before = self.pin()
@@ -137,7 +137,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         install.install(SOURCE, [], project=self.repo, migrate_legacy=False, update=True)
         self.assertEqual((self.repo / ".gsd-path/runtime.json").read_bytes(), before)
         # Execute the upgrade recipe from the canonical ship skill.
-        ship = (SOURCE / "skills/gsd-path-ship/SKILL.md").read_text()
+        ship = (SOURCE / "skills/gsd-path-ship/SKILL.md").read_text(encoding="utf-8")
         blocks = re.findall(r"```bash\n(.*?)```", ship, re.S)
         upgrade = next(block for block in blocks if block.lstrip().startswith("node <trusted-gsd-path>") and "<trust-root>" in block)
         resolver = next(block for block in blocks if "--runtime-path" in block and "<trust-root>" in block)
@@ -156,8 +156,8 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertNotEqual((self.repo / ".gsd-path/runtime.json").read_bytes(), before)
         self.assertTrue((self.home / ".gsd-path/runtimes" / json.loads(before)["digest"]).is_dir())
         (self.repo / ".project").mkdir()
-        (self.repo / ".project/STATE.md").write_text(
-            (SOURCE / "skills/gsd-path/templates/state.md").read_text().replace("<slug>", "fixture"))
+        (self.repo / ".project/STATE.md").write_bytes(
+            (SOURCE / "skills/gsd-path/templates/state.md").read_text(encoding="utf-8").replace("<slug>", "fixture").encode("utf-8"))
         failures = [item for item in install.doctor(SOURCE, [], lambda _: self.root, self.repo)
                     if item["level"] == "fail"]
         self.assertEqual(failures, [])
@@ -239,7 +239,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-m", "legacy runtime")
         changed = runtime / "pipeline_state.py"
-        changed.write_text(changed.read_text() + "\n# user edit\n")
+        changed.write_bytes((changed.read_text(encoding="utf-8") + "\n# user edit\n").encode("utf-8"))
         before = changed.read_bytes()
         result = self.runtime_command("--runtime-migrate")
         self.assertNotEqual(result.returncode, 0)
@@ -293,12 +293,12 @@ class RuntimeLifecycleTests(unittest.TestCase):
         args = ["node", str(SOURCE / "scripts/install.mjs"), "--update", "--claude",
                 "--claude-root", str(skills), "--project", str(self.repo), "--hooks"]
         version = skills / "gsd-path/VERSION"
-        version.write_text("0.0.1\n")
+        version.write_bytes("0.0.1\n".encode("utf-8"))
         refused = subprocess.run(args, capture_output=True, text=True)
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn(str(self.repo), refused.stdout + refused.stderr)
         self.assertNotIn("rolled back", refused.stdout + refused.stderr)
-        self.assertEqual(version.read_text(), "0.0.1\n")
+        self.assertEqual(version.read_text(encoding="utf-8"), "0.0.1\n")
         edited = runtime / "pipeline_state.py"
         original = edited.read_bytes()
         edited.write_bytes(original + b"\n# user edit\n")
@@ -306,18 +306,18 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertNotEqual(blocked.returncode, 0)
         self.assertIn("locally modified", blocked.stdout + blocked.stderr)
         self.assertEqual(edited.read_bytes(), original + b"\n# user edit\n")
-        self.assertEqual(version.read_text(), "0.0.1\n")
+        self.assertEqual(version.read_text(encoding="utf-8"), "0.0.1\n")
         edited.write_bytes(original)
         preview = subprocess.run([*args, "--runtime-migrate", "--dry-run"], capture_output=True, text=True)
         self.assertEqual(preview.returncode, 0, preview.stderr)
         self.assertEqual(self.git("status", "--porcelain"), "")
         self.assertTrue(runtime.exists())
-        self.assertEqual(version.read_text(), "0.0.1\n")
+        self.assertEqual(version.read_text(encoding="utf-8"), "0.0.1\n")
         self.assertFalse((self.home / ".gsd-path/runtimes").exists())
         result = subprocess.run([*args, "--runtime-migrate"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Updated.", result.stdout)
-        self.assertEqual(version.read_text().strip(), json.loads((SOURCE / "package.json").read_text())["version"])
+        self.assertEqual(version.read_text(encoding="utf-8").strip(), json.loads((SOURCE / "package.json").read_text(encoding="utf-8"))["version"])
         self.assertFalse(runtime.exists())
         self.assertTrue((skills.parent / "disabled-gsd-skills").exists())
         self.assertTrue((self.repo / ".claude/settings.json").exists())
@@ -335,7 +335,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         runtime = self.legacy_update_fixture()
         skills = self.home / ".claude/skills"
         install.install(SOURCE, [install.TargetPlan("claude", skills)], migrate_legacy=False)
-        (self.repo / ".claude").write_text("user file prevents project wiring\n")
+        (self.repo / ".claude").write_bytes("user file prevents project wiring\n".encode("utf-8"))
         result = subprocess.run(["node", str(SOURCE / "scripts/install.mjs"), "--update", "--runtime-migrate",
                                  "--claude", "--claude-root", str(skills), "--project", str(self.repo)],
                                 capture_output=True, text=True)
@@ -395,7 +395,7 @@ process.exitCode = await main([]);
     def test_corrupt_runtime_can_be_explicitly_restored(self):
         self.provision()
         runtime = self.home / ".gsd-path/runtimes" / self.pin()["digest"]
-        (runtime / "pipeline_state.py").write_text("broken\n")
+        (runtime / "pipeline_state.py").write_bytes("broken\n".encode("utf-8"))
         result = self.runtime_command("--runtime-restore")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((runtime / "pipeline_state.py").read_bytes(), (SOURCE / "scripts/pipeline_state.py").read_bytes())
@@ -436,8 +436,8 @@ runtime_store.operate(Path(sys.argv[1]), Path(sys.argv[2]), 'migrate')
         # Install the stable guard wiring through the normal opt-in entry point.
         install.refresh_hooks(SOURCE, self.repo, True, selected=["claude"], initialize=True)
         (self.repo / ".project").mkdir()
-        state = (SOURCE / "skills/gsd-path/templates/state.md").read_text().replace("<slug>", "fixture")
-        (self.repo / ".project/STATE.md").write_text(state)
+        state = (SOURCE / "skills/gsd-path/templates/state.md").read_text(encoding="utf-8").replace("<slug>", "fixture")
+        (self.repo / ".project/STATE.md").write_bytes(state.encode("utf-8"))
         self.git("add", ".")
         self.git("-c", "core.hooksPath=/dev/null", "commit", "-m", "runtime wiring")
         for branch in ("gsd-path-task/T001", "gsd-path-verify/check", "gsd-path-integrate/M001"):
@@ -479,7 +479,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
 """
         result = subprocess.run([sys.executable, "-B", "-c", code, str(runtime)], cwd=SOURCE)
         self.assertEqual(result.returncode, 77)
-        (runtime / "pipeline_state.py").write_text("incomplete")
+        (runtime / "pipeline_state.py").write_bytes("incomplete".encode("utf-8"))
         restored = self.runtime_command("--runtime-restore")
         self.assertEqual(restored.returncode, 0, restored.stderr)
 
@@ -548,7 +548,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         pin = self.pin()
         pin["comment"] = "project annotation"
         declaration = self.repo / ".gsd-path/runtime.json"
-        declaration.write_text(json.dumps(pin))
+        declaration.write_bytes(json.dumps(pin).encode("utf-8"))
         original = declaration.read_bytes()
         self.assertTrue(install.status_runtime.resolve_runtime(self.repo).is_dir())
         result = self.runtime_command("--runtime-restore")
@@ -559,12 +559,12 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         directory = self.repo / ".gsd-path"
         directory.mkdir()
         guard = directory / "guard_hook.py"
-        guard.write_text("user guard\n")
+        guard.write_bytes("user guard\n".encode("utf-8"))
         for dry_run in (True, False):
             with self.subTest(dry_run=dry_run):
                 with self.assertRaisesRegex(install.InstallerError, "not a managed GSD Path guard"):
                     install.refresh_hooks(SOURCE, self.repo, True, dry_run, ["claude"], True)
-                self.assertEqual(guard.read_text(), "user guard\n")
+                self.assertEqual(guard.read_text(encoding="utf-8"), "user guard\n")
                 self.assertFalse((directory / "runtime.json").exists())
 
 

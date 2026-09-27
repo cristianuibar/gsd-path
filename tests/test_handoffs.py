@@ -69,7 +69,7 @@ class HandoffValidationTests(unittest.TestCase):
     def write(self, root: Path, relative: str, content: str) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_bytes(content.encode("utf-8"))
 
     def write_state(
         self, root: Path, phase: str, status: str, project_dir: str = ".project"
@@ -203,12 +203,11 @@ Intent: `.project/intent/INTENT.md`
             )
             self.write_research_handoff(root)
             handoff = root / ".project" / "research" / "RESEARCH.md"
-            handoff.write_text(
+            handoff.write_bytes(
                 handoff.read_text(encoding="utf-8").replace(
                     "Intent: `.project/intent/INTENT.md`",
                     "Intent: `.project/CHARTER.md`",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = check_handoffs.validate_research(root)
@@ -290,8 +289,8 @@ Intent: `.project/intent/INTENT.md`
                         self.write_research_handoff(root, track)
                         state = root / track / "STATE.md"
                         evidence = root / track / "research/evidence-domain.md"
-                        valid = evidence.read_text()
-                        evidence.write_text(valid.replace("Questions assigned: Which domain applies?", "Questions assigned: wrong"))
+                        valid = evidence.read_text(encoding="utf-8")
+                        evidence.write_bytes(valid.replace("Questions assigned: Which domain applies?", "Questions assigned: wrong").encode("utf-8"))
                         original = state.read_bytes()
                         command = [sys.executable, "-B", str(helper), "transition", "--repo", str(root),
                                    "--project-dir", track, "--expect-phase", "research", "--expect-status", status,
@@ -302,7 +301,7 @@ Intent: `.project/intent/INTENT.md`
                         self.assertNotEqual(failed.returncode, 0, failed.stdout)
                         self.assertIn("Questions assigned", failed.stderr)
                         self.assertEqual(state.read_bytes(), original)
-                        evidence.write_text(valid)
+                        evidence.write_bytes(valid.encode("utf-8"))
                         passed = subprocess.run(command, capture_output=True, text=True)
                         self.assertEqual(passed.returncode, 0, passed.stderr)
                         self.assertNotEqual(state.read_bytes(), original)
@@ -335,8 +334,8 @@ Intent: `.project/intent/INTENT.md`
                 self.assertIn('"dispatched": ["domain"]', passed.stdout)
 
                 evidence = root / track / "research/evidence-domain.md"
-                evidence.write_text(evidence.read_text().replace(
-                    "Questions assigned: Which domain applies?", "Questions assigned: wrong"))
+                evidence.write_bytes(evidence.read_text(encoding="utf-8").replace(
+                    "Questions assigned: Which domain applies?", "Questions assigned: wrong").encode("utf-8"))
                 failed = subprocess.run(command, capture_output=True, text=True)
                 self.assertNotEqual(failed.returncode, 0, failed.stdout)
                 self.assertIn("Questions assigned", failed.stderr)
@@ -472,12 +471,11 @@ Intent: `.project/intent/INTENT.md`
             self.write_intent(root, "- [RESEARCH] Which domain applies?\n")
             self.write_research_handoff(root)
             evidence = root / ".project/research/evidence-domain.md"
-            evidence.write_text(
+            evidence.write_bytes(
                 evidence.read_text(encoding="utf-8").replace(
                     "- Which domain applies? → The evidence answers this with the cited source.\n",
                     "",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -505,9 +503,9 @@ Intent: `.project/intent/INTENT.md`
             self.write_intent(root, "- none\n")
             self.write_research_handoff(root)
             handoff = root / ".project/research/RESEARCH.md"
-            handoff.write_text(handoff.read_text().replace(
+            handoff.write_bytes(handoff.read_text(encoding="utf-8").replace(
                 "- `[RESEARCH] Which domain applies?` → `domain`", "- none"
-            ))
+            ).encode("utf-8"))
             self.write_evidence(root, "domain", questions=())
             with self.assertRaisesRegex(check_handoffs.HandoffError, "no assigned research question"):
                 check_handoffs.validate_research(root)
@@ -605,11 +603,10 @@ State: ship/blocked
             self.write_review_sources(root)
             self.write_patch_findings(root)
             final_review = root / ".project/review/FINAL.md"
-            final_review.write_text(
+            final_review.write_bytes(
                 final_review.read_text(encoding="utf-8").replace(
                     RESEARCH_HEAD, "b" * 40
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError):
@@ -622,9 +619,8 @@ State: ship/blocked
             self.write_review_sources(root)
             self.write_patch_findings(root)
             patch = root / ".project/review/PATCH-FINDINGS.md"
-            patch.write_text(
-                patch.read_text(encoding="utf-8").replace("`SC1`", "`SC2`", 1),
-                encoding="utf-8",
+            patch.write_bytes(
+                patch.read_text(encoding="utf-8").replace("`SC1`", "`SC2`", 1).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError):
@@ -637,11 +633,10 @@ State: ship/blocked
             self.write_review_sources(root)
             self.write_patch_findings(root)
             patch = root / ".project/review/PATCH-FINDINGS.md"
-            patch.write_text(
+            patch.write_bytes(
                 patch.read_text(encoding="utf-8").replace(
                     "The demo does not run.", "An invented failure.", 1
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError):
@@ -656,11 +651,10 @@ State: ship/blocked
                 self.write_review_sources(root)
                 self.write_patch_findings(root)
                 patch = root / ".project/review/PATCH-FINDINGS.md"
-                patch.write_text(
+                patch.write_bytes(
                     patch.read_text(encoding="utf-8").replace(
                         "### P002 — project verify", malformed
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
 
                 with self.assertRaises(check_handoffs.HandoffError) as failure:
@@ -873,20 +867,20 @@ The task implements the demo.
             root = Path(directory)
             self.write_plan_handoff(root)
             task = root / ".project/tasks/T001-demo.md"
-            progressed = task.read_text().replace("status: pending", "status: done").replace(
+            progressed = task.read_text(encoding="utf-8").replace("status: pending", "status: done").replace(
                 "base: null", "base: " + "a" * 40
             ).replace("agent: null", "agent: /root/build_t001")
-            task.write_text(progressed)
+            task.write_bytes(progressed.encode("utf-8"))
             # Patch mode: a landed task keeps its metadata while planning reopens.
             self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
-            task.write_text(progressed.replace("status: done", "status: pending"))
+            task.write_bytes(progressed.replace("status: done", "status: pending").encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "initially"):
                 check_handoffs.validate_plan(root)
-            task.write_text(progressed)
+            task.write_bytes(progressed.encode("utf-8"))
             self.write_state(root, "build", "active")
             self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
-            self.assertEqual(task.read_text(), progressed)
-            task.write_text(progressed.replace("- SC1", "- SC2"))
+            self.assertEqual(task.read_text(encoding="utf-8"), progressed)
+            task.write_bytes(progressed.replace("- SC1", "- SC2").encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "Intent coverage"):
                 check_handoffs.validate_plan(root)
 
@@ -922,13 +916,13 @@ The task implements the demo.
             root = Path(directory)
             self.write_plan_handoff(root)
             task = root / ".project/tasks/T001-demo.md"
-            text = task.read_text().replace(
+            text = task.read_text(encoding="utf-8").replace(
                 "## Interface contract\n\n- None",
                 "## Interface contract\n\n- `total_amount(records) -> int`: return the sum.",
             )
-            task.write_text(text)
+            task.write_bytes(text.encode("utf-8"))
             self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
-            task.write_text(text.replace("return the sum.", "<fill in>"))
+            task.write_bytes(text.replace("return the sum.", "<fill in>").encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
                 check_handoffs.validate_plan(root)
 
@@ -947,8 +941,8 @@ The task implements the demo.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_plan_handoff(root)
-            (root / ".project/tasks/notes.md").write_text(
-                "post-review notes\n", encoding="utf-8"
+            (root / ".project/tasks/notes.md").write_bytes(
+                "post-review notes\n".encode("utf-8")
             )
 
             with self.assertRaisesRegex(
@@ -960,9 +954,9 @@ The task implements the demo.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             subprocess.run(("git", "init", "-q", str(root)), check=True)
-            (root / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            (root / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
             self.write_plan_handoff(root)
-            (root / ".project/tasks/.DS_Store").write_text("finder\n", encoding="utf-8")
+            (root / ".project/tasks/.DS_Store").write_bytes("finder\n".encode("utf-8"))
 
             self.assertEqual(check_handoffs.validate_plan(root)["tasks"], 2)
 
@@ -1001,9 +995,8 @@ The task implements the demo.
             root = Path(directory)
             self.write_plan_handoff(root)
             state = root / ".project/STATE.md"
-            state.write_text(
-                state.read_text(encoding="utf-8").replace("project: demo\n", ""),
-                encoding="utf-8",
+            state.write_bytes(
+                state.read_text(encoding="utf-8").replace("project: demo\n", "").encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1656,11 +1649,10 @@ Surfaces: none
             self.assertEqual(result["decisions"], ["Storage"])
 
             synthesis = root / ".project/SYNTHESIS.md"
-            synthesis.write_text(
+            synthesis.write_bytes(
                 synthesis.read_text(encoding="utf-8").replace(
                     "- **Evidence**: evidence-stack.md § Storage\n", ""
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             with self.assertRaises(check_handoffs.HandoffError):
                 check_handoffs.validate_decide(root)
@@ -1751,11 +1743,10 @@ Open questions
             git(root, "add", ".project")
             git(root, "commit", "-q", "-m", "roadmap")
             roadmap = root / ".project/ROADMAP.md"
-            roadmap.write_text(
+            roadmap.write_bytes(
                 roadmap.read_text(encoding="utf-8").replace(
                     "### M001 — first", "### M001 — renamed"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
@@ -1812,12 +1803,12 @@ Tasks reviewed: 2
                 self.write_plan_handoff(root)
                 relative = self.write_wave_review(root)
                 review = root / relative
-                review.write_text(review.read_text().replace(
+                review.write_bytes(review.read_text(encoding="utf-8").replace(
                     "Tasks reviewed:", field + "\nTasks reviewed:",
-                ))
+                ).encode("utf-8"))
                 result = check_handoffs.validate_wave(root, review=relative)
                 self.assertEqual(result["verdict"], "pass")
-                review.write_text(review.read_text().replace(field + "\n", "Lens: contract\n"))
+                review.write_bytes(review.read_text(encoding="utf-8").replace(field + "\n", "Lens: contract\n").encode("utf-8"))
                 with self.assertRaisesRegex(check_handoffs.HandoffError, "must not declare a review lens"):
                     check_handoffs.validate_wave(root, review=relative)
 
@@ -1846,18 +1837,18 @@ Tasks reviewed: 2
                     relative = ".project/review/FINAL.md"
                     validate = lambda: check_handoffs.validate_final(root)
                 intent = root / ".project/intent/INTENT.md"
-                intent.write_text(intent.read_text().replace(
+                intent.write_bytes(intent.read_text(encoding="utf-8").replace(
                     "1. The demo command prints hello.",
                     "1. The demo command prints\n   hello.\n   It preserves signed integers.",
-                ))
+                ).encode("utf-8"))
                 review = root / relative
-                original = review.read_text()
-                review.write_text(original.replace(
+                original = review.read_text(encoding="utf-8")
+                review.write_bytes(original.replace(
                     "### SC1 — The demo command prints hello.",
                     "### SC1 — The demo command prints hello. It preserves signed integers.",
-                ))
+                ).encode("utf-8"))
                 self.assertEqual(validate()["verdict"], "pass")
-                review.write_text(original)
+                review.write_bytes(original.encode("utf-8"))
                 with self.assertRaisesRegex(
                     check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
                 ):
@@ -1875,24 +1866,24 @@ Tasks reviewed: 2
                     acceptance="1. AC1 — `hello.py <integer>` prints\n   the signed integer.",
                 )
                 review = root / relative
-                original = review.read_text().replace(
+                original = review.read_text(encoding="utf-8").replace(
                     "## T001 — Demo task T001: pass", f"## T001 — Demo task T001: {verdict}"
                 )
                 if verdict == "fail":
                     original = original.replace("Wave verdict: pass", "Wave verdict: blocked")
                 old = "- ✅ The demo command prints hello. — ran hello.py"
-                review.write_text(original.replace(old, f"- {marker} {criterion} — ran hello.py 7; stdout 7"))
+                review.write_bytes(original.replace(old, f"- {marker} {criterion} — ran hello.py 7; stdout 7").encode("utf-8"))
                 result = check_handoffs.validate_wave(root, review=relative)
                 self.assertEqual(result["verdict"], "pass" if verdict == "pass" else "blocked")
                 for evidence in ("<observed result>", "none", ""):
                     with self.subTest(evidence=evidence):
-                        review.write_text(original.replace(old, f"- {marker} {criterion} — {evidence}"))
+                        review.write_bytes(original.replace(old, f"- {marker} {criterion} — {evidence}").encode("utf-8"))
                         with self.assertRaises(check_handoffs.HandoffError):
                             check_handoffs.validate_wave(root, review=relative)
-                review.write_text(original.replace(
+                review.write_bytes(original.replace(
                     old,
                     f"- {marker} AC1 — `other.py <integer>` prints the signed integer. — <observed result>",
-                ))
+                ).encode("utf-8"))
                 with self.assertRaisesRegex(check_handoffs.HandoffError, "placeholder"):
                     check_handoffs.validate_wave(root, review=relative)
 
@@ -1902,12 +1893,11 @@ Tasks reviewed: 2
             self.write_plan_handoff(root)
             relative = self.write_wave_review(root)
             review = root / relative
-            review.write_text(
+            review.write_bytes(
                 review.read_text(encoding="utf-8").replace(
                     "- ✅ The demo command prints hello. — ran hello.py",
                     "- ✅ none",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(check_handoffs.HandoffError, "is empty"):
@@ -1919,11 +1909,10 @@ Tasks reviewed: 2
             self.write_plan_handoff(root)
             relative = self.write_wave_review(root)
             review = root / relative
-            review.write_text(
+            review.write_bytes(
                 review.read_text(encoding="utf-8").replace(
                     "- ✅ hello.py output\n", ""
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -1947,9 +1936,8 @@ Tasks reviewed: 2
             self.write_plan_handoff(root)
             relative = self.write_wave_review(root)
             review = root / relative
-            review.write_text(
-                review.read_text(encoding="utf-8").replace("### SC2 —", "### SC9 —"),
-                encoding="utf-8",
+            review.write_bytes(
+                review.read_text(encoding="utf-8").replace("### SC2 —", "### SC9 —").encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
@@ -1973,12 +1961,11 @@ Tasks reviewed: 2
             self.write_plan_handoff(root)
             relative = self.write_wave_review(root)
             review = root / relative
-            review.write_text(
+            review.write_bytes(
                 review.read_text(encoding="utf-8").replace(
                     "## T002 — Demo task T002: pass",
                     "## T003 — Demo task T003: pass",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -2020,11 +2007,10 @@ Tasks reviewed: 2
             )
             relative = self.write_wave_review(root)
             review = root / relative
-            review.write_text(
+            review.write_bytes(
                 review.read_text(encoding="utf-8").replace(
                     "Tasks reviewed: 2", "Tasks reviewed: 1"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -2284,12 +2270,11 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root, check="none")
             final = root / ".project/review/FINAL.md"
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "- **Reference**: hello.py:1",
                     "- **Reference**: none",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
@@ -2316,14 +2301,13 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root, verdict="blocked")
             gap = root / ".project/review/final-gap-1.md"
-            gap.write_text(
+            gap.write_bytes(
                 gap.read_text(encoding="utf-8")
                 .replace("Gap verdict: pass", "Gap verdict: blocked")
                 .replace(
                     "- **Fix direction**: none",
                     "- **Fix direction**: Repair the integration and rerun the gap.",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = check_handoffs.validate_final(root)
@@ -2337,11 +2321,10 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root)
             final = root / ".project/review/FINAL.md"
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "- **Observed**: hello\n", ""
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -2356,12 +2339,11 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root)
             final = root / ".project/review/FINAL.md"
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "### SC1 — The demo command prints hello.",
                     "### SC1 — Something easier passes.",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -2376,13 +2358,12 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root)
             final = root / ".project/review/FINAL.md"
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "- **Finding**: none\n",
                     "- **Finding**: none\n- **Finding**: none\n",
                     1,
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -2398,10 +2379,10 @@ Waves checked: 1
                 self.write_intent_criteria(root)
                 self.write_final_review(root)
                 artifact = root / ".project/review" / name
-                text = artifact.read_text()
+                text = artifact.read_text(encoding="utf-8")
                 header = next(line for line in text.splitlines()
                               if line.startswith("Reviewed HEAD:"))
-                artifact.write_text(text + "\n## Recorded output\n\n" + header + "\n")
+                artifact.write_bytes((text + "\n## Recorded output\n\n" + header + "\n").encode("utf-8"))
                 with self.assertRaisesRegex(check_handoffs.HandoffError,
                                             "repeats Reviewed HEAD"):
                     check_handoffs.validate_final(root)
@@ -2453,9 +2434,8 @@ Waves checked: 1
             self.assertEqual(result["gaps"], [1])
 
             gap = root / ".project/review/final-gap-1.md"
-            gap.write_text(
-                gap.read_text(encoding="utf-8").replace(reviewed_head, "b" * 40),
-                encoding="utf-8",
+            gap.write_bytes(
+                gap.read_text(encoding="utf-8").replace(reviewed_head, "b" * 40).encode("utf-8"),
             )
             with self.assertRaises(check_handoffs.HandoffError) as failure:
                 check_handoffs.validate_final(root)
@@ -2468,11 +2448,10 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root)
             gap = root / ".project/review/final-gap-1.md"
-            gap.write_text(
+            gap.write_bytes(
                 gap.read_text(encoding="utf-8").replace(
                     "# Gap Review — 1:", "# Gap Review — 2:"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaises(check_handoffs.HandoffError) as failure:
@@ -2486,11 +2465,10 @@ Waves checked: 1
             self.write_intent_criteria(root)
             self.write_final_review(root)
             gap = root / ".project/review/final-gap-1.md"
-            gap.write_text(
+            gap.write_bytes(
                 gap.read_text(encoding="utf-8").replace(
                     "Risk: Project verify", "Risk: release packaging"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             with self.assertRaisesRegex(

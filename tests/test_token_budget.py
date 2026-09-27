@@ -22,8 +22,8 @@ class TokenBudgetTests(unittest.TestCase):
             self.assertEqual(configured.returncode, 0, configured.stderr)
             for index, usage in enumerate((3000, 1100)):
                 event = root / f"run-{index}.jsonl"
-                event.write_text(json.dumps({"type": "turn.completed", "usage": {"output_tokens": usage,
-                    "input_tokens": 10000, "reasoning_output_tokens": 100}}) + "\n")
+                event.write_bytes((json.dumps({"type": "turn.completed", "usage": {"output_tokens": usage,
+                    "input_tokens": 10000, "reasoning_output_tokens": 100}}) + "\n").encode("utf-8"))
                 for _ in range(2):
                     record = self.run_cli(root, "record", "--task", "plan", "--events", str(event))
                     self.assertEqual(record.returncode, 0, record.stderr)
@@ -51,9 +51,9 @@ class TokenBudgetTests(unittest.TestCase):
                          '--authority', 'owner policy')
             first, second = root / 'first.jsonl', root / 'second.jsonl'
             for path, total in ((first, 3000), (second, 4100)):
-                path.write_text('\n'.join(json.dumps(event) for event in [
+                path.write_bytes('\n'.join(json.dumps(event) for event in [
                     {'type': 'thread.started', 'thread_id': 'same-thread'},
-                    {'type': 'turn.completed', 'usage': {'output_tokens': total}}]))
+                    {'type': 'turn.completed', 'usage': {'output_tokens': total}}]).encode("utf-8"))
             self.assertEqual(self.run_cli(root, 'record', '--task', 'inspect', '--events', str(first)).returncode, 0)
             for _ in range(2):
                 result = self.run_cli(root, 'record', '--task', 'define', '--events', str(second),
@@ -64,12 +64,12 @@ class TokenBudgetTests(unittest.TestCase):
             self.assertEqual(admission['task_output_tokens'], 1100)
             self.assertEqual(admission['decision'], 'admit')
             saved = (root / 'budget.json').read_bytes()
-            first.write_text(first.read_text().replace('3000', '3500'))
+            first.write_bytes(first.read_text(encoding="utf-8").replace('3000', '3500').encode("utf-8"))
             result = self.run_cli(root, 'record', '--task', 'inspect', '--events', str(first))
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((root / 'budget.json').read_bytes(), saved)
-            first.write_text(first.read_text().replace('3500', '3000'))
-            second.write_text(second.read_text().replace('same-thread', 'other-thread'))
+            first.write_bytes(first.read_text(encoding="utf-8").replace('3500', '3000').encode("utf-8"))
+            second.write_bytes(second.read_text(encoding="utf-8").replace('same-thread', 'other-thread').encode("utf-8"))
             result = self.run_cli(root, 'record', '--task', 'define', '--events', str(second),
                                   '--previous-events', str(first))
             self.assertNotEqual(result.returncode, 0)
@@ -81,7 +81,7 @@ class TokenBudgetTests(unittest.TestCase):
             self.run_cli(root, "configure", "--task-limit", "4000", "--session-limit", "30000",
                          "--authority", "owner policy")
             event = root / "events.jsonl"
-            event.write_text(json.dumps({"type": "turn.completed", "usage": {"output_tokens": 30000}}) + "\n")
+            event.write_bytes((json.dumps({"type": "turn.completed", "usage": {"output_tokens": 30000}}) + "\n").encode("utf-8"))
             self.run_cli(root, "record", "--task", "orchestrator", "--events", str(event))
             result = self.run_cli(root, "admit", "--task", "new_task")
             self.assertNotEqual(result.returncode, 0)
@@ -94,7 +94,7 @@ class TokenBudgetTests(unittest.TestCase):
                          "--authority", "owner policy")
             before = (root / "budget.json").read_bytes()
             event = root / "incomplete.jsonl"
-            event.write_text(json.dumps({"type": "thread.started", "thread_id": "x"}) + "\n")
+            event.write_bytes((json.dumps({"type": "thread.started", "thread_id": "x"}) + "\n").encode("utf-8"))
             result = self.run_cli(root, "record", "--task", "plan", "--events", str(event))
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(before, (root / "budget.json").read_bytes())
@@ -111,12 +111,12 @@ class TokenBudgetTests(unittest.TestCase):
                     "total_token_usage": {"output_tokens": 3000, "reasoning_output_tokens": 100}}}},
                 {"type": "event_msg", "payload": {"type": "task_complete"}},
             ]
-            child.write_text("\n".join(json.dumps(event) for event in events))
+            child.write_bytes("\n".join(json.dumps(event) for event in events).encode("utf-8"))
             self.assertEqual(token_budget.output_usage(child), 3000)
             wrapped = root / "wrapped.jsonl"
-            wrapped.write_text(json.dumps({"raw": json.dumps({"type": "turn.completed", "usage": {
-                "output_tokens": 4100, "reasoning_output_tokens": 100}})}))
+            wrapped.write_bytes(json.dumps({"raw": json.dumps({"type": "turn.completed", "usage": {
+                "output_tokens": 4100, "reasoning_output_tokens": 100}})}).encode("utf-8"))
             self.assertEqual(token_budget.output_usage(wrapped), 4100)
-            child.write_text("\n".join(json.dumps(event) for event in events[:-1]))
+            child.write_bytes("\n".join(json.dumps(event) for event in events[:-1]).encode("utf-8"))
             with self.assertRaisesRegex(ValueError, "unavailable"):
                 token_budget.output_usage(child)

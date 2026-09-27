@@ -67,14 +67,14 @@ def prepare(host, directory, candidate):
     arm = directory / "quick"; repo = arm / "repo"; repo.mkdir(parents=True)
     g = lambda *a: sh(["git", *a], repo)
     g("init", "-q", "-b", "main"); g("config", "user.name", "Feature Evaluation"); g("config", "user.email", "evaluation@example.invalid")
-    (repo / "README.md").write_text("# Feature evaluation fixture\n"); (repo / "count.py").write_text(FIXTURE_SCRIPT)
+    (repo / "README.md").write_bytes("# Feature evaluation fixture\n".encode("utf-8")); (repo / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
     g("add", "."); g("commit", "-qm", "fixture: initial product")
     remote = arm / "origin.git"; sh(["git", "clone", "--quiet", "--bare", str(repo), str(remote)], arm); g("remote", "add", "origin", str(remote))
     install_cmd = ["node", str(plugin / "scripts/install.mjs"), spec.install_flag, "--local", "--project", str(repo), "--hooks", "--no-color"]
     output = sh(install_cmd, repo)
     g("add", "."); g("commit", "-qm", "fixture: install pinned candidate"); g("push", "-q", "-u", "origin", "main")
-    (arm / "install.json").write_text(json.dumps({"candidate": revision, "head": g("rev-parse", "HEAD"), "exit_code": 0,
-                                                  "command": " ".join(install_cmd), "output": output}, indent=2) + "\n")
+    (arm / "install.json").write_bytes((json.dumps({"candidate": revision, "head": g("rev-parse", "HEAD"), "exit_code": 0,
+                                                  "command": " ".join(install_cmd), "output": output}, indent=2) + "\n").encode("utf-8"))
     skill = repo / spec.skill_root / "gsd-path" / "SKILL.md"
     prompt = f"""{spec.invocation}
 
@@ -96,10 +96,10 @@ Use python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} --category
 <implementation|verification|review> -- <command> for measured shell work. That
 wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
 """ + RELEASE_ADDENDUM
-    (arm / "prompt.txt").write_text(prompt)
-    (directory / "manifest.json").write_text(json.dumps({"schema": "gsd-path/feature-evaluation/v1", "candidate": revision,
+    (arm / "prompt.txt").write_bytes(prompt.encode("utf-8"))
+    (directory / "manifest.json").write_bytes((json.dumps({"schema": "gsd-path/feature-evaluation/v1", "candidate": revision,
                                                         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-                                                        "scenarios": ["quick"], "host": host}, indent=2) + "\n")
+                                                        "scenarios": ["quick"], "host": host}, indent=2) + "\n").encode("utf-8"))
     return {"host": host, "candidate": revision, "repo": str(repo), "verified_live": spec.verified_live}
 
 
@@ -108,14 +108,14 @@ def run(host, directory, resume=None, prompt_file=None):
     arm = Path(directory).resolve() / "quick"
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")); run_dir.mkdir()
     prompt_path = run_dir / "prompt.txt"  # lives in the run dir: a host whose CLI writes files targets prompt_path.parent
-    prompt_path.write_text(Path(prompt_file or arm / "prompt.txt").read_text())
+    prompt_path.write_bytes(Path(prompt_file or arm / "prompt.txt").read_text(encoding="utf-8").encode("utf-8"))
     args = spec.command(prompt_path, resume)
     started = time.monotonic(); started_at = dt.datetime.now(dt.timezone.utc).isoformat(); lines = []
     with (run_dir / "stderr.txt").open("w") as err, (run_dir / "events.jsonl").open("w") as events:
         proc = subprocess.Popen(args, cwd=arm / "repo", stdin=subprocess.PIPE if spec.prompt_on_stdin else subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=err, text=True)
         if spec.prompt_on_stdin:
-            proc.stdin.write(prompt_path.read_text()); proc.stdin.close()
+            proc.stdin.write(prompt_path.read_text(encoding="utf-8")); proc.stdin.close()
         for line in proc.stdout:
             line = line.rstrip("\n"); lines.append(line)
             events.write(json.dumps({"elapsed_seconds": time.monotonic() - started, "raw": line}) + "\n"); events.flush()
@@ -123,7 +123,7 @@ def run(host, directory, resume=None, prompt_file=None):
     parsed = spec.parse_events(lines)
     result = {"host": host, "command": args, "exit_code": code, "started_at": started_at,
               "elapsed_seconds": time.monotonic() - started, "head": sh(["git", "rev-parse", "HEAD"], arm / "repo"), **parsed}
-    (run_dir / "run.json").write_text(json.dumps(result, indent=2) + "\n")
+    (run_dir / "run.json").write_bytes((json.dumps(result, indent=2) + "\n").encode("utf-8"))
     return result
 
 

@@ -17,10 +17,10 @@ class TaskContextTests(unittest.TestCase):
             repo = Path(directory)
             intent = repo / '.project/intent/INTENT.md'
             intent.parent.mkdir(parents=True)
-            intent.write_text('## Success criteria\n\n1. First outcome.\n2. Other outcome.\n\n'
-                              '## Constraints\n\nKeep the wire format.\n')
+            intent.write_bytes('## Success criteria\n\n1. First outcome.\n2. Other outcome.\n\n'
+                              '## Constraints\n\nKeep the wire format.\n'.encode("utf-8"))
             task = repo / 'T001.md'
-            task.write_text('## Intent coverage\n\n- SC1\n')
+            task.write_bytes('## Intent coverage\n\n- SC1\n'.encode("utf-8"))
             brief = dispatch_driver.brief_text(
                 dict(worktree=str(repo), task_id='T001', task_file='T001.md',
                      base='a' * 40, mode='serial'),
@@ -37,7 +37,7 @@ class TaskContextTests(unittest.TestCase):
             intent = repo / '.project/intent/INTENT.md'
             intent.parent.mkdir(parents=True)
             task = repo / 'T001.md'
-            task.write_text('# Task\n\n## Intent coverage\n\n- SC2\n')
+            task.write_bytes('# Task\n\n## Intent coverage\n\n- SC2\n'.encode("utf-8"))
             prefix = '# Intent\n\n## Summary\n\nKeep existing callers working.\n\n'
             suffix = ('## Scope: out (vetoes)\n\nNever publish customer data.\n\n'
                       '## Constraints\n\nUse the standard library.\n\n'
@@ -45,7 +45,7 @@ class TaskContextTests(unittest.TestCase):
                       '## Owner extension\n\nPreserve this unknown section verbatim.\n')
             criteria = '## Success criteria\n\n1. Unrelated export works.\n2. Assigned command works.\n   Preserve multiline detail.\n\n'
             original = prefix + criteria + suffix
-            intent.write_text(original)
+            intent.write_bytes(original.encode("utf-8"))
             command = [sys.executable, '-B', str(ROOT / 'scripts/task_context.py'),
                        '--repo', str(repo), '--task', str(task)]
             result = subprocess.run(command, capture_output=True, text=True)
@@ -57,7 +57,7 @@ class TaskContextTests(unittest.TestCase):
             self.assertIn(hashlib.sha256(original.encode()).hexdigest(), result.stdout)
             self.assertIn(str(intent), result.stdout)
             self.assertIn('Mode: owned-criteria', result.stdout)
-            self.assertEqual(intent.read_text(), original)
+            self.assertEqual(intent.read_text(encoding="utf-8"), original)
 
             # Bundled commands must work outside the source repository, too.
             for skill in ('gsd-path', 'gsd-path-build', 'path'):
@@ -67,14 +67,14 @@ class TaskContextTests(unittest.TestCase):
                 self.assertEqual(installed.returncode, 0, installed.stderr)
                 self.assertEqual(installed.stdout, result.stdout)
 
-            intent.write_text(original.replace('Keep compatibility.', 'Keep SC1 unchanged.'))
+            intent.write_bytes(original.replace('Keep compatibility.', 'Keep SC1 unchanged.').encode("utf-8"))
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('1. Unrelated export works.', result.stdout)
 
             # Unstructured text could carry a constraint: retain the complete input.
             ambiguous = original.replace('1. Unrelated', 'Never remove any command.\n1. Unrelated')
-            intent.write_text(ambiguous)
+            intent.write_bytes(ambiguous.encode("utf-8"))
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('Mode: full-intent', result.stdout)
@@ -87,7 +87,7 @@ class TaskContextTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(hashlib.sha256(windows_source).hexdigest(), result.stdout)
 
-            task.write_text('## Intent coverage\n\n- SC99\n')
+            task.write_bytes('## Intent coverage\n\n- SC99\n'.encode("utf-8"))
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('SC99', result.stderr)

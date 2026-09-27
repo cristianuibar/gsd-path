@@ -67,10 +67,10 @@ def make_source_clone(manager, version="1.2.0"):
     src = manager.src_dir
     (src / ".git").mkdir(parents=True)
     (src / "scripts").mkdir()
-    (src / "scripts" / "install.py").write_text("# installer\n", encoding="utf-8")
-    (src / "package.json").write_text(json.dumps({"version": version}), encoding="utf-8")
-    (src / "AGENTS.md").write_text("# agents template\n", encoding="utf-8")
-    (src / "WORKFLOW.md").write_text("# workflow template\n", encoding="utf-8")
+    (src / "scripts" / "install.py").write_bytes("# installer\n".encode("utf-8"))
+    (src / "package.json").write_bytes(json.dumps({"version": version}).encode("utf-8"))
+    (src / "AGENTS.md").write_bytes("# agents template\n".encode("utf-8"))
+    (src / "WORKFLOW.md").write_bytes("# workflow template\n".encode("utf-8"))
     return src
 
 
@@ -78,8 +78,8 @@ def make_global_install(manager, host, version="1.0.0"):
     root = manager.global_root(host)
     skill = root / "gsd-path"
     skill.mkdir(parents=True)
-    (skill / "VERSION").write_text(version + "\n", encoding="utf-8")
-    (skill / "SKILL.md").write_text("# gsd-path\n", encoding="utf-8")
+    (skill / "VERSION").write_bytes((version + "\n").encode("utf-8"))
+    (skill / "SKILL.md").write_bytes("# gsd-path\n".encode("utf-8"))
     return root
 
 
@@ -256,7 +256,7 @@ class SourceTests(unittest.TestCase):
         # age the cache past the TTL so a refresh is attempted
         cache = json.loads(manager.cache_path.read_text(encoding="utf-8"))
         cache["last_fetch_epoch"] = 0
-        manager.cache_path.write_text(json.dumps(cache), encoding="utf-8")
+        manager.cache_path.write_bytes(json.dumps(cache).encode("utf-8"))
         git.responses = [(1, "", "offline")]
         result = manager.refresh_source(ttl_hours=24)
         self.assertFalse(result["refreshed"])
@@ -297,27 +297,27 @@ class DetectionTests(unittest.TestCase):
         project = Path(self.tmp.name) / "proj"
         local = project / ".kimi-code" / "skills" / "gsd-path"
         local.mkdir(parents=True)
-        (local / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+        (local / "VERSION").write_bytes("1.0.0\n".encode("utf-8"))
         runtime = project / ".gsd-path" / "runtime"
         runtime.mkdir(parents=True)
-        (runtime / "pipeline_state.py").write_text(f"# {RUNTIME_MARKER}\n", encoding="utf-8")
-        (project / ".gsd-path" / "status_runtime.py").write_text(
-            f"# {STATUS_MARKER}\n", encoding="utf-8")
-        (project / ".gsd-path" / "guard_hook.py").write_text(f"# {GUARD_MARKER}\n", encoding="utf-8")
-        (project / ".gsd-path" / "git_guard.py").write_text(f"# {GUARD_MARKER}\n", encoding="utf-8")
-        (project / "AGENTS.md").write_text("x\n", encoding="utf-8")
-        (project / "WORKFLOW.md").write_text("y\n", encoding="utf-8")
+        (runtime / "pipeline_state.py").write_bytes(f"# {RUNTIME_MARKER}\n".encode("utf-8"))
+        (project / ".gsd-path" / "status_runtime.py").write_bytes(
+            f"# {STATUS_MARKER}\n".encode("utf-8"))
+        (project / ".gsd-path" / "guard_hook.py").write_bytes(f"# {GUARD_MARKER}\n".encode("utf-8"))
+        (project / ".gsd-path" / "git_guard.py").write_bytes(f"# {GUARD_MARKER}\n".encode("utf-8"))
+        (project / "AGENTS.md").write_bytes("x\n".encode("utf-8"))
+        (project / "WORKFLOW.md").write_bytes("y\n".encode("utf-8"))
         result = self.manager.detect_project(project)
         self.assertEqual(result["local_skills"], ["kimi"])
         self.assertTrue(result["runtime"])
         self.assertTrue(result["hooks"])
         self.assertTrue(result["contracts"])
         self.assertIsNone(result["runtime_version"])
-        (runtime / "VERSION").write_text("1.1.0\n")
+        (runtime / "VERSION").write_bytes("1.1.0\n".encode("utf-8"))
         self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.1.0")
-        (project / ".gsd-path/runtime.json").write_text(json.dumps({
+        (project / ".gsd-path/runtime.json").write_bytes(json.dumps({
             "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
-        }))
+        }).encode("utf-8"))
         self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.2.3")
         plan = self.manager.plan_uninstall_project(project)
         self.assertIn(str(runtime / "VERSION"), [entry["path"] for entry in plan["plan"]])
@@ -353,7 +353,7 @@ class UninstallPlanTests(unittest.TestCase):
         # managed name but no VERSION and no gsd-path SKILL.md -> kept
         impostor = root / "gsd-path-impostor"
         impostor.mkdir()
-        (impostor / "SKILL.md").write_text("# unrelated\n", encoding="utf-8")
+        (impostor / "SKILL.md").write_bytes("# unrelated\n".encode("utf-8"))
         # backup dir -> never touched
         backup = root / "disabled-gsd-skills-2026"
         backup.mkdir()
@@ -374,7 +374,7 @@ class UninstallPlanTests(unittest.TestCase):
     def test_global_plan_includes_cursor_agent_file(self):
         agent = self.manager.user_home / ".cursor" / "agents" / "gsd-path.md"
         agent.parent.mkdir(parents=True)
-        agent.write_text("# gsd-path subagent\n", encoding="utf-8")
+        agent.write_bytes("# gsd-path subagent\n".encode("utf-8"))
         plan = self.manager.plan_uninstall_global(["cursor"])
         paths = [entry["path"] for entry in plan["plan"]]
         self.assertIn(str(agent), paths)
@@ -391,21 +391,21 @@ class UninstallPlanTests(unittest.TestCase):
         runtime = project / ".gsd-path" / "runtime"
         runtime.mkdir(parents=True)
         managed = runtime / "pipeline_state.py"
-        managed.write_text(f"# {RUNTIME_MARKER}\n", encoding="utf-8")
+        managed.write_bytes(f"# {RUNTIME_MARKER}\n".encode("utf-8"))
         foreign = runtime / "custom.py"
-        foreign.write_text("# mine\n", encoding="utf-8")
+        foreign.write_bytes("# mine\n".encode("utf-8"))
         launcher = project / ".gsd-path" / "status_runtime.py"
-        launcher.write_text(f"# {STATUS_MARKER}\n", encoding="utf-8")
+        launcher.write_bytes(f"# {STATUS_MARKER}\n".encode("utf-8"))
         guard = project / ".gsd-path" / "guard_hook.py"
-        guard.write_text(f"# {GUARD_MARKER}\n", encoding="utf-8")
+        guard.write_bytes(f"# {GUARD_MARKER}\n".encode("utf-8"))
         declaration = project / ".gsd-path/runtime.json"
-        declaration.write_text(json.dumps({
+        declaration.write_bytes(json.dumps({
             "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
-        }))
+        }).encode("utf-8"))
         (project / "AGENTS.md").write_bytes((self.src / "AGENTS.md").read_bytes())
-        (project / "WORKFLOW.md").write_text("user edits\n", encoding="utf-8")
+        (project / "WORKFLOW.md").write_bytes("user edits\n".encode("utf-8"))
         (project / ".claude").mkdir()
-        (project / ".claude" / "CLAUDE.md").write_text(CLAUDE_BRIDGE, encoding="utf-8")
+        (project / ".claude" / "CLAUDE.md").write_bytes(CLAUDE_BRIDGE.encode("utf-8"))
         plan = self.manager.plan_uninstall_project(project)
         paths = [entry["path"] for entry in plan["plan"]]
         for expected in (managed, launcher, guard, declaration,
@@ -448,7 +448,7 @@ class UninstallPlanTests(unittest.TestCase):
     def test_project_uninstall_keeps_symlinked_agents(self):
         shared = Path(self.tmp.name) / "shared-agents.md"
         text = "<!-- gsd-path:begin -->\nx\n<!-- gsd-path:end -->\nshared\n"
-        shared.write_text(text, encoding="utf-8")
+        shared.write_bytes(text.encode("utf-8"))
         project = self._make_project()
         (project / "AGENTS.md").symlink_to(shared)
 
@@ -463,12 +463,12 @@ class UninstallPlanTests(unittest.TestCase):
         # lookalikes inside .project/ must never appear in the plan
         inside = project / ".project"
         (inside / ".gsd-path" / "runtime").mkdir(parents=True)
-        (inside / ".gsd-path" / "runtime" / "pipeline_state.py").write_text(
-            f"# {RUNTIME_MARKER}\n", encoding="utf-8")
+        (inside / ".gsd-path" / "runtime" / "pipeline_state.py").write_bytes(
+            f"# {RUNTIME_MARKER}\n".encode("utf-8"))
         (inside / "AGENTS.md").write_bytes((self.src / "AGENTS.md").read_bytes())
         local = inside / ".kimi-code" / "skills" / "gsd-path"
         local.mkdir(parents=True)
-        (local / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+        (local / "VERSION").write_bytes("1.0.0\n".encode("utf-8"))
         plan = self.manager.plan_uninstall_project(project)
         for entry in plan["plan"]:
             self.assertNotIn(".project", Path(entry["path"]).parts)
@@ -478,9 +478,9 @@ class UninstallPlanTests(unittest.TestCase):
         hooks_dir = project / ".git" / "hooks"
         hooks_dir.mkdir(parents=True)
         managed_hook = hooks_dir / "pre-commit"
-        managed_hook.write_text(f"#!/bin/sh\n# {GUARD_MARKER}: x\n", encoding="utf-8")
+        managed_hook.write_bytes(f"#!/bin/sh\n# {GUARD_MARKER}: x\n".encode("utf-8"))
         user_hook = hooks_dir / "commit-msg"
-        user_hook.write_text("#!/bin/sh\n# user hook\n", encoding="utf-8")
+        user_hook.write_bytes("#!/bin/sh\n# user hook\n".encode("utf-8"))
         plan = self.manager.plan_uninstall_project(project)
         paths = [entry["path"] for entry in plan["plan"]]
         self.assertIn(str(managed_hook), paths)
@@ -511,7 +511,7 @@ class UninstallPlanTests(unittest.TestCase):
                 "PostToolUse": [{"matcher": ".*", "hooks": []}],
             },
         }
-        settings.write_text(json.dumps(payload), encoding="utf-8")
+        settings.write_bytes(json.dumps(payload).encode("utf-8"))
         plan = self.manager.plan_uninstall_project(project)
         kinds = {entry["path"]: entry["kind"] for entry in plan["plan"]}
         self.assertEqual(kinds[str(settings)], "settings")
@@ -545,7 +545,7 @@ class UninstallPlanTests(unittest.TestCase):
                  "matcher": ".*", "failClosed": True},
             ]},
         }
-        settings.write_text(json.dumps(payload), encoding="utf-8")
+        settings.write_bytes(json.dumps(payload).encode("utf-8"))
         removed = []
         manager = make_manager(self.tmp.name,
                                remove_file=lambda p: removed.append(p),
@@ -561,7 +561,7 @@ class UninstallPlanTests(unittest.TestCase):
         project = self._make_project()
         (project / ".claude").mkdir()
         settings = project / ".claude" / "settings.json"
-        settings.write_text("{not json", encoding="utf-8")
+        settings.write_bytes("{not json".encode("utf-8"))
         plan = self.manager.plan_uninstall_project(project)
         skipped = {entry["path"]: entry["reason"] for entry in plan["skipped"]}
         self.assertIn(str(settings), skipped)
@@ -601,7 +601,7 @@ class EndpointTests(unittest.TestCase):
         parent = Path(cls.tmp.name) / "work"
         project = parent / "demo"
         (project / ".project").mkdir(parents=True)
-        (project / ".project" / "STATE.md").write_text(STATE, encoding="utf-8")
+        (project / ".project" / "STATE.md").write_bytes(STATE.encode("utf-8"))
         cls.project = project
         cls.manager = make_manager(cls.tmp.name)
         make_global_install(cls.manager, "kimi", version="1.0.0")

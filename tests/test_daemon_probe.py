@@ -108,7 +108,7 @@ def make_task(project_dir: Path, task_id: str, slug: str, wave: int, status: str
     title = title or f"Task {task_id}"
     files_block = "\n".join(f"  - {path}" for path in files)
     path = tasks_dir / f"{task_id}-{slug}.md"
-    path.write_text(
+    path.write_bytes(
         f"""---
 id: {task_id}
 title: {title}
@@ -124,8 +124,7 @@ files:
 ---
 
 # {task_id} — {title}
-""",
-        encoding="utf-8",
+""".encode("utf-8"),
     )
     return path
 
@@ -133,17 +132,17 @@ files:
 def make_project(root: Path, state: str = STATE_FULL, with_next: bool = True) -> Path:
     project_dir = root / ".project"
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "STATE.md").write_text(state, encoding="utf-8")
+    (project_dir / "STATE.md").write_bytes(state.encode("utf-8"))
     make_task(project_dir, "T001", "first-task", wave=1, status="done", title="First task")
     make_task(project_dir, "T002", "second-task", wave=1, status="in-progress", title="Second task",
               files=("src/b.py", "src/c.py"))
     make_task(project_dir, "T003", "third-task", wave=2, status="pending", title="Third task")
     (project_dir / "plan").mkdir(exist_ok=True)
-    (project_dir / "plan" / "PLAN.md").write_text(PLAN, encoding="utf-8")
-    (project_dir / "ROADMAP.md").write_text(ROADMAP, encoding="utf-8")
+    (project_dir / "plan" / "PLAN.md").write_bytes(PLAN.encode("utf-8"))
+    (project_dir / "ROADMAP.md").write_bytes(ROADMAP.encode("utf-8"))
     if with_next:
         (project_dir / "next").mkdir(exist_ok=True)
-        (project_dir / "next" / "STATE.md").write_text(NEXT_STATE, encoding="utf-8")
+        (project_dir / "next" / "STATE.md").write_bytes(NEXT_STATE.encode("utf-8"))
     return root
 
 
@@ -169,7 +168,7 @@ class ParseStateTests(unittest.TestCase):
 
     def test_parse_state_legacy_minimal(self) -> None:
         path = Path(self.tmp.name) / "legacy.md"
-        path.write_text(STATE_LEGACY, encoding="utf-8")
+        path.write_bytes(STATE_LEGACY.encode("utf-8"))
         state = probe.parse_state_file(path)
         self.assertEqual(state["project"], "legacy")
         self.assertEqual(state["phase"], "define")
@@ -179,11 +178,11 @@ class ParseStateTests(unittest.TestCase):
 
     def test_parse_state_tolerates_garbage(self) -> None:
         path = Path(self.tmp.name) / "garbage.md"
-        path.write_text("not frontmatter at all\n---\npipeline: gsd-path/v2\n", encoding="utf-8")
+        path.write_bytes("not frontmatter at all\n---\npipeline: gsd-path/v2\n".encode("utf-8"))
         self.assertEqual(probe.parse_state_file(path), {})
         self.assertEqual(probe.parse_state_file(path.with_name("missing.md")), {})
         malformed = Path(self.tmp.name) / "malformed.md"
-        malformed.write_text("---\n!!!not yaml!!!\npipeline: gsd-path/v2\n: : :\n---\n", encoding="utf-8")
+        malformed.write_bytes("---\n!!!not yaml!!!\npipeline: gsd-path/v2\n: : :\n---\n".encode("utf-8"))
         self.assertEqual(probe.parse_state_file(malformed).get("pipeline"), "gsd-path/v2")
 
     def test_is_project_root(self) -> None:
@@ -212,7 +211,7 @@ class ParseTaskTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8").replace(
             "files:\n  - src/a.py", "files: [src/x.py, src/y.py]"
         )
-        path.write_text(text, encoding="utf-8")
+        path.write_bytes(text.encode("utf-8"))
         task = probe.parse_task_file(path)
         self.assertEqual(task.files, ["src/x.py", "src/y.py"])
 
@@ -234,10 +233,9 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_roadmap_depends_and_integrated(self) -> None:
         path = Path(self.tmp.name) / "roadmap2.md"
-        path.write_text(
+        path.write_bytes(
             "### M002 — two\n\nGoal: second thing\nDepends on: [M001, M000]\nStatus: shipped\n"
-            "Archive: .project/archive/002-two\nIntegrated: 158ab3a6554e3d6be083e4a752583763a5d682a5\n",
-            encoding="utf-8",
+            "Archive: .project/archive/002-two\nIntegrated: 158ab3a6554e3d6be083e4a752583763a5d682a5\n".encode("utf-8"),
         )
         milestone = probe.parse_roadmap(path)[0]
         self.assertEqual(milestone["depends"], ["M001", "M000"])
@@ -246,10 +244,9 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_manifest(self) -> None:
         path = Path(self.tmp.name) / "MANIFEST.md"
-        path.write_text(
+        path.write_bytes(
             "# Archive — 004-x\n\nMilestone: x\nShipped: 2026-09-08\nFinal verdict: all criteria met\n"
-            "Waves: 14  Tasks: 18 done / 18 total  Review cycles used: 1/2/3/2\nCarried forward: 3 DOCS-AUDIT ruling(s)\n",
-            encoding="utf-8",
+            "Waves: 14  Tasks: 18 done / 18 total  Review cycles used: 1/2/3/2\nCarried forward: 3 DOCS-AUDIT ruling(s)\n".encode("utf-8"),
         )
         self.assertEqual(probe.parse_manifest(path), {
             "shipped": "2026-09-08", "verdict": "all criteria met", "waves": 14,
@@ -259,10 +256,9 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_phase_log_collapses_repeats(self) -> None:
         path = Path(self.tmp.name) / "STATE-log.md"
-        path.write_text(
+        path.write_bytes(
             "## Log\n- 2026-08-26 — define — started\n- 2026-08-26 — define — charter approved\n"
-            "- 2026-08-27 — research — started\n- 2026-09-10 — build — started\n",
-            encoding="utf-8",
+            "- 2026-08-27 — research — started\n- 2026-09-10 — build — started\n".encode("utf-8"),
         )
         self.assertEqual(probe.parse_phase_log(path), [
             {"phase": "define", "date": "2026-08-26"},
@@ -273,11 +269,10 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_phase_log_scopes_to_current_milestone(self) -> None:
         path = Path(self.tmp.name) / "STATE-log2.md"
-        path.write_text(
+        path.write_bytes(
             "## Log\n- 2026-08-26 — inspect — initialized\n- 2026-08-26 — define — started\n"
             "- 2026-08-27 — build — started\n- 2026-08-30 — shipped — done\n"
-            "- 2026-09-01 — define — next milestone\n- 2026-09-02 — plan — started\n",
-            encoding="utf-8",
+            "- 2026-09-01 — define — next milestone\n- 2026-09-02 — plan — started\n".encode("utf-8"),
         )
         self.assertEqual(probe.parse_phase_log(path), [
             {"phase": "define", "date": "2026-09-01"},
@@ -286,11 +281,10 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_parse_phase_log_keeps_each_phase_once_dating_current_by_latest(self) -> None:
         path = Path(self.tmp.name) / "STATE-log3.md"
-        path.write_text(
+        path.write_bytes(
             "## Log\n- 2026-09-01 — define — started\n- 2026-09-02 — plan — started\n"
             "- 2026-09-03 — build — started\n- 2026-09-04 — ship — started\n"
-            "- 2026-09-05 — plan — patch\n- 2026-09-06 — build — patch\n",
-            encoding="utf-8",
+            "- 2026-09-05 — plan — patch\n- 2026-09-06 — build — patch\n".encode("utf-8"),
         )
         self.assertEqual(probe.parse_phase_log(path), [
             {"phase": "define", "date": "2026-09-01"},
@@ -301,19 +295,18 @@ class ParseTaskTests(unittest.TestCase):
 
     def test_section_paragraph_and_latest_lesson(self) -> None:
         charter = Path(self.tmp.name) / "CHARTER.md"
-        charter.write_text("# Charter\n\nReview panel: off\n\n## Vision\n\nFirst line\ncontinues here.\n\nSecond paragraph.\n\n## Scope\n- x\n", encoding="utf-8")
+        charter.write_bytes("# Charter\n\nReview panel: off\n\n## Vision\n\nFirst line\ncontinues here.\n\nSecond paragraph.\n\n## Scope\n- x\n".encode("utf-8"))
         self.assertEqual(probe._section_paragraph(charter, "Vision"), "First line continues here.")
         self.assertIsNone(probe._section_paragraph(charter, "Missing"))
         lessons = Path(self.tmp.name) / "LESSONS.md"
-        lessons.write_text("- 001-a — first lesson\n- 002-b — latest lesson\n\n", encoding="utf-8")
+        lessons.write_bytes("- 001-a — first lesson\n- 002-b — latest lesson\n\n".encode("utf-8"))
         self.assertEqual(probe.parse_latest_lesson(lessons), "002-b — latest lesson")
         self.assertIsNone(probe.parse_latest_lesson(lessons.with_name("nope.md")))
 
     def test_parse_roadmap_archive_path(self) -> None:
         path = Path(self.tmp.name) / "roadmap.md"
-        path.write_text(
-            "### M001 — done-ms\n\nStatus: shipped\nArchive: .project/archive/001-done-ms\n",
-            encoding="utf-8",
+        path.write_bytes(
+            "### M001 — done-ms\n\nStatus: shipped\nArchive: .project/archive/001-done-ms\n".encode("utf-8"),
         )
         milestones = probe.parse_roadmap(path)
         self.assertEqual(milestones[0]["archive"], ".project/archive/001-done-ms")
@@ -364,10 +357,9 @@ class ProbeProjectTests(unittest.TestCase):
         make_project(self.root)
         tasks_dir = self.root / ".project" / "tasks"
         for path in tasks_dir.iterdir():
-            path.write_text(
+            path.write_bytes(
                 path.read_text(encoding="utf-8").replace("status: in-progress", "status: done")
-                .replace("status: pending", "status: done"),
-                encoding="utf-8",
+                .replace("status: pending", "status: done").encode("utf-8"),
             )
         status = probe.probe_project(self.root)
         self.assertIsNone(status.current_wave)
@@ -400,7 +392,7 @@ class ProbeProjectTests(unittest.TestCase):
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
-        (runtime_dir / "pipeline_state.py").write_text(RUNTIME_STUB, encoding="utf-8")
+        (runtime_dir / "pipeline_state.py").write_bytes(RUNTIME_STUB.encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(status.status_source, "runtime")
         self.assertEqual(status.pending_answers, [{"id": "Q001"}])
@@ -415,7 +407,7 @@ class ProbeProjectTests(unittest.TestCase):
                                 (False, False), (True, True), (None, None)):
             with self.subTest(dirty=dirty):
                 stub = RUNTIME_STUB.replace('"dirty": False', '"dirty": ' + repr(dirty))
-                (runtime / "pipeline_state.py").write_text(stub, encoding="utf-8")
+                (runtime / "pipeline_state.py").write_bytes(stub.encode("utf-8"))
                 status = probe.probe_project(self.root)
                 self.assertEqual(status.status_source, "runtime")
                 self.assertIs(status.to_dict()["git"]["dirty"], expected)
@@ -424,7 +416,7 @@ class ProbeProjectTests(unittest.TestCase):
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
-        (runtime_dir / "pipeline_state.py").write_text("raise SystemExit(1)\n", encoding="utf-8")
+        (runtime_dir / "pipeline_state.py").write_bytes("raise SystemExit(1)\n".encode("utf-8"))
         status = probe.probe_project(self.root)
         self.assertEqual(status.status_source, "parse-only")
 
@@ -432,7 +424,7 @@ class ProbeProjectTests(unittest.TestCase):
         make_project(self.root)
         runtime_dir = self.root / ".gsd-path" / "runtime"
         runtime_dir.mkdir(parents=True)
-        (runtime_dir / "pipeline_state.py").write_text(RUNTIME_STUB, encoding="utf-8")
+        (runtime_dir / "pipeline_state.py").write_bytes(RUNTIME_STUB.encode("utf-8"))
         status = probe.probe_project(self.root, enrich=False)
         self.assertEqual(status.status_source, "parse-only")
         self.assertEqual(status.pending_answers, [])
@@ -573,11 +565,11 @@ class ReviewParsingTests(unittest.TestCase):
         self.review_dir.mkdir()
 
     def test_parse_reviews(self) -> None:
-        (self.review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW, encoding="utf-8")
-        (self.review_dir / "wave-2.cycle2.md").write_text(WAVE_REVIEW_BLOCKED, encoding="utf-8")
-        (self.review_dir / "FINAL.md").write_text(FINAL_REVIEW, encoding="utf-8")
-        (self.review_dir / "final-gap-1.md").write_text(GAP_REVIEW, encoding="utf-8")
-        (self.review_dir / "PATCH-FINDINGS.md").write_text(PATCH_FINDINGS, encoding="utf-8")
+        (self.review_dir / "wave-1.cycle1.md").write_bytes(WAVE_REVIEW.encode("utf-8"))
+        (self.review_dir / "wave-2.cycle2.md").write_bytes(WAVE_REVIEW_BLOCKED.encode("utf-8"))
+        (self.review_dir / "FINAL.md").write_bytes(FINAL_REVIEW.encode("utf-8"))
+        (self.review_dir / "final-gap-1.md").write_bytes(GAP_REVIEW.encode("utf-8"))
+        (self.review_dir / "PATCH-FINDINGS.md").write_bytes(PATCH_FINDINGS.encode("utf-8"))
         reviews = probe.parse_reviews(self.review_dir)
         by_file = {review["file"]: review for review in reviews}
         self.assertEqual([review["file"] for review in reviews],
@@ -603,8 +595,8 @@ class ReviewParsingTests(unittest.TestCase):
         self.assertEqual(patch["verdict"], "pass")
 
     def test_parse_reviews_tolerates_garbage(self) -> None:
-        (self.review_dir / "wave-9.cycle1.md").write_text("no verdicts here\n", encoding="utf-8")
-        (self.review_dir / "notes.txt").write_text("not markdown\n", encoding="utf-8")
+        (self.review_dir / "wave-9.cycle1.md").write_bytes("no verdicts here\n".encode("utf-8"))
+        (self.review_dir / "notes.txt").write_bytes("not markdown\n".encode("utf-8"))
         reviews = probe.parse_reviews(self.review_dir)
         self.assertEqual(len(reviews), 1)
         self.assertIsNone(reviews[0]["verdict"])
@@ -617,7 +609,7 @@ class ReviewParsingTests(unittest.TestCase):
 
     def test_parse_final_criteria(self) -> None:
         path = self.review_dir / "FINAL.md"
-        path.write_text(FINAL_REVIEW, encoding="utf-8")
+        path.write_bytes(FINAL_REVIEW.encode("utf-8"))
         criteria = probe.parse_final_criteria(path)
         self.assertEqual(criteria, [
             {"id": "SC1", "text": "daemon discovers v2 projects under watched parents",
@@ -648,7 +640,7 @@ class LedgerParsingTests(unittest.TestCase):
             }))
         lines.insert(3, "not json at all")
         lines.insert(5, json.dumps([1, 2, 3]))
-        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
         ledger = probe.parse_verify_ledger(self.path)
         self.assertEqual(len(ledger), 20)
         self.assertEqual(ledger[0]["command"], "cmd-24")
@@ -669,7 +661,7 @@ class AnswersParsingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "ANSWERS.md"
-        self.path.write_text(ANSWERS_MD, encoding="utf-8")
+        self.path.write_bytes(ANSWERS_MD.encode("utf-8"))
 
     def test_parse_pending_answers(self) -> None:
         pending = probe.parse_pending_answers(self.path)
@@ -723,7 +715,7 @@ class UsageParsingTests(unittest.TestCase):
              "cost": 0.05},
         ]
         lines = [json.dumps(entry) for entry in entries] + ["garbage line"]
-        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
         usage = probe.parse_usage(self.path)
         self.assertEqual(usage["tokens_in"], 4500)
         self.assertEqual(usage["tokens_out"], 2000)
@@ -744,7 +736,7 @@ class UsageParsingTests(unittest.TestCase):
     def test_parse_usage_by_task_complete(self) -> None:
         lines = [json.dumps({"task": f"T{i:03d}", "tokens_in": i, "tokens_out": 0})
                  for i in range(15)]
-        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
         usage = probe.parse_usage(self.path)
         self.assertEqual(len(usage["by_task"]), 15)
         self.assertEqual(usage["by_task"][0]["task"], "T014")
@@ -753,7 +745,7 @@ class UsageParsingTests(unittest.TestCase):
         self.assertIsNone(probe.parse_usage(self.path))
 
     def test_parse_usage_empty_file(self) -> None:
-        self.path.write_text("", encoding="utf-8")
+        self.path.write_bytes("".encode("utf-8"))
         usage = probe.parse_usage(self.path)
         self.assertEqual(usage["tokens_in"], 0)
         self.assertEqual(usage["models"], [])
@@ -783,8 +775,7 @@ class TimeInPhaseTests(unittest.TestCase):
             {"type": "phase-changed", "root": "/somewhere/else", "detail": "a -> b",
              "at": at},
         ]
-        self.history.write_text("".join(json.dumps(e) + "\n" for e in events),
-                                encoding="utf-8")
+        self.history.write_bytes("".join(json.dumps(e) + "\n" for e in events).encode("utf-8"))
         before = datetime.now(timezone.utc)
         status = self._probe()
         after = datetime.now(timezone.utc)
@@ -837,24 +828,22 @@ class ProbeNewFieldsTests(unittest.TestCase):
         project_dir = self.root / ".project"
         review_dir = project_dir / "review"
         review_dir.mkdir()
-        (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW, encoding="utf-8")
-        (review_dir / "FINAL.md").write_text(FINAL_REVIEW, encoding="utf-8")
+        (review_dir / "wave-1.cycle1.md").write_bytes(WAVE_REVIEW.encode("utf-8"))
+        (review_dir / "FINAL.md").write_bytes(FINAL_REVIEW.encode("utf-8"))
         build_dir = project_dir / "build"
         build_dir.mkdir()
-        (build_dir / "verify-ledger.jsonl").write_text(
-            json.dumps({"command": "make test", "commit": "abc1234", "result": "pass",
-                        "recorded_at": "2026-09-11T12:00:00+00:00"}) + "\n",
-            encoding="utf-8",
+        (build_dir / "verify-ledger.jsonl").write_bytes(
+            (json.dumps({"command": "make test", "commit": "abc1234", "result": "pass",
+                        "recorded_at": "2026-09-11T12:00:00+00:00"}) + "\n").encode("utf-8"),
         )
-        (build_dir / "usage.jsonl").write_text(
-            json.dumps({"task": "T001", "model": "kimi-k2", "family": "kimi",
+        (build_dir / "usage.jsonl").write_bytes(
+            (json.dumps({"task": "T001", "model": "kimi-k2", "family": "kimi",
                         "tokens_in": 100, "tokens_out": 50, "cost": 0.01,
-                        "phase": "build"}) + "\n",
-            encoding="utf-8",
+                        "phase": "build"}) + "\n").encode("utf-8"),
         )
         discuss_dir = project_dir / "discuss"
         discuss_dir.mkdir()
-        (discuss_dir / "ANSWERS.md").write_text(ANSWERS_MD, encoding="utf-8")
+        (discuss_dir / "ANSWERS.md").write_bytes(ANSWERS_MD.encode("utf-8"))
         status = self._probe()
         self.assertEqual(len(status.reviews), 2)
         self.assertEqual(len(status.criteria), 2)

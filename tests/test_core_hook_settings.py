@@ -71,7 +71,7 @@ class HookSettingsTests(unittest.TestCase):
         data = json.loads(self.original)
         path_command = shlex.join([sys.executable, "-B", str(SCRIPT.with_name("guard_hook.py"))])
         data["hooks"]["PreToolUse"][0]["hooks"][1]["command"] = path_command
-        self.settings.write_text(json.dumps(data))
+        self.settings.write_bytes(json.dumps(data).encode("utf-8"))
         self.assertEqual(self.command("plan").returncode, 0)
         self.assertEqual(self.command("apply").returncode, 0)
         hooks = json.loads(self.settings.read_bytes())["hooks"]["PreToolUse"][0]["hooks"]

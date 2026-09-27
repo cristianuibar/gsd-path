@@ -47,25 +47,25 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             head, _ = self.fixture(root)
-            (root / "precious.txt").write_text("keep")
+            (root / "precious.txt").write_bytes("keep".encode("utf-8"))
             with self.assertRaises(isolation.IsolationError):
                 isolation.clean_verify(root, root, head, "gsd-path/verify/example")
-            self.assertEqual((root / "precious.txt").read_text(), "keep")
+            self.assertEqual((root / "precious.txt").read_text(encoding="utf-8"), "keep")
             (root / "precious.txt").unlink()
             sidecar = isolation.isolate_verify(root, head, "changed")
             worktree = Path(sidecar["worktree"])
             git(worktree, "commit", "--allow-empty", "-qm", "unexpected commit")
-            (worktree / "precious.txt").write_text("keep")
+            (worktree / "precious.txt").write_bytes("keep".encode("utf-8"))
             with self.assertRaisesRegex(isolation.IsolationError, "HEAD changed"):
                 isolation.clean_verify(root, worktree, head, sidecar["branch"])
-            self.assertEqual((worktree / "precious.txt").read_text(), "keep")
+            self.assertEqual((worktree / "precious.txt").read_text(encoding="utf-8"), "keep")
 
     def test_uncommitted_contract_is_not_verified_at_committed_head(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             head, _ = self.fixture(root)
             plan = root / ".project/plan/PLAN.md"
-            plan.write_text(plan.read_text().replace("python3 -m unittest discover", "false"))
+            plan.write_bytes(plan.read_text(encoding="utf-8").replace("python3 -m unittest discover", "false").encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "uncommitted"):
                 lean_verification.verify_project(root, head)
             self.assertFalse((root / ".project/build/verify-ledger.jsonl").exists())
@@ -75,7 +75,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             root = Path(tmp)
             self.fixture(root)
             plan = root / ".project/plan/PLAN.md"
-            plan.write_text(plan.read_text().replace("python3 -m unittest discover", "echo broken >&2; exit 7"))
+            plan.write_bytes(plan.read_text(encoding="utf-8").replace("python3 -m unittest discover", "echo broken >&2; exit 7").encode("utf-8"))
             git(root, "add", ".")
             git(root, "commit", "-qm", "failing verify")
             head = git_output(root, "rev-parse", "HEAD")
@@ -128,27 +128,27 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             self.fixture(root)
             counter = Path(tmp) / "executions.txt"
             program = root / "verify.py"
-            program.write_text(
+            program.write_bytes(
                 "from pathlib import Path\n"
                 f"with Path({str(counter)!r}).open('a') as f: f.write('run\\n')\n"
                 "Path('hello.py').write_text('generated change')\n"
                 "Path('generated.txt').write_text('output')\n"
-                "print('verified in ' + str(Path.cwd()))\n"
+                "print('verified in ' + str(Path.cwd()))\n".encode("utf-8")
             )
             plan = root / ".project/plan/PLAN.md"
             command = f"{shlex.quote(sys.executable)} -B verify.py"
-            plan.write_text(plan.read_text().replace("python3 -m unittest discover", command))
+            plan.write_bytes(plan.read_text(encoding="utf-8").replace("python3 -m unittest discover", command).encode("utf-8"))
             git(root, "add", ".")
             git(root, "commit", "-qm", "verification command")
             head = git_output(root, "rev-parse", "HEAD")
             result = lean_verification.verify_project(root, head)
             self.assertTrue(result["passed"])
             self.assertFalse(result["reused"])
-            self.assertEqual(counter.read_text(), "run\n")
+            self.assertEqual(counter.read_text(encoding="utf-8"), "run\n")
             gap = root / ".project/review/final-gap-1.md"
-            self.assertIn(".project/build/verify-ledger.jsonl", gap.read_text())
-            self.assertNotIn("verified in", gap.read_text())
-            self.assertEqual((root / "hello.py").read_text(), "print('hello')\n")
+            self.assertIn(".project/build/verify-ledger.jsonl", gap.read_text(encoding="utf-8"))
+            self.assertNotIn("verified in", gap.read_text(encoding="utf-8"))
+            self.assertEqual((root / "hello.py").read_text(encoding="utf-8"), "print('hello')\n")
             self.assertFalse((root / "generated.txt").exists())
             self.assertEqual(git_output(root, "worktree", "list", "--porcelain").count("worktree "), 1)
             ledger = root / ".project/build/verify-ledger.jsonl"
@@ -157,8 +157,8 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             result = lean_verification.verify_project(root, head)
             self.assertTrue(result["reused"])
             self.assertTrue(result["passed"])
-            self.assertIn(".project/build/verify-ledger.jsonl", gap.read_text())
-            self.assertEqual(counter.read_text(), "run\n")
+            self.assertIn(".project/build/verify-ledger.jsonl", gap.read_text(encoding="utf-8"))
+            self.assertEqual(counter.read_text(encoding="utf-8"), "run\n")
             self.assertEqual(ledger.read_bytes(), before)
             self.assertEqual(json.loads(before)["execution"]["exit_code"], 0)
             self.assertIn("verified in", json.loads(before)["execution"]["stdout"])
@@ -178,16 +178,16 @@ Walkthrough:
 1. Run python3 hello.py and observe hello.
 """)
         intent = root / ".project/intent/INTENT.md"
-        intent.write_text(intent.read_text().replace("# Intent — demo", f"# Intent — demo\n\n{lane_line}"))
-        (root / "hello.py").write_text("print('hello')\n")
-        (root / "test_hello.py").write_text(
+        intent.write_bytes(intent.read_text(encoding="utf-8").replace("# Intent — demo", f"# Intent — demo\n\n{lane_line}").encode("utf-8"))
+        (root / "hello.py").write_bytes("print('hello')\n".encode("utf-8"))
+        (root / "test_hello.py").write_bytes(
             "import subprocess\n"
             "import sys\n"
             "import unittest\n\n"
             "class HelloTests(unittest.TestCase):\n"
             "    def test_output(self):\n"
             "        output = subprocess.check_output([sys.executable, 'hello.py'], text=True)\n"
-            "        self.assertEqual(output, 'hello\\n')\n"
+            "        self.assertEqual(output, 'hello\\n')\n".encode("utf-8")
         )
         git(root, "init", "-q", "-b", "gsd-path/M001")
         # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
@@ -199,13 +199,13 @@ Walkthrough:
         reviewed = git_output(root, "rev-parse", "HEAD")
         relative = helper.write_wave_review(root)
         wave = root / relative
-        text = wave.read_text().replace("Wave verdict: pass", f"Reviewed HEAD: {reviewed}\nReview scope: final\nWave verdict: pass")
+        text = wave.read_text(encoding="utf-8").replace("Wave verdict: pass", f"Reviewed HEAD: {reviewed}\nReview scope: final\nWave verdict: pass")
         if surface:
             text = text.replace("- ✅ hello.py output", """- ✅ hello.py output
 - **Surface**: CLI
 - **Check**: `python3 hello.py`
 - **Observed**: hello followed by newline""")
-        wave.write_text(text)
+        wave.write_bytes(text.encode("utf-8"))
         git(root, "add", ".project")
         git(root, "commit", "-qm", "record full wave review")
         helper.write_state(root, "ship", "active")
@@ -252,7 +252,7 @@ Walkthrough:
             result = lean_verification.reuse_final(root, head)
             self.assertTrue(result["reused"], result)
             final = root / ".project/review/FINAL.md"
-            self.assertIn("hello followed by newline", final.read_text())
+            self.assertIn("hello followed by newline", final.read_text(encoding="utf-8"))
             self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
 
     def test_wave_surface_state_converts_without_accepting_a_different_surface(self):
@@ -260,7 +260,7 @@ Walkthrough:
             with self.subTest(surface=named), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 _, wave = self.fixture(root, surface=True)
-                wave.write_text(wave.read_text().replace("- **Surface**: CLI", f"- **Surface**: {named}"))
+                wave.write_bytes(wave.read_text(encoding="utf-8").replace("- **Surface**: CLI", f"- **Surface**: {named}").encode("utf-8"))
                 before = wave.read_bytes()
                 git(root, "add", str(wave.relative_to(root)))
                 git(root, "commit", "-qm", "record surface state in wave evidence")
@@ -273,7 +273,7 @@ Walkthrough:
                 final = root / ".project/review/FINAL.md"
                 if expected:
                     self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
-                    self.assertIn("hello followed by newline", final.read_text())
+                    self.assertIn("hello followed by newline", final.read_text(encoding="utf-8"))
                 else:
                     self.assertFalse(final.exists())
 
@@ -284,7 +284,7 @@ Walkthrough:
                 root = Path(tmp)
                 _, _wave = self.fixture(root)
                 path = root / name
-                path.write_text(path.read_text() + "\nchanged\n")
+                path.write_bytes((path.read_text(encoding="utf-8") + "\nchanged\n").encode("utf-8"))
                 git(root, "add", name)
                 git(root, "commit", "-qm", "change review input")
                 test_handoffs.HandoffValidationTests().write_final_review(root)
@@ -299,7 +299,7 @@ Walkthrough:
             with self.subTest(removed=removed), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 head, wave = self.fixture(root, surface=True)
-                wave.write_text(wave.read_text().replace(removed, ""))
+                wave.write_bytes(wave.read_text(encoding="utf-8").replace(removed, "").encode("utf-8"))
                 git(root, "add", str(wave.relative_to(root)))
                 git(root, "commit", "-qm", "record incomplete review")
                 head = git_output(root, "rev-parse", "HEAD")

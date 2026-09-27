@@ -158,10 +158,9 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             (project / "intent").mkdir(parents=True)
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — first\n\nLane: quick\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: plan done")
@@ -180,7 +179,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture")
             run_git(repo, "checkout", "-b", "other")
@@ -205,17 +204,15 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="plan", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="plan", status="active").encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"),
-                encoding="utf-8",
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8"),
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", parent)
@@ -248,27 +245,25 @@ class PipelineDiagnoseTests(unittest.TestCase):
             project = repo / ".project"
             discussion = project / "discuss"
             discussion.mkdir(parents=True)
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             (project / "intent").mkdir()
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — first\n\nLane: quick\n", encoding="utf-8"
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8")
             )
-            (discussion / "DIALOGUE.md").write_text(
+            (discussion / "DIALOGUE.md").write_bytes(
                 "# GSD Path Discussion — Dialogue\n\n## Turns\n\n"
                 "### D001 — 2026-08-28 — plan/done — Review\n\n"
                 "- **Thread**: T001\n- **Reply to**: none\n- **Type**: question\n"
-                "- **Status**: open\n\nQuestion\n",
-                encoding="utf-8",
+                "- **Status**: open\n\nQuestion\n".encode("utf-8"),
             )
-            (discussion / "ANSWERS.md").write_text(
+            (discussion / "ANSWERS.md").write_bytes(
                 "# GSD Path Discussion — Answers\n\n"
                 "## Answer A001 — 2026-08-28 — Review\n\n"
                 "- **Thread**: T001\n- **Turn**: D001\n- **Supersedes**: none\n"
                 "- **Status**: final\n- **Phase/status**: plan/done\n"
                 "- **Confidence**: high\n- **Follow-up**: required\n"
                 "- **Next owner**: planner\n- **Target artifact**: .project/plan/PLAN.md\n\n"
-                "Conclusion\n\nReasoning\n",
-                encoding="utf-8",
+                "Conclusion\n\nReasoning\n".encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: pending discussion")
@@ -297,7 +292,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state = state_text(phase="ship", status="active")
-            (project / "STATE.md").write_text(state, encoding="utf-8")
+            (project / "STATE.md").write_bytes(state.encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: shipment")
             journal = Path(
@@ -306,7 +301,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             if not journal.is_absolute():
                 journal = repo / journal
             event = "archive preflight passed; shipment recorded"
-            journal.write_text(
+            journal.write_bytes(
                 json.dumps(
                     {
                         "schema": "gsd-path/shipment/v1",
@@ -318,8 +313,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                         "state_before": state,
                         "state_after": state,
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = diagnose_installed(repo)
@@ -343,8 +337,8 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"), encoding="utf-8"
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: collect")
@@ -354,7 +348,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 common = repo / common
             journal = common / "gsd-path" / "collect-artifact" / "pending.json"
             journal.parent.mkdir(parents=True)
-            journal.write_text(
+            journal.write_bytes(
                 json.dumps(
                     {
                         "schema": "gsd-path/collect-artifact/v1",
@@ -371,8 +365,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                         "sha256": "b" * 64,
                         "stage": "prepared",
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = pipeline_diagnose.diagnose(repo)
@@ -393,7 +386,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             intent = repo / ".project" / "intent"
             intent.mkdir(parents=True)
-            (intent / "INTENT.md").write_text("# leftover\n", encoding="utf-8")
+            (intent / "INTENT.md").write_bytes("# leftover\n".encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: orphan")
 
@@ -406,7 +399,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             run_git(Path(tmp), "init", "-b", "main", str(repo))
-            (repo / "README.md").write_text("# app\n", encoding="utf-8")
+            (repo / "README.md").write_bytes("# app\n".encode("utf-8"))
 
             result = pipeline_diagnose.diagnose(repo)
             self.assertEqual(result["status"], "stuck")
@@ -426,13 +419,12 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             (project / "archive" / "001-first").mkdir(parents=True)
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     phase="shipped",
                     status="done",
                     archive=".project/archive/001-first/",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: worktrees")
@@ -457,7 +449,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                 str(dirty),
                 "HEAD",
             )
-            (dirty / "rejected.txt").write_text("keep\n", encoding="utf-8")
+            (dirty / "rejected.txt").write_bytes("keep\n".encode("utf-8"))
             run_git(
                 repo,
                 "worktree",
@@ -510,9 +502,8 @@ class PipelineDiagnoseTests(unittest.TestCase):
     def test_helper_loaders_surface_internal_import_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
-            (directory / "archive_milestone.py").write_text(
-                "import missing_helper_dependency\n",
-                encoding="utf-8",
+            (directory / "archive_milestone.py").write_bytes(
+                "import missing_helper_dependency\n".encode("utf-8"),
             )
             environment = os.environ.copy()
             environment["PYTHONPATH"] = str(directory)
@@ -542,10 +533,9 @@ class PipelineDiagnoseTests(unittest.TestCase):
             run_git(repo, "config", "user.email", "test@example.com")
             project = repo / ".project"
             (project / "intent").mkdir(parents=True)
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
-            (project / "intent" / "INTENT.md").write_text(
-                "# Intent — first\n\nLane: quick\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
+            (project / "intent" / "INTENT.md").write_bytes(
+                "# Intent — first\n\nLane: quick\n".encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: plan done")

@@ -83,8 +83,8 @@ class DetectProjectTests(unittest.TestCase):
     def test_dockerfile_is_brownfield_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "Dockerfile").write_text(
-                "FROM python:3.12\n", encoding="utf-8"
+            (repo / "Dockerfile").write_bytes(
+                "FROM python:3.12\n".encode("utf-8")
             )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
@@ -104,8 +104,8 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / filename).write_text(
-                        "existing project\n", encoding="utf-8"
+                    (repo / filename).write_bytes(
+                        "existing project\n".encode("utf-8")
                     )
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
@@ -118,9 +118,9 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             self.git(repo, "init", "-q", "-b", "main")
-            (repo / "LICENSE").write_text("MIT\n", encoding="utf-8")
-            (repo / "README.md").write_text("# Demo\n", encoding="utf-8")
-            (repo / ".gitignore").write_text("node_modules\n", encoding="utf-8")
+            (repo / "LICENSE").write_bytes("MIT\n".encode("utf-8"))
+            (repo / "README.md").write_bytes("# Demo\n".encode("utf-8"))
+            (repo / ".gitignore").write_bytes("node_modules\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
@@ -134,7 +134,7 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    (repo / "README.md").write_bytes(contents.encode("utf-8"))
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "greenfield")
                     self.assertEqual(payload["signals"], [])
@@ -142,9 +142,8 @@ class DetectProjectTests(unittest.TestCase):
     def test_title_readme_with_unclosed_comment_is_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "README.md").write_text(
-                "# Demo\n<!-- scaffold note\n",
-                encoding="utf-8",
+            (repo / "README.md").write_bytes(
+                "# Demo\n<!-- scaffold note\n".encode("utf-8"),
             )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
@@ -153,9 +152,8 @@ class DetectProjectTests(unittest.TestCase):
     def test_title_readme_with_three_space_comment_is_greenfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "README.md").write_text(
-                "# Demo\n   <!-- scaffold -->\n",
-                encoding="utf-8",
+            (repo / "README.md").write_bytes(
+                "# Demo\n   <!-- scaffold -->\n".encode("utf-8"),
             )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
@@ -164,9 +162,8 @@ class DetectProjectTests(unittest.TestCase):
     def test_extensionless_readme_with_body_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "README").write_text(
-                "Demo\n====\n\nAn existing project.\n",
-                encoding="utf-8",
+            (repo / "README").write_bytes(
+                "Demo\n====\n\nAn existing project.\n".encode("utf-8"),
             )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
@@ -206,7 +203,7 @@ class DetectProjectTests(unittest.TestCase):
             for relative, contents in managed_files.items():
                 path = repo / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(contents, encoding="utf-8")
+                path.write_bytes(contents.encode("utf-8"))
             self.git(repo, "add", ".")
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
@@ -227,7 +224,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload['route'], 'define')
             source = repo / 'src/runtime/main.py'
             source.parent.mkdir(parents=True)
-            source.write_text("print('product')\n")
+            source.write_bytes("print('product')\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload['verdict'], 'brownfield')
             self.assertEqual(payload['signals'], [{'kind': 'source', 'path': 'src/runtime/main.py'}])
@@ -241,7 +238,7 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    (repo / "README.md").write_bytes(contents.encode("utf-8"))
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
                     self.assertEqual(
@@ -263,7 +260,7 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    (repo / "README.md").write_bytes(contents.encode("utf-8"))
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
                     self.assertEqual(
@@ -276,7 +273,7 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    (repo / "README.md").write_bytes(contents.encode("utf-8"))
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
                     self.assertEqual(
@@ -289,9 +286,8 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(name=name):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / name).write_text(
-                        f"# {Path(name).stem}\n\nExisting project details.\n",
-                        encoding="utf-8",
+                    (repo / name).write_bytes(
+                        f"# {Path(name).stem}\n\nExisting project details.\n".encode("utf-8"),
                     )
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
@@ -304,9 +300,8 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             for name in ("LICENSE.md", "LICENCE.markdown", "COPYING.mdx"):
-                (repo / name).write_text(
-                    "# License\n\nPermission is granted.\n",
-                    encoding="utf-8",
+                (repo / name).write_bytes(
+                    "# License\n\nPermission is granted.\n".encode("utf-8"),
                 )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
@@ -315,7 +310,7 @@ class DetectProjectTests(unittest.TestCase):
     def test_package_manifest_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / "package.json").write_bytes("{}\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(payload["route"], "inspect")
@@ -328,7 +323,7 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             (repo / "src").mkdir()
-            (repo / "src" / "main.py").write_text("print(1)\n", encoding="utf-8")
+            (repo / "src" / "main.py").write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(
@@ -341,7 +336,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             source = repo / "skills" / "gsd-path-tool.py"
             source.parent.mkdir()
-            source.write_text("print(1)\n", encoding="utf-8")
+            source.write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(
@@ -354,7 +349,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             source = repo / "src" / "disabled-gsd-skills" / "main.py"
             source.parent.mkdir(parents=True)
-            source.write_text("print(1)\n", encoding="utf-8")
+            source.write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(
@@ -370,9 +365,8 @@ class DetectProjectTests(unittest.TestCase):
     def test_readme_with_body_is_brownfield_docs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "README.md").write_text(
-                "# Widget\n\nA widget that already exists.\n",
-                encoding="utf-8",
+            (repo / "README.md").write_bytes(
+                "# Widget\n\nA widget that already exists.\n".encode("utf-8"),
             )
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
@@ -385,9 +379,8 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             (repo / "docs").mkdir()
-            (repo / "docs" / "architecture.md").write_text(
-                "# Architecture\n\nThe API lives in src/.\n",
-                encoding="utf-8",
+            (repo / "docs" / "architecture.md").write_bytes(
+                "# Architecture\n\nThe API lives in src/.\n".encode("utf-8"),
             )
             payload = self.classify(repo)
             self.assertEqual(
@@ -400,7 +393,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             nested = repo / "node_modules" / "left-pad"
             nested.mkdir(parents=True)
-            (nested / "package.json").write_text("{}\n", encoding="utf-8")
+            (nested / "package.json").write_bytes("{}\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
 
@@ -420,10 +413,10 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             self.git(repo, "init", "-q")
             (repo / ".project").mkdir()
-            (repo / ".project" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+            (repo / ".project" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
             self.assertEqual(self.classify(repo)["verdict"], "orphan")  # not ignored yet
 
-            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
+            (repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
             self.assertEqual(self.classify(repo)["verdict"], "greenfield")
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
@@ -451,9 +444,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "---\npipeline: gsd-path/v2\n---\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "---\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
             real_lstat = detect_project.os.lstat
             project_evidence = project.resolve()
@@ -481,9 +473,8 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             readme = repo / "README.md"
-            readme.write_text(
-                "# External\n\nExisting project.\n",
-                encoding="utf-8",
+            readme.write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
             )
             real_stat = detect_project.os.stat
             readme_evidence = readme.resolve()
@@ -523,9 +514,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             state = repo / ".project" / "STATE.md"
             state.parent.mkdir()
-            state.write_text(
-                "---\npipeline: gsd-path/v2\n---\n",
-                encoding="utf-8",
+            state.write_bytes(
+                "---\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
             with mock.patch.object(
                 detect_project,
@@ -556,7 +546,7 @@ class DetectProjectTests(unittest.TestCase):
             project = repo / ".project"
             target = workspace / "STATE.md"
             project.mkdir(parents=True)
-            target.write_text("---\npipeline: gsd-path/v2\n---\n")
+            target.write_bytes("---\npipeline: gsd-path/v2\n---\n".encode("utf-8"))
             (project / "STATE.md").symlink_to(target)
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "orphan")
@@ -590,9 +580,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             state = repo / ".project" / "STATE.md"
             state.parent.mkdir()
-            state.write_text(
-                "---\npipeline: gsd-path/v2\n---\n",
-                encoding="utf-8",
+            state.write_bytes(
+                "---\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
             state_evidence = state.resolve()
             real_open = detect_project.os.open
@@ -629,9 +618,9 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             (repo / ".project" / "intent").mkdir(parents=True)
-            (repo / ".project" / "intent" / "INTENT.md").write_text("# Intent\n")
+            (repo / ".project" / "intent" / "INTENT.md").write_bytes("# Intent\n".encode("utf-8"))
             (repo / "src" / "main.py").parent.mkdir()
-            (repo / "src" / "main.py").write_text("print(1)\n")
+            (repo / "src" / "main.py").write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "orphan")
             self.assertEqual(payload["route"], "recover-orphan")
@@ -646,11 +635,10 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "---\npipeline: gsd-path/v2\nphase: define\n---\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "---\npipeline: gsd-path/v2\nphase: define\n---\n".encode("utf-8"),
             )
-            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / "package.json").write_bytes("{}\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "owned")
             self.assertEqual(payload["pipeline"], "gsd-path/v2")
@@ -662,7 +650,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text("# State\n", encoding="utf-8")
+            (project / "STATE.md").write_bytes("# State\n".encode("utf-8"))
 
             payload = self.classify(repo)
 
@@ -674,9 +662,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "# State\n\npipeline: gsd-path/v2\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "# State\n\npipeline: gsd-path/v2\n".encode("utf-8"),
             )
 
             payload = self.classify(repo)
@@ -689,9 +676,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "---\npipeline: gsd-path/v2\npipeline: other/v1\n---\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "---\npipeline: gsd-path/v2\npipeline: other/v1\n---\n".encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -705,9 +691,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "---\npipeline gsd-path/v2\n---\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "---\npipeline gsd-path/v2\n---\n".encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -721,9 +706,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "---\n[invalid\npipeline: gsd-path/v2\n---\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "---\n[invalid\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
 
             with self.assertRaisesRegex(
@@ -749,9 +733,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                "pipeline: gsd-path/v2\n",
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                "pipeline: gsd-path/v2\n".encode("utf-8"),
             )
             os.mkfifo(project / "events")
 
@@ -766,7 +749,7 @@ class DetectProjectTests(unittest.TestCase):
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "config", "user.email", "dev@example.test")
             self.git(repo, "config", "user.name", "Dev")
-            (repo / "app.py").write_text("print(1)\n", encoding="utf-8")
+            (repo / "app.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "add", "app.py")
             self.git(repo, "commit", "-q", "-m", "add app")
             (repo / "app.py").unlink()
@@ -817,7 +800,7 @@ class DetectProjectTests(unittest.TestCase):
             self.git(repo, "init", "-q", "--separate-git-dir", str(metadata), ".")
             self.git(repo, "config", "user.email", "dev@example.test")
             self.git(repo, "config", "user.name", "Dev")
-            (repo / "app.py").write_text("print(1)\n", encoding="utf-8")
+            (repo / "app.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "add", "app.py")
             self.git(repo, "commit", "-q", "-m", "add app")
 
@@ -860,7 +843,7 @@ class DetectProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             source = repo / "main.py"
-            source.write_text("print(1)\n", encoding="utf-8")
+            source.write_bytes("print(1)\n".encode("utf-8"))
             source_evidence = source.resolve()
             real_lstat = detect_project.os.lstat
 
@@ -892,7 +875,7 @@ class DetectProjectTests(unittest.TestCase):
     def test_worktree_uses_descriptor_listing_when_supported(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            (repo / "main.py").write_text("print(1)\n", encoding="utf-8")
+            (repo / "main.py").write_bytes("print(1)\n".encode("utf-8"))
             with mock.patch.object(
                 detect_project.os,
                 "walk",
@@ -916,7 +899,7 @@ class DetectProjectTests(unittest.TestCase):
             bundle = repo / "gsd-path-app"
             moved = workspace / "moved"
             bundle.mkdir(parents=True)
-            (bundle / "main.py").write_text("print(1)\n", encoding="utf-8")
+            (bundle / "main.py").write_bytes("print(1)\n".encode("utf-8"))
             bundle_evidence = bundle.resolve()
             skill_evidence = bundle_evidence / "SKILL.md"
             real_lstat = detect_project.os.lstat
@@ -927,7 +910,7 @@ class DetectProjectTests(unittest.TestCase):
                 if not replaced and Path(path) == skill_evidence:
                     bundle_evidence.rename(moved)
                     bundle_evidence.mkdir()
-                    skill_evidence.write_text("# Skill\n", encoding="utf-8")
+                    skill_evidence.write_bytes("# Skill\n".encode("utf-8"))
                     replaced = True
                 return real_lstat(path)
 
@@ -957,9 +940,8 @@ class DetectProjectTests(unittest.TestCase):
                     child = repo / "src"
                     if target == "child":
                         child.mkdir()
-                        (child / "main.py").write_text(
-                            "print(1)\n",
-                            encoding="utf-8",
+                        (child / "main.py").write_bytes(
+                            "print(1)\n".encode("utf-8"),
                         )
                     real_open = detect_project.os.open
 
@@ -1037,12 +1019,11 @@ class DetectProjectTests(unittest.TestCase):
             repo = workspace / "repo"
             repo.mkdir()
             self.git(repo, "init", "-q", "-b", "main")
-            (workspace / "README.md").write_text(
-                "# Outside\n\nExisting project.\n",
-                encoding="utf-8",
+            (workspace / "README.md").write_bytes(
+                "# Outside\n\nExisting project.\n".encode("utf-8"),
             )
             tracked = repo / r"..\README.md"
-            tracked.write_text("# Local\n", encoding="utf-8")
+            tracked.write_bytes("# Local\n".encode("utf-8"))
             self.git(repo, "add", "--", tracked.name)
             tracked.unlink()
             payload = self.classify(repo)
@@ -1057,9 +1038,8 @@ class DetectProjectTests(unittest.TestCase):
             repo.mkdir()
             self.git(repo, "init", "-q", "-b", "main")
             external = workspace / "README.md"
-            external.write_text(
-                "# External\n\nExisting project.\n",
-                encoding="utf-8",
+            external.write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
             )
             (repo / "README.md").symlink_to(external)
             self.git(repo, "add", "README.md")
@@ -1077,13 +1057,12 @@ class DetectProjectTests(unittest.TestCase):
             tracked.parent.mkdir(parents=True)
             external.mkdir()
             self.git(repo, "init", "-q", "-b", "main")
-            tracked.write_text("# Local\n", encoding="utf-8")
+            tracked.write_bytes("# Local\n".encode("utf-8"))
             self.git(repo, "add", "docs/README.md")
             tracked.unlink()
             tracked.parent.rmdir()
-            (external / "README.md").write_text(
-                "# External\n\nExisting project.\n",
-                encoding="utf-8",
+            (external / "README.md").write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
             )
             (repo / "docs").symlink_to(external, target_is_directory=True)
             with self.assertRaisesRegex(
@@ -1100,10 +1079,9 @@ class DetectProjectTests(unittest.TestCase):
             repo.mkdir()
             readme = repo / "README.md"
             external = workspace / "external.md"
-            readme.write_text("# Local\n", encoding="utf-8")
-            external.write_text(
-                "# External\n\nExisting project.\n",
-                encoding="utf-8",
+            readme.write_bytes("# Local\n".encode("utf-8"))
+            external.write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
             )
             readme_evidence = readme.resolve()
             real_open = detect_project.os.open
@@ -1145,10 +1123,9 @@ class DetectProjectTests(unittest.TestCase):
             readme = docs / "README.md"
             docs.mkdir(parents=True)
             external.mkdir()
-            readme.write_text("# Local\n", encoding="utf-8")
-            (external / "README.md").write_text(
-                "# External\n\nExisting project.\n",
-                encoding="utf-8",
+            readme.write_bytes("# Local\n".encode("utf-8"))
+            (external / "README.md").write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
             )
             real_open = detect_project.os.open
             replaced = False
@@ -1231,7 +1208,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             source = repo / "src" / "gsd-path-app" / "main.py"
             source.parent.mkdir(parents=True)
-            source.write_text("print(1)\n", encoding="utf-8")
+            source.write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(
@@ -1244,7 +1221,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             source = repo / "src" / "skills" / "gsd-path-app" / "main.py"
             source.parent.mkdir(parents=True)
-            source.write_text("print(1)\n", encoding="utf-8")
+            source.write_bytes("print(1)\n".encode("utf-8"))
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
             self.assertEqual(
@@ -1262,8 +1239,8 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             bundle = repo / "tools" / "gsd-path-helper"
             bundle.mkdir(parents=True)
-            (bundle / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
-            (bundle / "helper.py").write_text("print(1)\n", encoding="utf-8")
+            (bundle / "SKILL.md").write_bytes("# Skill\n".encode("utf-8"))
+            (bundle / "helper.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "add", ".")
             (bundle / "SKILL.md").unlink()
@@ -1279,7 +1256,7 @@ class DetectProjectTests(unittest.TestCase):
             bundle = repo / ".agents" / "skills" / "gsd-path-helper"
             bundle.mkdir(parents=True)
             helper = bundle / "helper.py"
-            helper.write_text("print(1)\n", encoding="utf-8")
+            helper.write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "add", ".")
             helper.unlink()
@@ -1296,9 +1273,9 @@ class DetectProjectTests(unittest.TestCase):
             bundle = repo / "tools" / "gsd-path-helper"
             marker = workspace / "SKILL.md"
             bundle.mkdir(parents=True)
-            marker.write_text("# Skill\n", encoding="utf-8")
+            marker.write_bytes("# Skill\n".encode("utf-8"))
             (bundle / "SKILL.md").symlink_to(marker)
-            (bundle / "helper.py").write_text("print(1)\n", encoding="utf-8")
+            (bundle / "helper.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "add", ".")
             (bundle / "SKILL.md").unlink()
@@ -1319,14 +1296,14 @@ class DetectProjectTests(unittest.TestCase):
             bundle = repo / "src" / "skills" / "gsd-path-app"
             external = workspace / "external"
             bundle.mkdir(parents=True)
-            (bundle / "main.py").write_text("print(1)\n", encoding="utf-8")
+            (bundle / "main.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "add", ".")
             (bundle / "main.py").unlink()
             bundle.rmdir()
             external.mkdir()
-            (external / "main.py").write_text("print(2)\n", encoding="utf-8")
-            (external / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+            (external / "main.py").write_bytes("print(2)\n".encode("utf-8"))
+            (external / "SKILL.md").write_bytes("# Skill\n".encode("utf-8"))
             bundle.symlink_to(external, target_is_directory=True)
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "brownfield")
@@ -1343,7 +1320,7 @@ class DetectProjectTests(unittest.TestCase):
             with self.subTest(contents=contents):
                 with tempfile.TemporaryDirectory() as temporary:
                     repo = Path(temporary)
-                    (repo / "README.md").write_text(contents, encoding="utf-8")
+                    (repo / "README.md").write_bytes(contents.encode("utf-8"))
                     payload = self.classify(repo)
                     self.assertEqual(payload["verdict"], "brownfield")
                     self.assertEqual(
@@ -1357,9 +1334,8 @@ class DetectProjectTests(unittest.TestCase):
             self.git(repo, "init", "-q", "-b", "main")
             self.git(repo, "config", "user.email", "dev@example.test")
             self.git(repo, "config", "user.name", "Dev")
-            (repo / "README.md").write_text(
-                "# Widget\n\nAn existing project.\n",
-                encoding="utf-8",
+            (repo / "README.md").write_bytes(
+                "# Widget\n\nAn existing project.\n".encode("utf-8"),
             )
             self.git(repo, "add", "README.md")
             self.git(repo, "commit", "-q", "-m", "docs")
@@ -1503,7 +1479,7 @@ class DetectProjectTests(unittest.TestCase):
             other.mkdir()
             self.git(repo, "init", "-q", "-b", "main")
             self.git(other, "init", "-q", "-b", "main")
-            (other / "app.py").write_text("print(1)\n", encoding="utf-8")
+            (other / "app.py").write_bytes("print(1)\n".encode("utf-8"))
             self.git(other, "add", "app.py")
             env = os.environ.copy()
             env["GIT_DIR"] = str(other / ".git")
@@ -1574,7 +1550,7 @@ class DetectProjectTests(unittest.TestCase):
             target = workspace / "target"
             repo.mkdir()
             target.mkdir()
-            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / "package.json").write_bytes("{}\n".encode("utf-8"))
             template = (
                 ROOT / "skills" / "gsd-path" / "templates" / "state.md"
             )
@@ -1613,7 +1589,7 @@ class DetectProjectTests(unittest.TestCase):
             external = workspace / "external"
             project.mkdir(parents=True)
             external.mkdir()
-            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / "package.json").write_bytes("{}\n".encode("utf-8"))
             template = (
                 ROOT / "skills" / "gsd-path" / "templates" / "state.md"
             )
@@ -1656,7 +1632,7 @@ class DetectProjectTests(unittest.TestCase):
             repo = Path(temporary)
             project = repo / ".project"
             project.mkdir()
-            (repo / "package.json").write_text("{}\n", encoding="utf-8")
+            (repo / "package.json").write_bytes("{}\n".encode("utf-8"))
             template = (
                 ROOT / "skills" / "gsd-path" / "templates" / "state.md"
             )
@@ -1671,9 +1647,8 @@ class DetectProjectTests(unittest.TestCase):
                     and bool(flags & os.O_CREAT)
                 )
                 if creating_state and not changed:
-                    (project / "foreign.md").write_text(
-                        "foreign\n",
-                        encoding="utf-8",
+                    (project / "foreign.md").write_bytes(
+                        "foreign\n".encode("utf-8"),
                     )
                     changed = True
                 return real_open(path, flags, mode, dir_fd=dir_fd)
@@ -1813,7 +1788,7 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
             project.mkdir(parents=True)
             victim = Path(temporary) / "victim.txt"
             original = "do not replace\n"
-            victim.write_text(original, encoding="utf-8")
+            victim.write_bytes(original.encode("utf-8"))
             os.link(victim, project / detect_project.STATE_TEMP_NAME)
             template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
 
@@ -1889,7 +1864,7 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
     def test_lock_exclusive_blocks_a_second_opener(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "STATE.md"
-            target.write_text("", encoding="utf-8")
+            target.write_bytes("".encode("utf-8"))
             first = os.open(target, os.O_RDWR)
             second = os.open(target, os.O_RDWR)
             try:
@@ -2210,8 +2185,8 @@ class PromoteLookaheadTests(unittest.TestCase):
         archive = project / "archive" / "001-first" / "research"
         archive.mkdir(parents=True)
         if archived_audit:
-            (archive / "DOCS-AUDIT.md").write_text(self.AUDIT, encoding="utf-8")
-        (project / "STATE.md").write_text(
+            (archive / "DOCS-AUDIT.md").write_bytes(self.AUDIT.encode("utf-8"))
+        (project / "STATE.md").write_bytes(
             """---
 pipeline: gsd-path/v2
 project: demo
@@ -2223,10 +2198,9 @@ archive: .project/archive/001-first
 ---
 
 # Project State
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
-        (project / "ROADMAP.md").write_text(
+        (project / "ROADMAP.md").write_bytes(
             """# Roadmap
 
 ### M001 — first
@@ -2242,15 +2216,14 @@ Depends on: [M001]
 Status: pending
 Archive: null
 Integrated: null
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
         next_root = project / "next"
         (next_root / "intent").mkdir(parents=True)
         (next_root / "research").mkdir()
         (next_root / "plan").mkdir()
         (next_root / "tasks").mkdir()
-        (next_root / "STATE.md").write_text(
+        (next_root / "STATE.md").write_bytes(
             """---
 pipeline: gsd-path/v2
 project: demo
@@ -2260,26 +2233,23 @@ status: done
 branch: null
 archive: null
 ---
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
-        (next_root / "intent" / "INTENT.md").write_text("# Intent\n")
+        (next_root / "intent" / "INTENT.md").write_bytes("# Intent\n".encode("utf-8"))
         track_audit = self.AUDIT
         if mismatched_audit:
             track_audit = track_audit.replace("keep this ruling", "changed ruling")
-        (next_root / "research" / "DOCS-AUDIT.md").write_text(
-            track_audit,
-            encoding="utf-8",
+        (next_root / "research" / "DOCS-AUDIT.md").write_bytes(
+            track_audit.encode("utf-8"),
         )
-        (next_root / "research" / "SYNTHESIS.md").write_text("# Synthesis\n")
-        (next_root / "plan" / "PLAN.md").write_text("# Plan\n")
-        (next_root / "tasks" / "T001-demo.md").write_text("# Task\n")
+        (next_root / "research" / "SYNTHESIS.md").write_bytes("# Synthesis\n".encode("utf-8"))
+        (next_root / "plan" / "PLAN.md").write_bytes("# Plan\n".encode("utf-8"))
+        (next_root / "tasks" / "T001-demo.md").write_bytes("# Task\n".encode("utf-8"))
         if archived_audit:
             active_research = project / "research"
             active_research.mkdir()
-            (active_research / "DOCS-AUDIT.md").write_text(
-                self.AUDIT,
-                encoding="utf-8",
+            (active_research / "DOCS-AUDIT.md").write_bytes(
+                self.AUDIT.encode("utf-8"),
             )
         self.git(repo, "add", ".project")
         self.git(repo, "commit", "-q", "-m", "ship: M001 — first")
@@ -2332,7 +2302,7 @@ archive: null
     def test_selector_chooses_first_pending_entry_after_active_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             roadmap = Path(temporary) / "ROADMAP.md"
-            roadmap.write_text(
+            roadmap.write_bytes(
                 """# Roadmap
 
 ### M001 — first
@@ -2355,8 +2325,7 @@ Depends on: [M001]
 Status: pending
 Archive: null
 Integrated: null
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
 
             result = subprocess.run(
@@ -2518,12 +2487,11 @@ Integrated: null
             repo = Path(temporary)
             integrate = self.setup_repo(repo)
             roadmap = repo / ".project" / "ROADMAP.md"
-            roadmap.write_text(
+            roadmap.write_bytes(
                 roadmap.read_text(encoding="utf-8").replace(
                     "### M002 — second",
                     "### M003 — third",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
 
             result = promote_lookahead.select_fetched_base(
@@ -2559,10 +2527,10 @@ Integrated: null
             directory = Path(temporary)
             roadmap = directory / "ROADMAP.md"
             snapshot = directory / "ROADMAP.before-reslice.md"
-            roadmap.write_text("original roadmap\n", encoding="utf-8")
+            roadmap.write_bytes("original roadmap\n".encode("utf-8"))
 
             created = promote_lookahead.snapshot_roadmap(roadmap, snapshot)
-            roadmap.write_text("revised roadmap\n", encoding="utf-8")
+            roadmap.write_bytes("revised roadmap\n".encode("utf-8"))
             existing = promote_lookahead.snapshot_roadmap(roadmap, snapshot)
 
             self.assertEqual(created["status"], "created")

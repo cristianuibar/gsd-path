@@ -44,20 +44,20 @@ class BuildReentryTests(unittest.TestCase):
         self.project = self.repo / ".project"
         for directory in ("plan", "tasks", "intent", "review"):
             (self.project / directory).mkdir(parents=True)
-        (self.project / "STATE.md").write_text(state_text(
+        (self.project / "STATE.md").write_bytes(state_text(
             phase="build", status="blocked", milestone="demo", branch="gsd-path/M001",
-        ))
-        (self.project / "intent/INTENT.md").write_text(
-            "# Intent\n\nLane: quick\n\n## Success criteria\n\n- SC1: The demo behavior holds.\n"
+        ).encode("utf-8"))
+        (self.project / "intent/INTENT.md").write_bytes(
+            "# Intent\n\nLane: quick\n\n## Success criteria\n\n- SC1: The demo behavior holds.\n".encode("utf-8")
         )
-        (self.project / "plan/PLAN.md").write_text(PLAN_WAVE.format(title="demo"))
+        (self.project / "plan/PLAN.md").write_bytes(PLAN_WAVE.format(title="demo").encode("utf-8"))
         self.task = self.project / "tasks/T001-demo.md"
-        self.task.write_text(TASK_TEMPLATE.format(
+        self.task.write_bytes(TASK_TEMPLATE.format(
             task_id="T001", files_block="  - app.py", context="Repair the demo.",
             approach="Keep the public interface.", contract="- None", verify="python3 app.py",
-        ))
-        (self.repo / "app.py").write_text("print('demo')\n")
-        (self.project / "review/PLAN-PANEL.md").write_text("Old plan approval evidence\n")
+        ).encode("utf-8"))
+        (self.repo / "app.py").write_bytes("print('demo')\n".encode("utf-8"))
+        (self.project / "review/PLAN-PANEL.md").write_bytes("Old plan approval evidence\n".encode("utf-8"))
         self.base = self.commit()
 
     def commit(self):
@@ -92,17 +92,17 @@ class BuildReentryTests(unittest.TestCase):
         old_records = dispatch_driver.records_root(self.repo)
         old_attempt = old_records / "review_wave_1_cycle_1/attempt-1/state.json"
         old_attempt.parent.mkdir(parents=True)
-        old_attempt.write_text(json.dumps({"outcome": "collected"}))
+        old_attempt.write_bytes(json.dumps({"outcome": "collected"}).encode("utf-8"))
         self.reopen("plan")
         prepared = self.cli("prepare-build-recovery")
         backup = Path(prepared["path"])
-        self.assertEqual((backup / "PLAN-PANEL.md").read_text(), "Old plan approval evidence\n")
+        self.assertEqual((backup / "PLAN-PANEL.md").read_text(encoding="utf-8"), "Old plan approval evidence\n")
         self.assertFalse((self.project / "review/PLAN-PANEL.md").exists())
         self.cli("prepare-build-recovery")
         self.assertEqual(self.cli("route")["route"]["mode"], "build-repair")
         self.assertNotEqual(dispatch_driver.records_root(self.repo), old_records)
         replacement = self.project / "tasks/T001-repaired.md"
-        replacement.write_text(self.task.read_text())
+        replacement.write_bytes(self.task.read_text(encoding="utf-8").encode("utf-8"))
         self.task.unlink()
         approved = self.cli("approve", "--kind", "plan", "--expected-head", self.base)
         self.assertEqual(approved["state"]["status"], "done")
@@ -119,7 +119,7 @@ class BuildReentryTests(unittest.TestCase):
         self.cli("prepare-build-recovery")
         self.assertEqual(self.cli("route")["route"]["mode"], "corrections")
         intent = self.project / "intent/INTENT.md"
-        intent.write_text(intent.read_text() + "\n## Corrections\n\nUser: change the demo output.\n")
+        intent.write_bytes((intent.read_text(encoding="utf-8") + "\n## Corrections\n\nUser: change the demo output.\n").encode("utf-8"))
         self.move("define", "done", "milestone intent approved")
         self.assertEqual(self.cli("route")["route"]["mode"], "build-repair")
         self.move("plan", "active", "planning started")
@@ -127,7 +127,7 @@ class BuildReentryTests(unittest.TestCase):
         self.assertIn("illegal state transition", failure)
         self.cli("approve", "--kind", "plan", "--expected-head", self.base)
         self.move("build", "active", "build started")
-        self.assertIn("User: change the demo output.", intent.read_text())
+        self.assertIn("User: change the demo output.", intent.read_text(encoding="utf-8"))
 
     def test_recovery_keeps_integration_locked(self):
         self.reopen("define")
@@ -135,7 +135,7 @@ class BuildReentryTests(unittest.TestCase):
         self.assertIn("integration mode is locked", failure)
 
     def test_active_task_blocks_recovery_without_changes(self):
-        self.task.write_text(self.task.read_text().replace("status: pending", "status: in-progress"))
+        self.task.write_bytes(self.task.read_text(encoding="utf-8").replace("status: pending", "status: in-progress").encode("utf-8"))
         self.commit()
         original = (self.project / "STATE.md").read_bytes()
         failure = self.move("plan", "active", "build plan repair requested", success=False)
@@ -148,39 +148,39 @@ class BuildReentryTests(unittest.TestCase):
         failure = self.cli("approve", "--kind", "plan", "--patch", success=False)
         self.assertIn("recovery requires a plan checkpoint", failure)
         intent = self.project / "intent/INTENT.md"
-        intent.write_text(intent.read_text() + "Changed requirements\n")
+        intent.write_bytes((intent.read_text(encoding="utf-8") + "Changed requirements\n").encode("utf-8"))
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("cannot change approved intent", failure)
         self.assertEqual(self.cli("validate")["state"]["status"], "active")
 
     def test_reapproval_reuses_only_reviews_of_unchanged_contracts(self):
         review = self.project / "review/wave-1.cycle1.md"
-        review.write_text("Previously recorded wave evidence\n")
+        review.write_bytes("Previously recorded wave evidence\n".encode("utf-8"))
         self.base = self.commit()
         self.reopen("plan")
         self.cli("prepare-build-recovery")
         self.assertFalse(review.exists())
         self.cli("approve", "--kind", "plan", "--expected-head", self.base)
-        self.assertEqual(review.read_text(), "Previously recorded wave evidence\n")
+        self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
 
     def test_reapproval_restores_a_partial_copy_of_unchanged_evidence(self):
         review = self.project / "review/wave-1.cycle1.md"
-        review.write_text("Previously recorded wave evidence\n")
+        review.write_bytes("Previously recorded wave evidence\n".encode("utf-8"))
         self.base = self.commit()
         self.reopen("plan")
         self.cli("prepare-build-recovery")
-        review.write_text("Previously")
+        review.write_bytes("Previously".encode("utf-8"))
         self.cli("approve", "--kind", "plan", "--expected-head", self.base)
-        self.assertEqual(review.read_text(), "Previously recorded wave evidence\n")
+        self.assertEqual(review.read_text(encoding="utf-8"), "Previously recorded wave evidence\n")
 
     def test_changed_contract_cannot_reuse_a_previous_review(self):
         review = self.project / "review/wave-1.cycle1.md"
-        review.write_text("Previously recorded wave evidence\n")
+        review.write_bytes("Previously recorded wave evidence\n".encode("utf-8"))
         self.base = self.commit()
         self.reopen("plan")
         self.cli("prepare-build-recovery")
-        self.task.write_text(self.task.read_text().replace("demo behavior holds", "new behavior holds"))
-        review.write_text("Previously recorded wave evidence\n")
+        self.task.write_bytes(self.task.read_text(encoding="utf-8").replace("demo behavior holds", "new behavior holds").encode("utf-8"))
+        review.write_bytes("Previously recorded wave evidence\n".encode("utf-8"))
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("changed wave must be reviewed after build resumes", failure)
 
@@ -188,23 +188,23 @@ class BuildReentryTests(unittest.TestCase):
         from scripts import isolation, build_state
         self.move("build", "active", "build resumed")
         base = self.commit()
-        self.task.write_text(self.task.read_text()
+        self.task.write_bytes(self.task.read_text(encoding="utf-8")
             .replace("status: pending", "status: in-progress")
             .replace("agent: null", "agent: builder")
             .replace("base: null", f"base: {base}")
-            .replace("worktree: null", f"worktree: {self.repo}"))
-        (self.repo / "app.py").write_text("print('implemented')\n")
+            .replace("worktree: null", f"worktree: {self.repo}").encode("utf-8"))
+        (self.repo / "app.py").write_bytes("print('implemented')\n".encode("utf-8"))
         landed = isolation.land(self.repo, self.repo, base, "T001", "Demo task T001",
                                 ".project/tasks/T001-demo.md", ["app.py"])
         self.move("build", "blocked", "plan defect requires repair")
         self.base = self.commit()
-        original = self.task.read_text()
+        original = self.task.read_text(encoding="utf-8")
         self.reopen("plan")
         self.cli("prepare-build-recovery")
-        self.task.write_text(original.replace("demo behavior holds", "changed behavior holds"))
+        self.task.write_bytes(original.replace("demo behavior holds", "changed behavior holds").encode("utf-8"))
         failure = self.cli("approve", "--kind", "plan", "--expected-head", self.base, success=False)
         self.assertIn("preserve landed task", failure)
-        self.task.write_text(original)
+        self.task.write_bytes(original.encode("utf-8"))
         self.cli("approve", "--kind", "plan", "--expected-head", self.base)
         self.move("build", "active", "build started")
         proof = build_state.reconcile(str(self.repo), task_id="T001")
@@ -214,7 +214,7 @@ class BuildReentryTests(unittest.TestCase):
     def test_recovery_rejects_a_changed_review_backup(self):
         self.reopen("plan")
         prepared = self.cli("prepare-build-recovery")
-        (Path(prepared["path"]) / "PLAN-PANEL.md").write_text("Changed old evidence\n")
+        (Path(prepared["path"]) / "PLAN-PANEL.md").write_bytes("Changed old evidence\n".encode("utf-8"))
         failure = self.cli("prepare-build-recovery", success=False)
         self.assertIn("review backup differs from the recovery base", failure)
 
@@ -232,7 +232,7 @@ class BuildReentryTests(unittest.TestCase):
         from scripts import dispatch_driver
         record = dispatch_driver.records_root(self.repo) / "reviews/wave-1/attempt-1/state.json"
         record.parent.mkdir(parents=True)
-        record.write_text(json.dumps({"outcome": None, "task_id": "review_wave_1"}))
+        record.write_bytes(json.dumps({"outcome": None, "task_id": "review_wave_1"}).encode("utf-8"))
         failure = self.move("plan", "active", "build plan repair requested", success=False)
         self.assertIn("settle dispatch records before recovery", failure)
 
@@ -241,7 +241,7 @@ class BuildReentryTests(unittest.TestCase):
         records = dispatch_driver.records_root(self.repo)
         record = records / "reviews/wave-1/attempt-1/state.json"
         record.parent.mkdir(parents=True)
-        record.write_text(json.dumps({"outcome": "collected", "cleanup_pending": True}))
+        record.write_bytes(json.dumps({"outcome": "collected", "cleanup_pending": True}).encode("utf-8"))
         original = (self.project / "STATE.md").read_bytes()
         for phase, event in (
             ("define", "build intent corrections requested"),
@@ -253,9 +253,9 @@ class BuildReentryTests(unittest.TestCase):
                 self.assertEqual((self.project / "STATE.md").read_bytes(), original)
                 self.assertEqual(dispatch_driver.records_root(self.repo), records)
             (self.project / "STATE.md").write_bytes(original)
-        record.write_text(json.dumps({
+        record.write_bytes(json.dumps({
             "outcome": "collected", "cleanup_pending": False, "cleanup_complete": True,
-        }))
+        }).encode("utf-8"))
         self.assertEqual(self.reopen("plan")["state"]["phase"], "plan")
         self.assertNotEqual(dispatch_driver.records_root(self.repo), records)
 
@@ -271,7 +271,7 @@ class BuildReentryTests(unittest.TestCase):
                 ("plan", "build plan repair requested"),
             ):
                 with self.subTest(outcome=outcome, phase=phase):
-                    record.write_text(json.dumps({"outcome": outcome}))
+                    record.write_bytes(json.dumps({"outcome": outcome}).encode("utf-8"))
                     self.assertEqual(self.reopen(phase)["state"]["phase"], phase)
                     (self.project / "STATE.md").write_bytes(original)
                     ownership = {
@@ -279,12 +279,12 @@ class BuildReentryTests(unittest.TestCase):
                         "worktree": str(self.repo / "review-sidecar"),
                         "branch": "gsd-path/verify/wave-1-cycle-1",
                     }
-                    record.write_text(json.dumps(ownership))
+                    record.write_bytes(json.dumps(ownership).encode("utf-8"))
                     failure = self.move(phase, "active", event, success=False)
                     self.assertIn("settle dispatch records before recovery", failure)
                     self.assertEqual((self.project / "STATE.md").read_bytes(), original)
                     self.assertEqual(dispatch_driver.records_root(self.repo), records)
-                    record.write_text(json.dumps({**ownership, "cleanup_complete": True}))
+                    record.write_bytes(json.dumps({**ownership, "cleanup_complete": True}).encode("utf-8"))
                     self.assertEqual(self.reopen(phase)["state"]["phase"], phase)
                     self.assertNotEqual(dispatch_driver.records_root(self.repo), records)
                 (self.project / "STATE.md").write_bytes(original)
@@ -302,21 +302,21 @@ class BuildReentryTests(unittest.TestCase):
                 project = repo / ".project"
                 for directory in ("plan", "tasks", "intent"):
                     (project / directory).mkdir(parents=True)
-                (project / "STATE.md").write_text(state_text(
+                (project / "STATE.md").write_bytes(state_text(
                     phase="build", status="blocked", milestone="demo",
                     branch="gsd-path/M001",
-                ))
-                (project / "intent/INTENT.md").write_text(
+                ).encode("utf-8"))
+                (project / "intent/INTENT.md").write_bytes(
                     "# Intent\n\nLane: quick\n\n## Success criteria\n\n"
-                    "- SC1: The demo behavior holds.\n"
+                    "- SC1: The demo behavior holds.\n".encode("utf-8")
                 )
-                (project / "plan/PLAN.md").write_text(PLAN_WAVE.format(title="demo"))
-                (project / "tasks/T001-demo.md").write_text(TASK_TEMPLATE.format(
+                (project / "plan/PLAN.md").write_bytes(PLAN_WAVE.format(title="demo").encode("utf-8"))
+                (project / "tasks/T001-demo.md").write_bytes(TASK_TEMPLATE.format(
                     task_id="T001", files_block="  - app.py",
                     context="Repair the demo.", approach="Keep the public interface.",
                     contract="- None", verify="python3 app.py",
-                ))
-                (repo / "app.py").write_text("print('demo')\n")
+                ).encode("utf-8"))
+                (repo / "app.py").write_bytes("print('demo')\n".encode("utf-8"))
                 git(repo, "add", ".")
                 git(repo, "commit", "-m", "build: checkpoint blocked build")
                 original_task = (project / "tasks/T001-demo.md").read_bytes()

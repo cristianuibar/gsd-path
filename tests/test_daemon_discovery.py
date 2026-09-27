@@ -34,7 +34,7 @@ status: active
 def make_project(root: Path, state: str = STATE_V2) -> Path:
     project_dir = root / ".project"
     project_dir.mkdir(parents=True, exist_ok=True)
-    (project_dir / "STATE.md").write_text(state, encoding="utf-8")
+    (project_dir / "STATE.md").write_bytes(state.encode("utf-8"))
     return root
 
 
@@ -104,7 +104,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_state_md_without_project_dir_is_not_project(self) -> None:
         stray = self.parent / "stray"
         stray.mkdir()
-        (stray / "STATE.md").write_text(STATE_V2, encoding="utf-8")
+        (stray / "STATE.md").write_bytes(STATE_V2.encode("utf-8"))
         self.assertEqual(self.scan(), [])
 
 

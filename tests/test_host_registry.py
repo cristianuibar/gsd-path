@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tests.hosts import HostSpec, known_hosts, load  # noqa: E402
 
-MANIFEST = json.loads((ROOT / "scripts" / "skill-resources.json").read_text())["hosts"]
+MANIFEST = json.loads((ROOT / "scripts" / "skill-resources.json").read_text(encoding="utf-8"))["hosts"]
 
 
 class HostRegistryTests(unittest.TestCase):
@@ -36,7 +36,7 @@ class HostRegistryTests(unittest.TestCase):
                 if "GSD_LIVE_HOSTS" in os.environ and spec.verified_live:
                     with tempfile.TemporaryDirectory() as tmp:
                         prompt = Path(tmp) / "prompt.txt"
-                        prompt.write_text("probe")
+                        prompt.write_bytes("probe".encode("utf-8"))
                         binary = Path(spec.command(prompt)[0]).name
                     self.assertIsNotNone(shutil.which(binary), f"{host} claims live verification without a CLI on PATH")
 
