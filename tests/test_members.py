@@ -564,6 +564,21 @@ class MembersArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(check_handoffs.HandoffError, "STRAY.md"):
                 lean_verification._require_ship_inputs(repo, head)
 
+    def test_ship_verification_prunes_empty_host_claude_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary).resolve()
+            git(repo, "init", "-q", "-b", "gsd-path/M001")
+            write_state(repo, "acme", "ship")
+            commit_all(repo)
+            head = git(repo, "rev-parse", "HEAD")
+            (repo / ".project" / ".claude" / ".cc-writes").mkdir(parents=True)
+            lean_verification._require_ship_inputs(repo, head)
+            self.assertFalse((repo / ".project" / ".claude").exists())
+            (repo / ".project" / ".claude").mkdir()
+            (repo / ".project" / ".claude" / "note.txt").write_text("x", encoding="utf-8")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "unsupported .project artifacts: .claude"):
+                lean_verification._require_ship_inputs(repo, head)
+
     def test_milestone_close_keeps_members_file_active(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             active = Path(temporary) / ".project"

@@ -1483,6 +1483,37 @@ refuted
 
             self.assertEqual(preflight.returncode, 0, preflight.stderr)
 
+    def test_preflight_prunes_ignored_empty_host_claude_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            with (repo / ".git" / "info" / "exclude").open("a") as exclude:
+                exclude.write("**/.claude/.cc-writes/\n")
+            (repo / ".project" / "research" / ".claude" / ".cc-writes").mkdir(parents=True)
+
+            archive = self.prepare_archive(repo)
+            self.write_manifest(archive)
+            (archive / "research" / ".claude" / ".cc-writes").mkdir(parents=True, exist_ok=True)
+            (repo / ".project" / ".claude" / ".cc-writes").mkdir(parents=True)
+            preflight = self.preflight(repo)
+
+            self.assertEqual(preflight.returncode, 0, preflight.stderr)
+            self.assertFalse((archive / "research" / ".claude").exists())
+            self.assertFalse((repo / ".project" / ".claude").exists())
+
+    def test_prepare_prunes_empty_host_claude_dir_in_discussion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            discussion = repo / ".project" / "discuss"
+            self.write_discussion(discussion)
+            (discussion / ".claude" / ".cc-writes").mkdir(parents=True)
+
+            archive = self.prepare_archive(repo)
+
+            self.assertEqual(sorted(path.name for path in (archive / "discuss").iterdir()),
+                             ["ANSWERS.md", "DIALOGUE.md"])
+
     def test_prepare_recovers_an_interrupted_carry_forward_copy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
