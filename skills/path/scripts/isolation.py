@@ -25,8 +25,8 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, Optional, Sequence, Set
 
-try:
-    from pipeline_git import (
+if __package__:
+    from .pipeline_git import (
         attest_commit_body,
         attest_commit_subject,
         is_bound_branch,
@@ -35,20 +35,33 @@ try:
         task_commit_body,
         task_commit_subject,
     )
-    import _common
-    import worktree_paths
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.pipeline_git import (
-        attest_commit_body,
-        attest_commit_subject,
-        is_bound_branch,
-        ship_commit_body,
-        ship_subject,
-        task_commit_body,
-        task_commit_subject,
-    )
-    from scripts import _common
-    from scripts import worktree_paths
+    from . import _common
+    from . import worktree_paths
+else:
+    try:
+        from pipeline_git import (
+            attest_commit_body,
+            attest_commit_subject,
+            is_bound_branch,
+            ship_commit_body,
+            ship_subject,
+            task_commit_body,
+            task_commit_subject,
+        )
+        import _common
+        import worktree_paths
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.pipeline_git import (
+            attest_commit_body,
+            attest_commit_subject,
+            is_bound_branch,
+            ship_commit_body,
+            ship_subject,
+            task_commit_body,
+            task_commit_subject,
+        )
+        from scripts import _common
+        from scripts import worktree_paths
 
 
 TASK_BRANCH_PREFIX = "gsd-path-task/"
@@ -2964,10 +2977,13 @@ def publication_base(repo: Path, branch: str, ship_commit: str) -> Optional[str]
     Returns None when the milestone is not an adopted one; raises when the
     archived receipt, ship commit, or archived tasks fail proof.
     """
-    try:
-        from pipeline_state import load_state
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts.pipeline_state import load_state
+    if __package__:
+        from .pipeline_state import load_state
+    else:
+        try:
+            from pipeline_state import load_state
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts.pipeline_state import load_state
     repo = require_directory(repo, "repository")
     state, state_text, _ = load_state(repo)
     if (state.phase, state.status, state.integration, state.branch) != (

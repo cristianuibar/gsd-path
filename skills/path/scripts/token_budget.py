@@ -10,12 +10,16 @@ import json
 import sys
 from pathlib import Path
 
-try:
-    from _common import atomic_write
-    from loop_run import log_lock
-except ModuleNotFoundError:  # pragma: no cover - package imports
-    from scripts._common import atomic_write
-    from scripts.loop_run import log_lock
+if __package__:
+    from ._common import atomic_write
+    from .loop_run import log_lock
+else:
+    try:
+        from _common import atomic_write
+        from loop_run import log_lock
+    except ModuleNotFoundError:  # pragma: no cover - package imports
+        from scripts._common import atomic_write
+        from scripts.loop_run import log_lock
 
 
 SCHEMA = "gsd-path/token-budget/v1"

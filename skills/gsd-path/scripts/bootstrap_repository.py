@@ -12,10 +12,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, Sequence
 
-try:
-    import _common
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts import _common
+if __package__:
+    from . import _common
+else:
+    try:
+        import _common
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import _common
 
 
 class BootstrapError(RuntimeError):

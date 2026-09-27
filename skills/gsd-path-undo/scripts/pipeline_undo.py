@@ -25,22 +25,30 @@ from pathlib import Path, PurePosixPath
 from typing import Optional, Sequence
 
 def _load_pipeline_modules():
-    try:
-        import archive_milestone
-        import isolation
-        import pipeline_git
-        import pipeline_state
-        import state_checkpoint
+    if __package__:
+        from . import archive_milestone
+        from . import isolation
+        from . import pipeline_git
+        from . import pipeline_state
+        from . import state_checkpoint
         return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
-    except ModuleNotFoundError as error:
-        if error.name not in {
-            "archive_milestone",
-            "isolation",
-            "pipeline_git",
-            "pipeline_state",
-            "state_checkpoint",
-        }:
-            raise
+    else:
+        try:
+            import archive_milestone
+            import isolation
+            import pipeline_git
+            import pipeline_state
+            import state_checkpoint
+            return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
+        except ModuleNotFoundError as error:
+            if error.name not in {
+                "archive_milestone",
+                "isolation",
+                "pipeline_git",
+                "pipeline_state",
+                "state_checkpoint",
+            }:
+                raise
     try:
         from scripts import archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint
         return archive_milestone, isolation, pipeline_git, pipeline_state, state_checkpoint

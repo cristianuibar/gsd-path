@@ -1889,6 +1889,25 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual(result["status"], "approved")
             self.assertNotEqual(result["commit"], expected_head)
 
+    def test_resume_approval_survives_scripts_dir_on_sys_path(self) -> None:
+        # test_pipeline_git imports scripts.pipeline_state first; test_members then
+        # puts scripts/ on sys.path. A later scripts.state_checkpoint must still
+        # share pipeline_state's IsolationError, so run that order in a fresh process.
+        program = (
+            "import sys, unittest\n"
+            "import tests.test_pipeline_git, tests.test_members\n"
+            "unittest.main(module='tests.test_pipeline_state', argv=['order', "
+            "'PipelineStateTests.test_resume_approval_rejects_artifact_drift'])\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", program],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_resume_approval_rejects_artifact_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "plan")

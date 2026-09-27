@@ -24,15 +24,15 @@ from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Iterator, NamedTuple, Optional, Sequence
 
-try:
-    from isolation import (
+if __package__:
+    from .isolation import (
         IsolationError,
         prune_host_scratch,
         PROJECT_ENTRIES,
         checkpoint as isolation_checkpoint,
         verify_landed_task_files,
     )
-    from pipeline_git import (
+    from .pipeline_git import (
         bound_branch_name,
         default_branch_name,
         integrate_commit_body,
@@ -45,43 +45,73 @@ try:
         ship_commit_body,
         ship_subject,
     )
-    from review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
-    from pipeline_state import (
+    from .review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
+    from .pipeline_state import (
         PipelineState,
         PipelineStateError,
         load_state,
         transition_state,
     )
-    import _common
-except ImportError:  # pragma: no cover - package import used by tests
-    from scripts.isolation import (
-        IsolationError,
-        prune_host_scratch,
-        PROJECT_ENTRIES,
-        checkpoint as isolation_checkpoint,
-        verify_landed_task_files,
-    )
-    from scripts.pipeline_git import (
-        bound_branch_name,
-        default_branch_name,
-        integrate_commit_body,
-        integrate_subject,
-        is_bound_branch,
-        is_integrate_subject,
-        is_ship_subject,
-        milestone_id,
-        milestone_number,
-        ship_commit_body,
-        ship_subject,
-    )
-    from scripts.review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
-    from scripts.pipeline_state import (
-        PipelineState,
-        PipelineStateError,
-        load_state,
-        transition_state,
-    )
-    from scripts import _common
+    from . import _common
+else:
+    try:
+        from isolation import (
+            IsolationError,
+            prune_host_scratch,
+            PROJECT_ENTRIES,
+            checkpoint as isolation_checkpoint,
+            verify_landed_task_files,
+        )
+        from pipeline_git import (
+            bound_branch_name,
+            default_branch_name,
+            integrate_commit_body,
+            integrate_subject,
+            is_bound_branch,
+            is_integrate_subject,
+            is_ship_subject,
+            milestone_id,
+            milestone_number,
+            ship_commit_body,
+            ship_subject,
+        )
+        from review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
+        from pipeline_state import (
+            PipelineState,
+            PipelineStateError,
+            load_state,
+            transition_state,
+        )
+        import _common
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts.isolation import (
+            IsolationError,
+            prune_host_scratch,
+            PROJECT_ENTRIES,
+            checkpoint as isolation_checkpoint,
+            verify_landed_task_files,
+        )
+        from scripts.pipeline_git import (
+            bound_branch_name,
+            default_branch_name,
+            integrate_commit_body,
+            integrate_subject,
+            is_bound_branch,
+            is_integrate_subject,
+            is_ship_subject,
+            milestone_id,
+            milestone_number,
+            ship_commit_body,
+            ship_subject,
+        )
+        from scripts.review_panel import KNOWN_FAMILIES, ReviewPanelError, parse_sources
+        from scripts.pipeline_state import (
+            PipelineState,
+            PipelineStateError,
+            load_state,
+            transition_state,
+        )
+        from scripts import _common
 
 if sys.platform == "win32":
     import msvcrt
