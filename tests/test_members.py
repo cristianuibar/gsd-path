@@ -133,6 +133,12 @@ class MemberTests(unittest.TestCase):
         (member / "README.md").write_text("changed", encoding="utf-8")
         self.assert_refused(self.add("web", member), "uncommitted changes")
 
+    def test_add_refuses_untracked_files_hidden_by_git_config(self) -> None:
+        member = self.make_member("web")
+        git(member, "config", "status.showUntrackedFiles", "no")
+        (member / "untracked.txt").write_text("hidden", encoding="utf-8")
+        self.assert_refused(self.add("web", member), "uncommitted changes")
+
     def test_add_refuses_member_nested_in_coordinator(self) -> None:
         member = self.make_member("web", parent=self.coordinator)
         self.assert_refused(self.add("web", member), "nested")
@@ -153,6 +159,34 @@ class MemberTests(unittest.TestCase):
         write_state(member, "web", "build")
         commit_all(member, "path state")
         self.assert_refused(self.add("web", member), "active milestone")
+
+    def test_add_and_validate_refuse_unreadable_member_state(self) -> None:
+        for kind in ("broken symlink", "live symlink", "directory"):
+            with self.subTest(kind):
+                member = self.make_member(kind.replace(" ", "-"))
+                state = member / ".project" / "STATE.md"
+                state.parent.mkdir()
+                if kind == "directory":
+                    state.mkdir()
+                else:
+                    if kind == "live symlink":
+                        write_state(member, "web", "shipped", status="done")
+                        state.rename(member / ".project" / "saved-state.md")
+                        state.symlink_to("saved-state.md")
+                    else:
+                        state.symlink_to("missing-state.md")
+                    commit_all(member, "state link")
+                self.assert_refused(self.add("web", member), "member STATE.md is unreadable")
+
+        member = self.make_member("valid")
+        self.assertEqual(self.add("valid", member).returncode, 0)
+        state = member / ".project" / "STATE.md"
+        state.parent.mkdir()
+        state.symlink_to("missing-state.md")
+        commit_all(member, "state link")
+        result = self.run_members("validate")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("member STATE.md is unreadable", result.stderr)
 
     def test_add_accepts_member_whose_own_milestone_shipped(self) -> None:
         member = self.make_member("web")
@@ -204,6 +238,34 @@ class MemberTests(unittest.TestCase):
                 self.assertIn("already", result.stderr)
                 self.assertEqual((self.coordinator / ".project" / "MEMBERS.md").read_bytes(), before)
 
+    def test_add_refuses_duplicate_github_origin_across_url_forms(self) -> None:
+        web = self.make_member("web")
+        self.assertEqual(self.add("web", web).returncode, 0)
+        before = (self.coordinator / ".project" / "MEMBERS.md").read_bytes()
+        for name, remote in (("clone", "git@github.com:Acme/Web"),
+                             ("clone2", "ssh://git@github.com/acme/web.git")):
+            with self.subTest(remote):
+                clone = self.make_member(name, remote=remote)
+                result = self.add(name, clone)
+                self.assertIn("member already recorded", result.stderr)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual((self.coordinator / ".project" / "MEMBERS.md").read_bytes(), before)
+
+    def test_add_refuses_duplicate_git_common_dir(self) -> None:
+        web = self.make_member("web")
+        self.assertEqual(self.add("web", web).returncode, 0)
+        linked = self.root / "linked"
+        git(web, "worktree", "add", "-q", "-b", "linked", str(linked))
+        path = self.coordinator / ".project" / "MEMBERS.md"
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            "https://github.com/acme/web.git", "https://github.com/acme/other.git"
+        ), encoding="utf-8")
+        before = path.read_bytes()
+        result = self.add("linked", linked)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("member already recorded", result.stderr)
+        self.assertEqual(path.read_bytes(), before)
+
     def test_add_refuses_coordinator_as_its_own_member(self) -> None:
         self.assert_refused(self.add("acme", self.coordinator), "coordinator")
 
@@ -229,6 +291,8 @@ class MemberTests(unittest.TestCase):
             "unknown field": "## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\nColor: red\n",
             "bad name": "## Web App\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
             "bad mode": "## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: squash\n",
+            "section heading changed": "# web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
+            "unexpected preamble": "extra\n## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
         }.items():
             with self.subTest(label):
                 path.write_text("# Members\n\n" + body, encoding="utf-8")

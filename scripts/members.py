@@ -31,7 +31,7 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FIELDS = ("Checkout", "Remote", "Integration")
 INTEGRATIONS = ("default", "direct", "pull-request")
 GITHUB_REMOTE_RE = re.compile(
-    r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)[^/\s]+/[^/\s]+"
+    r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/\s]+)/([^/\s]+)"
 )
 # Member-side Path refs carry the coordinator name, so they cannot collide with
 # a member's own Path history.
@@ -74,6 +74,13 @@ def _coordinator(repo: Path) -> tuple[Path, pipeline_state.PipelineState]:
     return root, state
 
 
+def _remote_identity(remote: str) -> Optional[tuple[str, str]]:
+    match = GITHUB_REMOTE_RE.fullmatch(remote)
+    if match is None:
+        return None
+    return match.group(1).lower(), match.group(2).removesuffix(".git").lower()
+
+
 def read_members(coordinator: Path) -> list[dict[str, str]]:
     """Parse MEMBERS.md; an absent file means a single-repo project."""
     path = coordinator / ".project" / MEMBERS_FILE
@@ -83,6 +90,7 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
         raise MembersError("MEMBERS.md must be a regular file")
     members: list[dict[str, str]] = []
     current: Optional[dict[str, str]] = None
+    preamble: list[str] = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if line.startswith("## "):
             name = line[3:].strip()
@@ -91,12 +99,25 @@ def read_members(coordinator: Path) -> list[dict[str, str]]:
             current = {"name": name}
             members.append(current)
             continue
-        if current is None or not line.strip():
+        if current is None:
+            preamble.append(line)
+            continue
+        if not line.strip():
             continue
         key, separator, value = line.partition(":")
         if not separator or key not in FIELDS or key.lower() in current:
             raise MembersError(f"MEMBERS.md line {number}: unexpected line {line!r}")
         current[key.lower()] = value.strip()
+    if not preamble or preamble[0] != "# Members":
+        raise MembersError("MEMBERS.md format error: expected # Members")
+    rest = preamble[1:]
+    while rest and not rest[0]:
+        rest.pop(0)
+    comment = HEADER.splitlines()[2:]
+    if rest[:len(comment)] == comment:
+        rest = rest[len(comment):]
+    if any(rest):
+        raise MembersError("MEMBERS.md format error: unexpected pre-section content")
     names = [member["name"] for member in members]
     if len(set(names)) != len(names):
         raise MembersError("MEMBERS.md repeats a member name")
@@ -135,7 +156,7 @@ def check_member(
     )
     if common.resolve() == coordinator_common.resolve():
         raise MembersError("the coordinator cannot be its own member")
-    if _git(checkout, "status", "--porcelain"):
+    if _git(checkout, "status", "--porcelain", "--untracked-files=all"):
         raise MembersError(f"member has uncommitted changes: {checkout}")
     remote = _git(checkout, "remote", "get-url", "origin")
     if not GITHUB_REMOTE_RE.fullmatch(remote):
@@ -145,7 +166,10 @@ def check_member(
     default = _common.run_git(checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     if default.returncode != 0 or default.stdout.strip() != "origin/main":
         raise MembersError(f"member remote default must be main: {checkout}")
-    if (checkout / ".project" / "STATE.md").exists():
+    member_state = checkout / ".project" / "STATE.md"
+    if member_state.exists() or member_state.is_symlink():
+        if member_state.is_symlink() or not member_state.is_file():
+            raise MembersError("member STATE.md is unreadable")
         try:
             state, _, _ = pipeline_state.load_state(checkout)
         except pipeline_state.PipelineStateError as error:
@@ -179,10 +203,15 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
         raise MembersError(f"invalid member name: {name!r}")
     members = read_members(root)
     resolved = checkout.resolve()
-    for member in members:
-        if member["name"] == name or Path(member["checkout"]) == resolved:
-            raise MembersError(f"member already recorded: {member['name']}")
     remote = check_member(root, state.project, checkout)
+    common = Path(_git(resolved, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve()
+    identity = _remote_identity(remote)
+    for member in members:
+        previous = Path(member["checkout"])
+        if (member["name"] == name or previous == resolved
+                or _remote_identity(member["remote"]) == identity
+                or Path(_git(previous, "rev-parse", "--path-format=absolute", "--git-common-dir")).resolve() == common):
+            raise MembersError(f"member already recorded: {member['name']}")
     members.append(
         {"name": name, "checkout": str(resolved), "remote": remote, "integration": integration}
     )
