@@ -24,7 +24,11 @@ checking. Legal entry is `research/done` or `decide/active|blocked`. On
 `research/done`, enter with `pipeline_state.py transition`, expected
 phase/status `research/done`, exact branch and archive values, event `decision
 synthesis started`, and set phase/status `decide/active` (plus the same
-lookahead project dir); never edit STATE directly. `decide/done` or any later phase blocks rather
+lookahead project dir). Resume `decide/blocked` through the same helper with
+the complete current state as expected, `--set-phase decide --set-status
+active`, event `decision synthesis resumed`, and the same lookahead project
+dir when supplied. Require the returned track state to be `decide/active`;
+never edit STATE directly. `decide/done` or any later phase blocks rather
 than replacing decisions beneath an existing plan. When an active router
 supplies the lookahead track root `.project/next/`, evaluate these
 preconditions against the track instead; see Lookahead mode. Require
@@ -60,8 +64,10 @@ rules are unchanged; never write an active-path artifact.
 
 1. Read the local [synthesis template](templates/synthesis.md),
    `.project/research/RESEARCH.md`, and the bundled `scripts/check_handoffs.py`;
-   resolve each to an absolute path. Run the research hand-off validator before
-   dispatch so decide receives a complete, intentional evidence set.
+   resolve each to an absolute path. At `decide/active`, before dispatch, run
+   `python3 <absolute check_handoffs.py> research --repo <absolute root>
+   [--project-dir .project/next]` so decide receives a complete, intentional
+   evidence set.
 2. Read the local [decider role](references/decider.md), then follow
    the local [runtime dispatch contract](references/dispatch.md) with
    deterministic logical task name `decide`. Give it absolute paths to the role,

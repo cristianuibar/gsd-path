@@ -377,7 +377,10 @@ def validate_research(
 ) -> Dict[str, object]:
     """Validate the research-to-synthesis hand-off and return its summary."""
 
-    _require_state(root, "research", "active", project_dir)
+    # Research runs this before closing; decide runs it after its entry transition.
+    _require_state_one_of(
+        root, {("research", "active"), ("decide", "active")}, project_dir
+    )
     return validate_research_artifacts(root, project_dir)
 
 
