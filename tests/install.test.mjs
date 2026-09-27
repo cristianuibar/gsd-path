@@ -596,6 +596,7 @@ test("existing managed entries backed up and unrelated preserved", async () => {
   assert.equal(fs.readFileSync(path.join(outside, "marker"), "utf8"), "preserve");
   assert.ok(fs.statSync(path.join(target, "other-skill")).isDirectory());
   assert.match(results.join("\n"), /backed up 5 entries/);
+  assert.match(results.join("\n"), /local edits inside these skills are not carried forward/);
 });
 
 test("codex migrates legacy root and preserves unrelated entries", async () => {
@@ -611,6 +612,10 @@ test("codex migrates legacy root and preserves unrelated entries", async () => {
   assert.ok(fs.statSync(path.join(legacy, "unrelated")).isDirectory());
   assert.ok(!fs.readdirSync(legacy).includes("gsd-path"));
   assert.match(results.join("\n"), /codex-legacy: backed up 1 entries/);
+  assert.match(
+    results.find((line) => line.startsWith("codex-legacy: backed up 1 entries")),
+    /local edits inside these skills are not carried forward \(see UPDATE\.md#local-additions\)/
+  );
 });
 
 test("migrateLegacy false skips the legacy root entirely", async () => {

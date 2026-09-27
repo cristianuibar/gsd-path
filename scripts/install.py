@@ -46,6 +46,10 @@ LOCAL_ROOTS = local_roots_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_NAMES = skill_names_for_manifest(sync_skill_resources.RESOURCE_MANIFEST)
 SKILL_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["skill_aliases"])
 ROUTER_ALIASES = dict(sync_skill_resources.RESOURCE_MANIFEST["router_aliases"])
+LOCAL_EDITS_NOTE = (
+    "; local edits inside these skills are not carried forward "
+    "(see UPDATE.md#local-additions)"
+)
 CLAUDE_BRIDGE = "@../AGENTS.md\n@../WORKFLOW.md\n"
 HOOKS_DIRECTORY = ".gsd-path"
 GUARD_SCRIPTS = ("guard_hook.py", "git_guard.py")
@@ -2858,7 +2862,7 @@ def install(
                     results.append(
                         "codex-legacy: backed up "
                         f"{len(legacy_transaction.moved)} entries to "
-                        f"{legacy_transaction.backup}"
+                        f"{legacy_transaction.backup}{LOCAL_EDITS_NOTE}"
                     )
             for index, plan in enumerate(deployments):
                 transaction = TargetTransaction(plan.root)
@@ -2869,7 +2873,7 @@ def install(
                     results.append(
                         f"{'+'.join(plan.targets)}: backed up "
                         f"{len(transaction.moved)} entries "
-                        f"to {transaction.backup}"
+                        f"to {transaction.backup}{LOCAL_EDITS_NOTE}"
                     )
             if project is not None:
                 result_line = _project_result(
