@@ -2031,6 +2031,28 @@ refuted
                 )
                 self.assertEqual(validate.returncode, 0, validate.stderr)
 
+    def test_tracked_ds_store_moved_into_archive_is_listed_and_must_be_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = Path(temporary_directory)
+            self.make_repo(repo)
+            (repo / ".git" / "info" / "exclude").write_text(".DS_Store\n")
+            original = repo / ".project" / "intent" / ".DS_Store"
+            original.write_text("tracked Finder data\n")
+            self.assertEqual(self.git(repo, "add", "-f", str(original)).returncode, 0)
+
+            archive = self.prepare_archive(repo)
+            rendered = self.render_manifest(repo)
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            archived = archive / "intent" / ".DS_Store"
+            self.assertTrue(archived.is_file())
+            self.assertIn("- intent/.DS_Store", (archive / "MANIFEST.md").read_text())
+            unstaged = self.preflight(repo)
+            self.assertNotEqual(unstaged.returncode, 0)
+            self.assertIn("ignored current archive paths", unstaged.stderr)
+            self.assertEqual(self.git(repo, "add", "-f", str(archived)).returncode, 0)
+            staged = self.preflight(repo)
+            self.assertEqual(staged.returncode, 0, staged.stderr)
+
     def test_is_ignored_junk_requires_an_ignored_untracked_junk_name(self) -> None:
         from scripts import _common
 
