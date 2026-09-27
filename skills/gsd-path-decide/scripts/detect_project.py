@@ -42,6 +42,11 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, NamedTuple, Optional, Sequence
 
 try:
+    from . import _common
+except ImportError:
+    import _common
+
+try:
     import fcntl
 
     def lock_exclusive(fd: int) -> None:
@@ -961,6 +966,26 @@ def is_staged_skill_bundle_artifact(
     )
 
 
+def ignored_junk(directory: Path, name: str, status: os.stat_result) -> bool:
+    """Ignored, untracked OS junk. The caller's no-follow status decides the file type."""
+    if (
+        name not in _common.OS_JUNK_NAMES
+        or is_link_like_status(status)
+        or not stat.S_ISREG(status.st_mode)
+    ):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(directory), "check-ignore", "-q", "--", name],
+            capture_output=True,
+            check=False,
+            env=git_environment(),
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
 def project_path_inventory(
     project: Path, root: Path
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -1001,14 +1026,18 @@ def project_path_inventory(
             posix_relative(current / name, root) for name in linked_directories
         )
         dirnames[:] = [name for name in dirnames if name not in linked_directories]
+        kept = []
         for name in filenames:
             path = current / name
-            relative = posix_relative(path, root)
             status = lstat_evidence(path, missing_ok=False)
+            if ignored_junk(current, name, status):
+                continue
+            kept.append(name)
+            relative = posix_relative(path, root)
             paths.append(relative)
             if is_link_like(path, status) or not stat.S_ISREG(status.st_mode):
                 unsafe_paths.append(relative)
-        if not filenames and not dirnames and current != project:
+        if not kept and not dirnames and current != project:
             paths.append(posix_relative(current, root))
     if not paths:
         try:
@@ -1017,7 +1046,11 @@ def project_path_inventory(
             raise DetectError(
                 f"cannot list project evidence: {project}: {error}"
             ) from error
-        paths = [posix_relative(project / name, root) for name in names]
+        paths = [
+            posix_relative(project / name, root)
+            for name in names
+            if not ignored_junk(project, name, lstat_evidence(project / name, missing_ok=False))
+        ]
     return tuple(sorted(paths)), tuple(sorted(unsafe_paths))
 
 
@@ -1265,6 +1298,19 @@ def close_file_descriptors(
             pass
 
 
+def project_entries(project_fd: int, project: Path) -> set:
+    """Names in .project without ignored OS junk (Finder may add .DS_Store at any time)."""
+    entries = set(os.listdir(project_fd))
+    for name in entries & _common.OS_JUNK_NAMES:
+        try:
+            status = os.stat(name, dir_fd=project_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            continue  # Keep the name: the caller's comparison then fails closed.
+        if ignored_junk(project, name, status):
+            entries.discard(name)
+    return entries
+
+
 def write_state_anchored(
     root: Path,
     content: str,
@@ -1333,7 +1379,7 @@ def write_state_anchored(
         ):
             raise DetectError(".project changed after classification")
         lock_exclusive(project_fd)
-        entries = set(os.listdir(project_fd))
+        entries = project_entries(project_fd, root / ".project")
         if entries not in (set(), {STATE_TEMP_NAME}):
             raise DetectError(".project changed after classification")
         create = (
@@ -1400,7 +1446,7 @@ def write_state_anchored(
             or not os.path.samestat(created_status, current_state)
         ):
             raise DetectError("temporary STATE.md changed while writing")
-        if set(os.listdir(project_fd)) != {STATE_TEMP_NAME}:
+        if project_entries(project_fd, root / ".project") != {STATE_TEMP_NAME}:
             raise DetectError(".project contents changed while creating STATE.md")
         try:
             os.link(
@@ -1420,7 +1466,7 @@ def write_state_anchored(
         published = os.stat("STATE.md", dir_fd=project_fd, follow_symlinks=False)
         if published.st_nlink != 1 or not os.path.samestat(created_status, published):
             raise DetectError("STATE.md changed while publishing")
-        if set(os.listdir(project_fd)) != {"STATE.md"}:
+        if project_entries(project_fd, root / ".project") != {"STATE.md"}:
             raise DetectError(".project contents changed while publishing STATE.md")
         os.fsync(project_fd)
         closing_state_fd = state_fd
