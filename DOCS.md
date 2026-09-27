@@ -321,10 +321,9 @@ Restart the host session. Confirm with `ls ~/.claude/skills/gsd-path` (or your h
 Yes: `node scripts/install.mjs --cursor` (add other flags as needed).
 
 **Will install overwrite my `AGENTS.md`?**
-No — if managed project files already exist, a plain install refuses and installs
-nothing for that project. Use `--update --project PATH` to refresh skills and the
-managed `.gsd-path/` runtime while keeping your contracts; merge project
-contract updates manually ([UPDATE.md](UPDATE.md)).
+No. A plain install refuses when a target project contract exists. See
+[Update project contracts](UPDATE.md#update-project-contracts) for first-install
+steps and later updates.
 
 **Where is pipeline state?**
 `.project/` in your repo — not chat history.
