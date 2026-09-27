@@ -99,6 +99,15 @@ class MemberWriteTests(unittest.TestCase):
         join(other, foreign, "sdk")
         self.assert_allowed(foreign / "app.py")
 
+    def test_foreign_member_stays_external_when_listed_checkout_is_gone(self) -> None:
+        self.member.rename(self.root / "web-gone")
+        other = make_repo(self.root / "other", "other")
+        foreign = make_repo(self.root / "sdk", "sdk", "https://github.com/acme/sdk.git")
+        (foreign / ".project" / "STATE.md").unlink()
+        git(foreign, "commit", "-q", "-am", "leave path")
+        join(other, foreign, "sdk")
+        self.assert_allowed(foreign / "app.py")
+
     def test_stale_member_of_this_coordinator_fails_closed(self) -> None:
         (self.coordinator / ".project" / "MEMBERS.md").unlink()
         self.assert_denied(self.member / "app.py", "members.py repair", phase="build")

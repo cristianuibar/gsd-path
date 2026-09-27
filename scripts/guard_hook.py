@@ -819,14 +819,16 @@ def member_target_kind(candidate, repo):
     if coordinator is None:
         return None
     if coordinator.resolve() != repo.resolve():
-        if any(
-            members._common_dir(Path(member["checkout"])) == common.resolve()
-            for member in members.read_members(repo)
-        ):
-            raise members.MembersError(
-                "member marker names an old coordinator; "
-                "run members.py repair --repo <coordinator>"
-            )
+        for member in members.read_members(repo):
+            try:
+                listed_common = members._common_dir(Path(member["checkout"]))
+            except (members.MembersError, OSError):
+                continue
+            if listed_common == common.resolve():
+                raise members.MembersError(
+                    "member marker names an old coordinator; "
+                    "run members.py repair --repo <coordinator>"
+                )
         return None
     members.member_role(toplevel)
     return "product"
