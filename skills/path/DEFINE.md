@@ -3,7 +3,8 @@ name: gsd-path-define
 description: Define and approve project or milestone intent through an interview or milestone confirmation, writing .project/CHARTER.md or .project/intent/INTENT.md. Use only when the user explicitly invokes $gsd-path-define or an active $gsd-path router explicitly routes to this phase.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Define Phase
 

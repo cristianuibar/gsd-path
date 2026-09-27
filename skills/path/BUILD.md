@@ -3,7 +3,8 @@ name: gsd-path-build
 description: Execute or resume an approved GSD Path plan with isolated task worktrees, deterministic commits, and independent wave review. Use only when the user explicitly invokes $gsd-path-build or an active $gsd-path router explicitly routes to this phase.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Build Orchestrator
 

@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -1006,7 +1007,7 @@ class InstallerTests(unittest.TestCase):
     def test_project_collision_fails_before_install_mutation(self):
         project = self.root / "my project"
         project.mkdir()
-        (project / "AGENTS.md").write_text("existing", encoding="utf-8")
+        (project / "WORKFLOW.md").write_text("existing", encoding="utf-8")
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(
             [
@@ -1023,12 +1024,11 @@ class InstallerTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertIn("already exists", error)
         move = (
-            f"mv {shlex.quote(str(project / 'AGENTS.md'))} "
-            f"{shlex.quote(str(project / 'AGENTS.pre-path.md'))}"
+            f"mv {shlex.quote(str(project / 'WORKFLOW.md'))} "
+            f"{shlex.quote(str(project / 'WORKFLOW.pre-path.md'))}"
         )
         self.assertIn(move, error)
-        self.assertIn("merge its rules into the new AGENTS.md", error)
-        self.assertIn("Codex reads only the first 32 KiB", error)
+        self.assertIn("merge its rules into the new WORKFLOW.md", error)
 
         # The printed command is the way through for an untracked contract.
         subprocess.run(move, shell=True, check=True)
@@ -1046,14 +1046,14 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertEqual(
             "existing",
-            (project / "AGENTS.pre-path.md").read_text(encoding="utf-8"),
+            (project / "WORKFLOW.pre-path.md").read_text(encoding="utf-8"),
         )
 
     def test_project_collision_with_occupied_backup_has_no_move_command(self):
         project = self.root / "project"
         project.mkdir()
-        (project / "AGENTS.md").write_text("existing", encoding="utf-8")
-        aside = project / "AGENTS.pre-path.md"
+        (project / "WORKFLOW.md").write_text("existing", encoding="utf-8")
+        aside = project / "WORKFLOW.pre-path.md"
         aside.write_text("earlier backup", encoding="utf-8")
         status, _, error = self.run_main(
             [
@@ -1070,11 +1070,195 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn("mv ", error)
         self.assertIn(f"{aside} already exists", error)
         self.assertIn("move the contract to an unused name", error)
-        self.assertIn("merge its rules into the new AGENTS.md", error)
-        self.assertIn("Codex reads only the first 32 KiB", error)
+        self.assertIn("merge its rules into the new WORKFLOW.md", error)
         self.assertIn("--update --project PATH", error)
-        self.assertEqual("existing", (project / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertEqual("existing", (project / "WORKFLOW.md").read_text(encoding="utf-8"))
         self.assertEqual("earlier backup", aside.read_text(encoding="utf-8"))
+
+    def install_agents(self, project, update=False):
+        return install.install(
+            self.source,
+            [install.TargetPlan("grok", self.root / "grok" / "skills")],
+            project,
+            update=update,
+        )
+
+    def test_project_inserts_block_into_foreign_agents_and_keeps_owner_text(self):
+        project = self.root / "foreign-agents"
+        project.mkdir()
+        owner = "# Team rules\r\n\nUse tabs.\n"
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
+
+        self.install_agents(project)
+
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        merged = (project / "AGENTS.md").read_bytes().decode("utf-8")
+        self.assertEqual(block + "\n" + owner, merged)
+
+        # Update replaces only the block; text on both sides stays byte-for-byte.
+        (project / "AGENTS.md").write_bytes(("above\n" + merged).encode("utf-8"))
+        (self.source / "AGENTS.md").write_text("# New contract\n", encoding="utf-8")
+        self.install_agents(project, update=True)
+        self.assertEqual(
+            "above\n" + install._agents_block("# New contract\n") + "\n" + owner,
+            (project / "AGENTS.md").read_bytes().decode("utf-8"),
+        )
+
+    def test_project_refuses_unmatched_or_duplicate_agents_markers(self):
+        begin, end = install.AGENTS_BEGIN, install.AGENTS_END
+        for index, text in enumerate(
+            (
+                f"{begin}\nrules\n",
+                f"{end}\nrules\n",
+                f"{end}\nx\n{begin}\n",
+                f"{begin}\na\n{end}\n{begin}\nb\n{end}\n",
+            )
+        ):
+            project = self.root / f"markers-{index}"
+            project.mkdir()
+            (project / "AGENTS.md").write_text(text, encoding="utf-8")
+            with self.assertRaisesRegex(install.InstallerError, "exactly one"):
+                self.install_agents(project)
+            self.assertEqual(text, (project / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertFalse((project / "WORKFLOW.md").exists())
+
+    def test_update_preserves_owner_bytes_after_crlf_agents_marker(self):
+        project = self.root / "crlf-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        owner_before = b"before\r\n"
+        owner_after = b"after\r\nowner\n"
+        block = install._agents_block("# Old contract\n").replace("\n", "\r\n")
+        agents.write_bytes(owner_before + block.encode("utf-8") + owner_after)
+        (self.source / "AGENTS.md").write_text("# New contract\n", encoding="utf-8")
+
+        self.install_agents(project, update=True)
+
+        self.assertEqual(
+            owner_before + install._agents_block("# New contract\n").encode("utf-8")
+            + owner_after,
+            agents.read_bytes(),
+        )
+
+    def test_project_refuses_merged_agents_over_codex_limit_with_sizes(self):
+        project = self.root / "large-agents"
+        project.mkdir()
+        owner = "x" * install.CODEX_DOC_LIMIT
+        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        merged_size = len(block.encode("utf-8")) + 1 + len(owner)
+
+        with self.assertRaises(install.InstallerError) as raised:
+            self.install_agents(project)
+
+        message = str(raised.exception)
+        self.assertIn(f"would be {merged_size} bytes", message)
+        self.assertIn(f"existing file {len(owner)} bytes", message)
+        self.assertIn(f"block {len(block.encode('utf-8'))} bytes", message)
+        self.assertIn(str(project / "AGENTS.pre-path.md"), message)
+        self.assertEqual(owner, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_update_migrates_released_whole_file_agents_to_block(self):
+        project = self.root / "released-agents"
+        project.mkdir()
+        released = install.LEGACY_AGENTS_TITLE + "\n\nold rules\n"
+        (project / "AGENTS.md").write_text(released, encoding="utf-8")
+        digest = hashlib.sha256(released.encode("utf-8")).hexdigest()
+
+        with mock.patch.object(install, "RELEASED_AGENTS", frozenset({digest})):
+            self.install_agents(project)
+
+        self.assertEqual(
+            install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8")),
+            (project / "AGENTS.md").read_text(encoding="utf-8"),
+        )
+
+    def test_update_refuses_edited_whole_file_agents_with_diff(self):
+        project = self.root / "edited-agents"
+        project.mkdir()
+        edited = install.LEGACY_AGENTS_TITLE + "\n\nmy own edit\n"
+        (project / "AGENTS.md").write_text(edited, encoding="utf-8")
+
+        with self.assertRaises(install.InstallerError) as raised:
+            self.install_agents(project)
+
+        message = str(raised.exception)
+        self.assertIn("edited whole-file GSD Path contract", message)
+        self.assertIn("+my own edit", message)
+        self.assertIn(install.AGENTS_END, message)
+        self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_project_refuses_edited_whole_file_agents_without_title(self):
+        project = self.root / "retitled-agents"
+        project.mkdir()
+        edited = "# Our rules\n\n" + install.LEGACY_AGENTS_MARKER + "\n- mine\n"
+        (project / "AGENTS.md").write_text(edited, encoding="utf-8")
+
+        with self.assertRaisesRegex(install.InstallerError, "edited whole-file"):
+            self.install_agents(project)
+        self.assertEqual(edited, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_project_treats_inline_legacy_marker_as_owner_text(self):
+        project = self.root / "inline-legacy-marker"
+        project.mkdir()
+        owner = f"Old Path files used `{install.LEGACY_AGENTS_MARKER}`.\n"
+        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+
+        self.install_agents(project)
+
+        self.assertTrue((project / "AGENTS.md").read_text(encoding="utf-8").endswith("\n" + owner))
+
+    def test_update_refuses_agents_changed_during_install(self):
+        project = self.root / "changing-agents"
+        project.mkdir()
+        agents = project / "AGENTS.md"
+        agents.write_text("owner\n", encoding="utf-8")
+        reads = iter((b"owner\n", b"owner edit\n"))
+
+        with mock.patch.object(install, "_read_agents", side_effect=lambda _: next(reads)):
+            transaction = install.ProjectTransaction()
+            with self.assertRaisesRegex(install.InstallerError, "changed during install"):
+                install._apply_agents(self.source, agents, transaction)
+
+        self.assertEqual("owner\n", agents.read_text(encoding="utf-8"))
+        self.assertEqual([], transaction.replaced)
+
+    def test_project_treats_inline_markers_as_owner_text(self):
+        project = self.root / "inline-markers"
+        project.mkdir()
+        owner = (
+            f"Path writes `{install.AGENTS_BEGIN}` and\n"
+            f"`{install.AGENTS_END}` around its rules.\n"
+        )
+        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+
+        self.install_agents(project)
+
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertEqual(block + "\n" + owner, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_doctor_checks_agents_block(self):
+        project = self.root / "doctor-agents"
+        project.mkdir()
+        shutil.copy2(self.source / "WORKFLOW.md", project / "WORKFLOW.md")
+        template = (self.source / "AGENTS.md").read_text(encoding="utf-8")
+        cases = (
+            ("owner\n" + install._agents_block(template) + "owner\n", "ok", "block present"),
+            (install._agents_block("# old\n"), "fail", "block is stale"),
+            (template, "fail", "no GSD Path block"),
+            (f"{install.AGENTS_BEGIN}\n", "fail", "exactly one"),
+            ("x" * install.CODEX_DOC_LIMIT + "\n" + install._agents_block(template),
+             "fail", "Codex reads only the first"),
+            (install._agents_block(template) + "x" * install.CODEX_DOC_LIMIT,
+             "fail", "Codex reads only the first"),
+        )
+        for text, level, expected in cases:
+            (project / "AGENTS.md").write_text(text, encoding="utf-8")
+            findings = install.doctor(self.source, [], lambda _: self.root, project)
+            agents = [f for f in findings if "AGENTS.md" in f["text"]]
+            self.assertEqual(1, len(agents), findings)
+            self.assertEqual(level, agents[0]["level"], agents)
+            self.assertIn(expected, agents[0]["text"])
 
     def test_claude_bridge_collision_names_its_own_move(self):
         project = self.root / "project"
@@ -1151,7 +1335,7 @@ class InstallerTests(unittest.TestCase):
 
         def create_contract_after_target(plan, staged, transaction):
             original(plan, staged, transaction)
-            (project / "AGENTS.md").write_text("concurrent", encoding="utf-8")
+            (project / "WORKFLOW.md").write_text("concurrent", encoding="utf-8")
 
         with mock.patch.object(
             install, "_apply_target", side_effect=create_contract_after_target
@@ -1163,9 +1347,9 @@ class InstallerTests(unittest.TestCase):
                     project,
                 )
         self.assertEqual(
-            "concurrent", (project / "AGENTS.md").read_text(encoding="utf-8")
+            "concurrent", (project / "WORKFLOW.md").read_text(encoding="utf-8")
         )
-        self.assertFalse((project / "WORKFLOW.md").exists())
+        self.assertFalse((project / "AGENTS.md").exists())
         self.assertFalse(target.exists())
 
     def test_project_contracts_cannot_overlap_target_or_auxiliary_roots(self):
@@ -2188,7 +2372,12 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(0, status, error)
-        (project / "AGENTS.md").write_text("edited contract\n", encoding="utf-8")
+        agents = project / "AGENTS.md"
+        owner = "\n## Owner rules\n\n- keep me\n"
+        agents.write_text(agents.read_text(encoding="utf-8") + owner, encoding="utf-8")
+        installed_agents = agents.read_text(encoding="utf-8")
+        template = (self.source / "AGENTS.md").read_text(encoding="utf-8")
+        (self.source / "AGENTS.md").write_text(template + "\n- new rule\n", encoding="utf-8")
         (project / ".claude" / "CLAUDE.md").write_text("edited bridge\n", encoding="utf-8")
         runtime_file = (
             self.runtime_root(project)
@@ -2210,9 +2399,10 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertRegex(
             output,
-            r"project: would refresh .*; kept AGENTS\.md, WORKFLOW\.md, .*\.claude/CLAUDE\.md",
+            r"project: would refresh AGENTS\.md, .*; kept WORKFLOW\.md, .*\.claude/CLAUDE\.md",
         )
         self.assertEqual(stale_runtime, runtime_file.read_text(encoding="utf-8"))
+        self.assertEqual(installed_agents, agents.read_text(encoding="utf-8"))
 
         status, output, error = self.run_main(
             [*self.hooks_arguments(project, target), "--update"]
@@ -2220,10 +2410,11 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertRegex(
             output,
-            r"project: refreshed .*; kept AGENTS\.md, WORKFLOW\.md, .*\.claude/CLAUDE\.md.*\n",
+            r"project: refreshed AGENTS\.md, .*; kept WORKFLOW\.md, .*\.claude/CLAUDE\.md.*\n",
         )
         self.assertEqual(
-            "edited contract\n", (project / "AGENTS.md").read_text(encoding="utf-8")
+            install._agents_block(template + "\n- new rule\n") + owner,
+            agents.read_text(encoding="utf-8"),
         )
         self.assertEqual(
             "edited bridge\n",
@@ -3348,7 +3539,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue((project / ".codex" / "hooks.json").is_file())
         self.assertTrue((project / ".cursor" / "hooks.json").is_file())
         self.assertEqual(
-            (self.source / "AGENTS.md").read_text(encoding="utf-8"),
+            install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8")),
             (project / "AGENTS.md").read_text(encoding="utf-8"),
         )
 

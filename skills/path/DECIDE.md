@@ -3,7 +3,8 @@ name: gsd-path-decide
 description: Decide implementation direction from approved intent and complete research evidence, recording settled choices in SYNTHESIS.md. Use only when the user explicitly invokes $gsd-path-decide or an active $gsd-path router explicitly routes to this phase.
 ---
 
-Before executing project helpers, read [runtime selection](references/runtime-selection.md).
+Before executing project helpers, read [runtime selection](references/runtime-selection.md)
+and [operating rules](references/operating-rules.md).
 
 # GSD Path Decide Phase
 

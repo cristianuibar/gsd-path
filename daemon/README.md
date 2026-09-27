@@ -293,8 +293,11 @@ one global op-lock — a second concurrent operation gets
   `.gsd-path/runtime/VERSION` when it contains a recognized version or `unknown`
   and is not a symlink; legacy `.gsd-path/runtime/*.py` and
   `status_runtime.py` only when marker-matched; `guard_hook.py` /
-  `git_guard.py` only when marker-matched; `AGENTS.md`, `WORKFLOW.md`, and
-  `.claude/CLAUDE.md` only when byte-identical to the source template
+  `git_guard.py` only when marker-matched; the `AGENTS.md` block between the
+  `<!-- gsd-path:begin -->` and `<!-- gsd-path:end -->` markers (owner text is
+  kept; a file left empty is deleted); `AGENTS.md` without markers,
+  `WORKFLOW.md`, and `.claude/CLAUDE.md` only when byte-identical to the
+  source template
   (user-modified files are kept); settings files
   (`.claude/settings.json`, `.codex/hooks.json`, `.cursor/hooks.json`) are
   surgically un-merged — only the gsd-path guard entries are removed,

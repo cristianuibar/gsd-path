@@ -55,6 +55,8 @@ GIT_HOOK_NAMES = ("pre-commit", "commit-msg", "pre-push")
 SETTINGS_FILES = (".claude/settings.json", ".codex/hooks.json", ".cursor/hooks.json")
 CONTRACT_FILES = ("AGENTS.md", "WORKFLOW.md")
 NEVER_TOUCH_DIRECTORY = ".project"
+AGENTS_BEGIN = "<!-- gsd-path:begin -->"
+AGENTS_END = "<!-- gsd-path:end -->"
 
 CACHE_NAME = "update-check.json"
 LOG_NAME = "plugin.log"
@@ -99,6 +101,18 @@ def _is_newer(latest: Optional[str], installed: Optional[str]) -> bool:
         and installed_parts is not None
         and latest_parts > installed_parts
     )
+
+
+def _without_agents_block(text: str) -> Optional[str]:
+    """AGENTS.md owner text with the one gsd-path block removed, or None."""
+    begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
+    ends = list(re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?(?:\n|$)", text))
+    if len(begins) != 1 or len(ends) != 1 or ends[0].start() < begins[0]:
+        return None
+    before, after = text[:begins[0]], text[ends[0].end():]
+    if not before and after.startswith("\n"):
+        after = after[1:]  # The installer puts one blank line after the block.
+    return before + after
 
 
 def _is_managed_name(name: str) -> bool:
@@ -779,8 +793,23 @@ class PluginManager:
                     "reason": "no gsd-path guard marker — kept",
                 })
 
+        agents = project / "AGENTS.md"
+        try:
+            block_removed = _without_agents_block(agents.read_bytes().decode("utf-8"))
+        except (OSError, UnicodeDecodeError):
+            block_removed = None
+        if block_removed is not None and agents.is_symlink():
+            skipped.append({"path": str(agents), "reason": "symlink — kept"})
+        elif block_removed is not None:
+            plan.append({
+                "path": str(agents),
+                "kind": "agents-block",
+                "reason": "remove the gsd-path block; owner text is kept"
+                + ("" if block_removed else "; file becomes empty and is deleted"),
+            })
         for name in CONTRACT_FILES:
-            self._plan_contract(project / name, self._template_bytes(name), plan, skipped)
+            if name != "AGENTS.md":
+                self._plan_contract(project / name, self._template_bytes(name), plan, skipped)
         self._plan_contract(
             project / ".claude" / "CLAUDE.md", CLAUDE_BRIDGE.encode("utf-8"), plan, skipped
         )
@@ -859,6 +888,16 @@ class PluginManager:
                     self._remove_file(path)
                 elif kind == "settings":
                     self._apply_settings_removal(Path(path))
+                elif kind == "agents-block":
+                    if Path(path).is_symlink():
+                        raise ValueError("refused: AGENTS.md became a symlink")
+                    remaining = _without_agents_block(Path(path).read_bytes().decode("utf-8"))
+                    if remaining is None:
+                        raise ValueError("gsd-path block markers changed since planning")
+                    if remaining:
+                        self._write_file(path, remaining)
+                    else:
+                        self._remove_file(path)
                 else:
                     raise ValueError(f"unknown plan entry kind: {kind}")
                 applied.append(path)

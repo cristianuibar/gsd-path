@@ -99,9 +99,8 @@ Use host flags such as `--claude --codex` instead of `--all` to select hosts.
 For project-local skills, run from your project directory and add `--local`
 to install and update commands. `--project PATH` selects where contracts are
 written; it does not change the directory used by `--local`. If the repo
-already has an `AGENTS.md` from another tool, the install refuses; see
-[first-install contract steps](UPDATE.md#update-project-contracts) before
-retrying. Run
+already has an `AGENTS.md`, the install adds a marked GSD Path block and keeps
+your text; see [project contracts](UPDATE.md#update-project-contracts). Run
 `npx @opengsd/gsd-path@latest --help` for all options. After installing, invoke
 `$path` in Codex or `/path` on slash-command hosts to start the pipeline.
 See [Install (summary)](#install-summary) for the host list and source-checkout commands.

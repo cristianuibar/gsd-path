@@ -2,6 +2,7 @@
 """Install GSD Path skills for supported coding agents."""
 
 import argparse
+import difflib
 import errno
 import hashlib
 import json
@@ -61,6 +62,21 @@ PROJECT_STATUS_MARKER = "gsd-path project status launcher"
 INSTALL_LOCK_NAME = ".gsd-path-install-lock"
 INSTALL_LOCK_OWNER = "owner.json"
 INSTALL_LOCK_SCHEMA = "gsd-path/install-lock/v2"
+AGENTS_BEGIN = "<!-- gsd-path:begin -->"
+AGENTS_END = "<!-- gsd-path:end -->"
+# Codex default project_doc_max_bytes; it silently cuts the rest of AGENTS.md.
+CODEX_DOC_LIMIT = 32768
+# sha256 of each released whole-file AGENTS.md (v1.0.0, v1.1.0, v1.2.0-v1.3.1).
+RELEASED_AGENTS = frozenset(
+    {
+        "dfc969299e10c4430742c66c273436136a813d75e332cecf9403f94c904b330b",
+        "3a5c4ed62f397725acce962a7fdfafd5a3296f0a784acafc55454b5304a4eb7c",
+        "831de61d4b4b624319930162d45ac88c49cc13ca22894f37733ba68e6503f972",
+    }
+)
+LEGACY_AGENTS_TITLE = "# AGENTS.md — Operating Rules for the GSD Path Pipeline"
+# Every released whole-file AGENTS.md carries this marker.
+LEGACY_AGENTS_MARKER = "<!-- gsd-path/plain-prompt-reentry/v1 -->"
 PROJECT_CONTRACTS = (
     ("AGENTS.md", "## Plain-prompt re-entry"),
     ("WORKFLOW.md", "### Plain-prompt re-entry"),
@@ -1206,7 +1222,8 @@ def _update_replacement(
     project: Path, destination: Path, hooks_dir: Optional[Path]
 ) -> Optional[Callable[[Path], bool]]:
     """--update replaces managed runtime, guard, and git hook files in place
-    and keeps everything else (AGENTS.md, WORKFLOW.md, CLAUDE.md). Returns
+    and keeps everything else (WORKFLOW.md, CLAUDE.md); AGENTS.md has its own
+    block merge. Returns
     the managed-file check for a replaceable destination, or None for a
     kept one."""
     parent = project / HOOKS_DIRECTORY
@@ -1267,6 +1284,7 @@ def _project_result(
     ):
         replaceable = (
             destination in mergers
+            or destination == project / "AGENTS.md"
             or _update_replacement(project, destination, hooks_dir) is not None
         )
         bucket = kept if _lexists(destination) and not replaceable else refreshed
@@ -1299,14 +1317,118 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
                 f"{shlex.quote(str(aside))}`, rerun, then merge its rules into the new "
                 f"{destination.name}."
             )
-        if destination.name == "AGENTS.md":
-            # Codex default project_doc_max_bytes; the rest is silently cut.
-            message += " Keep it under 32 KiB: Codex reads only the first 32 KiB."
         message += " Already a GSD Path project:"
     return InstallerError(
         f"{message} Run --update --project PATH to refresh managed "
         "runtime files; merge template changes manually (see UPDATE.md)."
     )
+
+
+def _agents_block(template: str) -> str:
+    return f"{AGENTS_BEGIN}\n{template.rstrip(chr(10))}\n{AGENTS_END}\n"
+
+
+def _split_agents(text: str, destination: Path) -> Optional[Tuple[str, str]]:
+    """Owner text (before, after) around Path's block, or None without markers.
+    Markers count only as whole lines; inline mentions are owner text."""
+    begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
+    ends = list(re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?(?:\n|$)", text))
+    if not begins and not ends:
+        return None
+    if len(begins) != 1 or len(ends) != 1 or ends[0].start() < begins[0]:
+        begins, ends = len(begins), len(ends)
+        raise InstallerError(
+            f"{destination} needs exactly one {AGENTS_BEGIN} line followed by one "
+            f"{AGENTS_END} line; found {begins} begin and {ends} end markers. "
+            "Fix the markers by hand, then rerun."
+        )
+    return text[:begins[0]], text[ends[0].end():]
+
+
+def _read_agents(destination: Path) -> Optional[bytes]:
+    if not _lexists(destination):
+        return None
+    try:
+        return destination.read_bytes()
+    except OSError as error:
+        raise InstallerError(f"cannot read {destination}: {error}") from error
+
+
+def _merged_agents(
+    source_root: Path, destination: Path, raw: Optional[bytes] = None
+) -> bytes:
+    """AGENTS.md with Path's block inserted or replaced; owner text kept as is.
+    raw is the current file (None when absent); read from disk when omitted."""
+    template = (source_root / "AGENTS.md").read_text(encoding="utf-8")
+    block = _agents_block(template)
+    if raw is None:
+        raw = _read_agents(destination)
+    if raw is not None:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise InstallerError(f"cannot read {destination}: {error}") from error
+        parts = _split_agents(text, destination)
+        if parts is not None:
+            merged = parts[0] + block + parts[1]
+        elif hashlib.sha256(raw).hexdigest() in RELEASED_AGENTS:
+            merged = block  # One-time migration of an unedited whole-file install.
+        elif LEGACY_AGENTS_TITLE in text or re.search(
+            rf"(?m)^{re.escape(LEGACY_AGENTS_MARKER)}\r?$", text
+        ):
+            diff = "".join(
+                difflib.unified_diff(
+                    template.splitlines(keepends=True),
+                    text.splitlines(keepends=True),
+                    "AGENTS.md (current GSD Path contract)",
+                    str(destination),
+                )
+            )
+            raise InstallerError(
+                f"{destination} is an edited whole-file GSD Path contract; Path cannot "
+                "tell its text from your edits. Migrate by hand: 1) keep your own "
+                f"rules from the diff below; 2) move the file aside with `mv "
+                f"{shlex.quote(str(destination))} "
+                f"{shlex.quote(str(destination.with_name('AGENTS.pre-path.md')))}`; "
+                "3) rerun; 4) add your rules after the "
+                f"{AGENTS_END} line.\n{diff}"
+            )
+        else:
+            merged = block + "\n" + text  # Block first: Codex cuts the tail.
+    else:
+        merged = block
+    data = merged.encode("utf-8")
+    if len(data) > CODEX_DOC_LIMIT:
+        aside = destination.with_name("AGENTS.pre-path.md")
+        raise InstallerError(
+            f"{destination} would be {len(data)} bytes (existing file {len(raw or b'')} "
+            f"bytes, GSD Path block {len(block.encode('utf-8'))} bytes). Codex reads "
+            f"only the first {CODEX_DOC_LIMIT} bytes and silently cuts the rest. "
+            f"Move it aside with `mv {shlex.quote(str(destination))} "
+            f"{shlex.quote(str(aside))}`, rerun, then add back only the rules that fit."
+        )
+    return data
+
+
+def _apply_agents(
+    source_root: Path, destination: Path, transaction: "ProjectTransaction"
+) -> None:
+    original = _read_agents(destination)
+    merged = _merged_agents(source_root, destination, original)
+    if original is None:
+        try:
+            with destination.open("xb") as output:
+                transaction.copied.append(destination)
+                output.write(merged)
+        except FileExistsError as error:
+            raise _existing_contract_error(destination) from error
+        return
+    if original != merged:
+        if _read_agents(destination) != original:
+            raise InstallerError(f"{destination} changed during install; rerun")
+        mode = destination.stat().st_mode & 0o777
+        _atomic_write(destination, merged, mode)
+        transaction.replaced.append((destination, original, mode))
 
 
 def _validate_project_git_root(project: Path) -> None:
@@ -1383,7 +1505,11 @@ def _validate_project(
     for destination, _, _, _ in _project_destinations(
         project, selected, hooks, interpreter, hooks_dir
     ):
-        if _lexists(destination):
+        if destination == project / "AGENTS.md":
+            if destination.is_symlink():
+                raise _existing_contract_error(destination)
+            _merged_agents(source_root, destination)
+        elif _lexists(destination):
             merge = mergers.get(destination)
             managed = (
                 _update_replacement(project, destination, hooks_dir) if update else None
@@ -1412,7 +1538,10 @@ def _apply_project(
     interpreter: str,
     hooks_dir: Optional[Path],
     update: bool = False,
+    contracts: bool = True,
 ) -> None:
+    """contracts=False (hook refresh) creates a missing AGENTS.md but never
+    rewrites an existing one."""
     try:
         pin = runtime_store.prepare(source_root, project)
     except (OSError, ValueError) as error:
@@ -1425,6 +1554,11 @@ def _apply_project(
         if destination.name == "runtime.json" and destination.parent == project / HOOKS_DIRECTORY:
             content = runtime_store.pin_text(pin)
         _create_directory(destination.parent, transaction.created_directories)
+        if destination == project / "AGENTS.md" and (
+            contracts or not _lexists(destination)
+        ):
+            _apply_agents(source_root, destination, transaction)
+            continue
         merge = mergers.get(destination)
         if _lexists(destination) and not destination.is_symlink():
             replaceable = (
@@ -1908,7 +2042,7 @@ def refresh_hooks(
             _validate_hooks_refresh(source_root, project, full, hooks_dir, selected, True)
             transaction = ProjectTransaction()
             try:
-                _apply_project(source_root, project, selected, full, transaction, interpreter, hooks_dir, update=True)
+                _apply_project(source_root, project, selected, full, transaction, interpreter, hooks_dir, update=True, contracts=False)
             except BaseException:
                 _rollback_project(transaction)
                 raise
@@ -1924,7 +2058,7 @@ def refresh_hooks(
                     refresh_targets.append(target)
         transaction = ProjectTransaction()
         try:
-            _apply_project(source_root, project, refresh_targets, True, transaction, interpreter, hooks_dir, update=True)
+            _apply_project(source_root, project, refresh_targets, True, transaction, interpreter, hooks_dir, update=True, contracts=False)
         except BaseException:
             _rollback_project(transaction)
             raise
@@ -2395,6 +2529,26 @@ def doctor(
             continue
         canonical = read_project_file(source_root / name, f"package: {name}")
         if canonical is None:
+            continue
+        if name == "AGENTS.md":
+            text = content.decode("utf-8", errors="replace")
+            try:
+                parts = _split_agents(text, contract)
+            except InstallerError as error:
+                push("fail", f"project: {error}")
+                continue
+            if parts is None:
+                push("fail", f'project: AGENTS.md has no GSD Path block — run --update --project "{project}"')
+            elif _agents_block(canonical.decode("utf-8", errors="replace")) not in text:
+                push("fail", f'project: AGENTS.md block is stale — run --update --project "{project}"')
+            elif len(content) > CODEX_DOC_LIMIT:
+                push(
+                    "fail",
+                    f"project: AGENTS.md is {len(content)} bytes; Codex reads only "
+                    f"the first {CODEX_DOC_LIMIT} — reduce the file to keep all rules visible",
+                )
+            else:
+                push("ok", "project: AGENTS.md block present")
             continue
         installed_section = _contract_section(
             content.decode("utf-8", errors="replace"), heading

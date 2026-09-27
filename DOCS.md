@@ -303,7 +303,8 @@ Full tree: [README.md](README.md#handoff-contract).
 | Project-local skills | `node scripts/install.mjs --update --local` |
 | From npm | `npx @opengsd/gsd-path@latest --update` |
 | Guard scripts | `node scripts/install.mjs --hooks-refresh --project PATH` |
-| `AGENTS.md` / `WORKFLOW.md` | Manual merge — installer refuses overwrite |
+| `AGENTS.md` | `node scripts/install.mjs --update --project PATH` — replaces only the GSD Path block |
+| `WORKFLOW.md` | Manual merge — installer refuses overwrite |
 | Health check | `node scripts/install.mjs --doctor [--project PATH]` — read-only; flags missing/stale skills, hook drift, and bad pipeline state |
 
 Full guide: **[UPDATE.md](UPDATE.md)**. Router may print a one-line npm update notice.
@@ -324,9 +325,8 @@ Restart the host session. Confirm with `ls ~/.claude/skills/gsd-path` (or your h
 Yes: `node scripts/install.mjs --cursor` (add other flags as needed).
 
 **Will install overwrite my `AGENTS.md`?**
-No. A plain install refuses when a target project contract exists. See
-[Update project contracts](UPDATE.md#update-project-contracts) for first-install
-steps and later updates.
+No. GSD Path adds one marked block and keeps your text outside it byte for
+byte. See [Update project contracts](UPDATE.md#update-project-contracts).
 
 **Where is pipeline state?**
 `.project/` in your repo — not chat history.
