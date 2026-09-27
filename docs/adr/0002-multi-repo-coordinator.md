@@ -5,7 +5,8 @@ Status: accepted.
 One milestone may change several Git repositories. One **coordinator** holds
 `.project/`: state, tasks, review, archive, and the ship commit. Its
 `.project/MEMBERS.md` lists the **members**; `members add` creates the file for
-new or existing Path projects. The fixed `REPOSITORY.md` format stays unchanged.
+new or existing Git repositories. The fixed `REPOSITORY.md` format stays
+unchanged.
 Every CLI keeps one `--repo` (the coordinator). Without `MEMBERS.md`, Path keeps
 its single-repo behavior and output.
 
@@ -31,10 +32,11 @@ directory holds a validated coordinator marker and exact push authorization
 per ref and object; member hooks call the coordinator guard. Member sidecars get untracked host
 guard configs. They sit beside the coordinator verify sidecar in a shared,
 pinned layout for cross-repo Verify. Ship records a
-`Reviewed-HEAD` for each member. A member has no ship commit: its integration
-merge must have that reviewed HEAD as second parent, and its tag is
-`milestone/<coord>-<archive-name>`. Member execution stays disabled until the
-two-repo proof passes. A member's remote default must be `main`; each member
-may choose its integration mode. The coordinator may be a product repo or a
-dedicated program repo. Submodules, nested repos, and one task across two repos
-stay out of scope. The work plan is [multi-repo-work.md](../multi-repo-work.md).
+`Reviewed-HEAD` for each member. Member close creates no ship commit for this
+milestone: its integration merge must have that reviewed HEAD as second parent,
+and its tag is `milestone/<coord>-<archive-name>`. Member execution stays
+disabled until the two-repo proof passes. A member's remote default must be
+`main`; each member may choose its integration mode. The coordinator may be a
+product repo or a dedicated program repo. Submodules, nested repos, and one
+task across two repos stay out of scope. The work plan is
+[multi-repo-work.md](../multi-repo-work.md).
