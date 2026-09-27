@@ -1195,6 +1195,20 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual("owner\n", agents.read_text(encoding="utf-8"))
         self.assertEqual([], transaction.replaced)
 
+    def test_project_treats_inline_markers_as_owner_text(self):
+        project = self.root / "inline-markers"
+        project.mkdir()
+        owner = (
+            f"Path writes `{install.AGENTS_BEGIN}` and\n"
+            f"`{install.AGENTS_END}` around its rules.\n"
+        )
+        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+
+        self.install_agents(project)
+
+        block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertEqual(block + "\n" + owner, (project / "AGENTS.md").read_text(encoding="utf-8"))
+
     def test_doctor_checks_agents_block(self):
         project = self.root / "doctor-agents"
         project.mkdir()
@@ -1205,6 +1219,8 @@ class InstallerTests(unittest.TestCase):
             (install._agents_block("# old\n"), "fail", "block is stale"),
             (template, "fail", "no GSD Path block"),
             (f"{install.AGENTS_BEGIN}\n", "fail", "exactly one"),
+            ("x" * install.CODEX_DOC_LIMIT + "\n" + install._agents_block(template),
+             "fail", "Codex reads only the first"),
         )
         for text, level, expected in cases:
             (project / "AGENTS.md").write_text(text, encoding="utf-8")

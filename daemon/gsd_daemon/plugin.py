@@ -105,11 +105,11 @@ def _is_newer(latest: Optional[str], installed: Optional[str]) -> bool:
 
 def _without_agents_block(text: str) -> Optional[str]:
     """AGENTS.md owner text with the one gsd-path block removed, or None."""
-    if text.count(AGENTS_BEGIN) != 1 or text.count(AGENTS_END) != 1:
+    begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
+    ends = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?$", text)]
+    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
         return None
-    start, end = text.find(AGENTS_BEGIN), text.find(AGENTS_END)
-    if end < start:
-        return None
+    start, end = begins[0], ends[0]
     before, after = text[:start], text[end + len(AGENTS_END):]
     after = after[1:] if after.startswith("\n") else after
     if not before and after.startswith("\n"):

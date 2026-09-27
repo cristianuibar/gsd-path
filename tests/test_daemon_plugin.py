@@ -423,6 +423,8 @@ class UninstallPlanTests(unittest.TestCase):
         for text, expected in ((block + "\n" + owner, owner),
                                ("above\n" + block + owner, "above\n" + owner),
                                (block + "\n\n", "\n"),
+                               ("see `<!-- gsd-path:begin -->`\n" + block + owner,
+                                "see `<!-- gsd-path:begin -->`\n" + owner),
                                (block, None)):
             project = Path(tempfile.mkdtemp(dir=self.tmp.name))
             agents = project / "AGENTS.md"

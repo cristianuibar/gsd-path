@@ -1329,17 +1329,20 @@ def _agents_block(template: str) -> str:
 
 
 def _split_agents(text: str, destination: Path) -> Optional[Tuple[str, str]]:
-    """Owner text (before, after) around Path's block, or None without markers."""
-    begins, ends = text.count(AGENTS_BEGIN), text.count(AGENTS_END)
-    if begins == ends == 0:
+    """Owner text (before, after) around Path's block, or None without markers.
+    Markers count only as whole lines; inline mentions are owner text."""
+    begins = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_BEGIN)}\r?$", text)]
+    ends = [m.start() for m in re.finditer(rf"(?m)^{re.escape(AGENTS_END)}\r?$", text)]
+    if not begins and not ends:
         return None
-    start, end = text.find(AGENTS_BEGIN), text.find(AGENTS_END)
-    if begins != 1 or ends != 1 or end < start:
+    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+        begins, ends = len(begins), len(ends)
         raise InstallerError(
             f"{destination} needs exactly one {AGENTS_BEGIN} line followed by one "
             f"{AGENTS_END} line; found {begins} begin and {ends} end markers. "
             "Fix the markers by hand, then rerun."
         )
+    start, end = begins[0], ends[0]
     after = text[end + len(AGENTS_END):]
     return text[:start], after[1:] if after.startswith("\n") else after
 
@@ -2536,10 +2539,18 @@ def doctor(
                 continue
             if parts is None:
                 push("fail", f'project: AGENTS.md has no GSD Path block — run --update --project "{project}"')
-            elif _agents_block(canonical.decode("utf-8", errors="replace")) in text:
-                push("ok", "project: AGENTS.md block present")
-            else:
+            elif _agents_block(canonical.decode("utf-8", errors="replace")) not in text:
                 push("fail", f'project: AGENTS.md block is stale — run --update --project "{project}"')
+            elif len(content) - len(parts[1].encode("utf-8")) > CODEX_DOC_LIMIT:
+                push(
+                    "fail",
+                    f"project: AGENTS.md block ends at byte "
+                    f"{len(content) - len(parts[1].encode('utf-8'))} of {len(content)}; "
+                    f"Codex reads only the first {CODEX_DOC_LIMIT} — move owner text "
+                    "above the block to after it",
+                )
+            else:
+                push("ok", "project: AGENTS.md block present")
             continue
         installed_section = _contract_section(
             content.decode("utf-8", errors="replace"), heading
