@@ -1165,11 +1165,17 @@ def _existing_contract_error(destination: Path) -> "InstallerError":
     )
     if document:
         aside = destination.with_name(f"{destination.stem}.pre-path{destination.suffix}")
-        message += (
-            f" First install: move it aside with `mv {shlex.quote(str(destination))} "
-            f"{shlex.quote(str(aside))}`, rerun, then merge its rules into the new "
-            f"{destination.name}."
-        )
+        if _lexists(aside):
+            message += (
+                f" First install: {aside} already exists; move the contract to an "
+                f"unused name, rerun, then merge its rules into the new {destination.name}."
+            )
+        else:
+            message += (
+                f" First install: move it aside with `mv {shlex.quote(str(destination))} "
+                f"{shlex.quote(str(aside))}`, rerun, then merge its rules into the new "
+                f"{destination.name}."
+            )
         if destination.name == "AGENTS.md":
             # Codex default project_doc_max_bytes; the rest is silently cut.
             message += " Keep it under 32 KiB: Codex reads only the first 32 KiB."

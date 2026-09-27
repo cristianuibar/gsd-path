@@ -1038,6 +1038,33 @@ class InstallerTests(unittest.TestCase):
             (project / "AGENTS.pre-path.md").read_text(encoding="utf-8"),
         )
 
+    def test_project_collision_with_occupied_backup_has_no_move_command(self):
+        project = self.root / "project"
+        project.mkdir()
+        (project / "AGENTS.md").write_text("existing", encoding="utf-8")
+        aside = project / "AGENTS.pre-path.md"
+        aside.write_text("earlier backup", encoding="utf-8")
+        status, _, error = self.run_main(
+            [
+                "--claude",
+                "--claude-root",
+                str(self.root / "claude" / "skills"),
+                "--source-root",
+                str(self.source),
+                "--project",
+                str(project),
+            ]
+        )
+        self.assertEqual(1, status)
+        self.assertNotIn("mv ", error)
+        self.assertIn(f"{aside} already exists", error)
+        self.assertIn("move the contract to an unused name", error)
+        self.assertIn("merge its rules into the new AGENTS.md", error)
+        self.assertIn("Codex reads only the first 32 KiB", error)
+        self.assertIn("--update --project PATH", error)
+        self.assertEqual("existing", (project / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertEqual("earlier backup", aside.read_text(encoding="utf-8"))
+
     def test_claude_bridge_collision_names_its_own_move(self):
         project = self.root / "project"
         (project / ".claude").mkdir(parents=True)
