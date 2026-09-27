@@ -29,7 +29,8 @@ member tags, includes the coordinator name. Branch checks accept these names
 only for verified members. Joining adds no new tracked Path
 files and leaves a member's existing `.project/` untouched. Its shared Git
 directory holds a validated coordinator marker and exact push authorization
-per ref and object; member hooks call the coordinator guard. Member sidecars get untracked host
+per ref and object, plus delete authorization per ref at its expected remote
+SHA; member hooks call the coordinator guard. Member sidecars get untracked host
 guard configs. They sit beside the coordinator verify sidecar in a shared,
 pinned layout for cross-repo Verify. Ship records a
 `Reviewed-HEAD` for each member. Member close creates no ship commit for this
