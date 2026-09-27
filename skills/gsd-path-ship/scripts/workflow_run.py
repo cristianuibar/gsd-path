@@ -124,6 +124,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                          f"Template: {template_path}\nRepository and command cwd: {isolated['worktree']}\n"
                          f"Recorded baseline and Audited HEAD: {isolated['base']}\n"
                          f"Write only: {Path(isolated['worktree']) / output}\n"
+                         f"Write header Repo root: {repo}\n"
                          "Use only this supplied sidecar for project commands; do not create worktrees.\n"
                          "The parent owns gates, collection, retirement, and phase state.\n"
                          "Exclude .git, node_modules, .project/archive, and installed GSD Path and path skill bundles.\n")
@@ -167,8 +168,8 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             if pending["pending"]:
                 raise StepFailed("pending discussion requires its owner disposition")
             docs = assignments["inspect_docs"]
-            step("check_docs_audit.py", "--repo", docs["worktree"], "--audit", docs["output"],
-                 "--inventory", str(inventory_file))
+            step("check_docs_audit.py", "--repo", docs["worktree"], "--primary", str(repo),
+                 "--audit", docs["output"], "--inventory", str(inventory_file))
             if f"Audited HEAD: {expected_head}" not in (Path(docs["worktree"]) / docs["output"]).read_text().splitlines():
                 raise StepFailed("audit does not name the supplied inspection baseline")
             for task_name, _, _, _ in INSPECTION_SPECS:

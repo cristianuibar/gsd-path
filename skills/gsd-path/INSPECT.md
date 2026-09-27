@@ -112,15 +112,15 @@ Preparation never changes phase state; neither command dispatches agents.
    includes its path and revision for project commands; expected new pipeline
    artifacts do not make product code dirty. Each agent writes only its
    assigned output under that sidecar and keeps it there for the gates in step
-   3. Otherwise no
+   3; its `Repo root` header still names the absolute primary. Otherwise no
    project command may run. The docs-auditor brief carries current HEAD as the
    audit baseline only when its verify sidecar was created at HEAD; otherwise
    it carries `none`. The auditor writes that baseline as `Audited HEAD`.
 3. Gate both artifacts against their templates: the codebase evidence needs
    a filled `## Map` plus findings as observed — no quota, but an empty
    findings section must say why; the docs audit must pass the bundled
-   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --audit
-   <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
+   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --primary
+   <absolute primary> --audit <track-relative DOCS-AUDIT.md> --inventory <frozen inventory file>`, where
    the audit path is `.project/research/DOCS-AUDIT.md` normally and
    `.project/next/research/DOCS-AUDIT.md` in Lookahead mode; add
    `--prior-audit <temporary prior-audit file>` when one was preserved and

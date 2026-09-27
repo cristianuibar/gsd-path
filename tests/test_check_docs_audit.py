@@ -250,6 +250,20 @@ class CheckDocsAuditTests(unittest.TestCase):
                 self.assertEqual(1, code)
                 self.assertIn(expected, error)
 
+    def test_sidecar_audit_names_the_primary_repo_root(self):
+        with tempfile.TemporaryDirectory() as primary:
+            primary = Path(primary).resolve()
+            self.write(AUDIT.format(verified=1).replace("Repo root: /repo", f"Repo root: {primary}"))
+            code, _, err = self.run_gate("--primary", str(primary))
+            self.assertEqual(code, 0, err)
+            code, _, err = self.run_gate()
+            self.assertEqual(code, 1)
+            self.assertIn("Repo root does not match", err)
+            self.write(AUDIT.format(verified=1))
+            code, _, err = self.run_gate("--primary", str(primary))
+            self.assertEqual(code, 1)
+            self.assertIn("Repo root does not match", err)
+
     def test_rejects_doc_sections_that_normalize_to_the_same_path(self):
         duplicate = AUDIT.format(verified=2).replace(
             "## Descriptive docs",

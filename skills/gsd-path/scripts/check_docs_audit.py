@@ -26,6 +26,10 @@ gate derives the inventory from tracked Markdown files, excluding `.git`,
 `*/skills/path` bundles,
 the audit itself, and — unless the
 audit declares `Alignment mode: yes` — everything else under `.project/`.
+
+`Repo root` names the primary repository. When the audit is gated inside a
+disposable sidecar, pass that sidecar as `--repo` and the primary as
+`--primary`; the header then stays valid after the sidecar is retired.
 """
 
 import argparse
@@ -249,6 +253,7 @@ def validate(
     inventory: Optional[Sequence[str]],
     prior_text: Optional[str] = None,
     changed: Optional[Sequence[str]] = None,
+    primary: Optional[Path] = None,
 ) -> Dict[str, object]:
     audit = repo / audit_relative
     if not audit.is_file() or audit.is_symlink():
@@ -263,8 +268,8 @@ def validate(
             raise AuditError(f"header must contain exactly one {key} line")
         header[key] = values[0]
     declared_root = Path(header["Repo root"])
-    if not declared_root.is_absolute() or declared_root.resolve() != repo.resolve():
-        raise AuditError("Repo root does not match --repo")
+    if not declared_root.is_absolute() or declared_root.resolve() != (primary or repo).resolve():
+        raise AuditError("Repo root does not match --primary (default --repo)")
     try:
         date.fromisoformat(header["Audited"])
     except ValueError as error:
@@ -393,6 +398,11 @@ def parser() -> argparse.ArgumentParser:
     argument_parser.add_argument("--audit", default=DEFAULT_AUDIT, help="relative audit path (default: %(default)s)")
     argument_parser.add_argument("--inventory", help="file with one inventoried POSIX path per line, or - for stdin")
     argument_parser.add_argument(
+        "--primary",
+        type=Path,
+        help="primary repository the Repo root header must name (default: --repo)",
+    )
+    argument_parser.add_argument(
         "--prior-audit",
         type=Path,
         help="pre-rewrite audit whose User rulings must carry forward",
@@ -454,7 +464,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     changed = _path_lines(arguments.changed) if arguments.changed is not None else None
     try:
         result = validate(
-            arguments.repo.resolve(), arguments.audit, inventory, prior_text, changed
+            arguments.repo.resolve(), arguments.audit, inventory, prior_text, changed,
+            arguments.primary,
         )
     except AuditError as error:
         print(f"docs audit validation failed: {error}", file=sys.stderr)

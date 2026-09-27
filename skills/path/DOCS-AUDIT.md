@@ -59,7 +59,8 @@ would dirty execution, invalidate review, or mutate shipped history.
    non-`.project` worktree changes, the orchestrator creates a verify sidecar
    with `python3 <absolute isolation.py> isolate-verify --repo <absolute
    primary> --base <HEAD> --name docs-audit` for project commands. The auditor
-   writes only its assigned output under that sidecar. Gate it there before
+   writes only its assigned output under that sidecar; its `Repo root` header
+   still names the absolute primary. Gate it there before
    collection. Then run `python3 <absolute isolation.py> collect-artifact
    --repo <absolute primary> --source <returned worktree> --base <recorded
    HEAD> --branch <returned branch> --source-path
@@ -74,8 +75,8 @@ would dirty execution, invalidate review, or mutate shipped history.
    it carries `none`. The auditor writes that baseline as `Audited HEAD`.
 2. Gate the artifact with the bundled helper: write the frozen inventory to
    a temporary file (one path per line) and run
-   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --inventory
-   <file> [--prior-audit <temporary prior-audit file>] [--changed <temporary
+   `python3 <absolute check_docs_audit.py> --repo <docs sidecar> --primary
+   <absolute primary> --inventory <file> [--prior-audit <temporary prior-audit file>] [--changed <temporary
    changed-set file>]`.
    It enforces the contract — every doc with at least one testable claim has
    a claims table, every claim a valid type and verdict with evidence, every
