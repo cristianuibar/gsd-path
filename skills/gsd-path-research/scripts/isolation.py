@@ -619,6 +619,17 @@ def _member_context(
     entry = next((item for item in entries if item["name"] == member), None)
     if entry is None:
         raise IsolationError(f"member {member} is not locked for this build because no task named it at build start")
+    checkout, project = member_checkout(coordinator, member)
+    return checkout, project, entry
+
+
+def member_checkout(coordinator: Path, member: str) -> Tuple[Path, str]:
+    """A MEMBERS.md member's checkout and coordinator project, after checking its marker."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    coordinator = require_directory(coordinator, "coordinator")
     repair = f"run members.py repair --repo {coordinator}"
     try:
         listed = {item["name"]: item for item in members.read_members(coordinator)}
@@ -630,7 +641,7 @@ def _member_context(
         raise IsolationError(f"{error}; {repair}") from error
     if role is None or role["coordinator"] != coordinator or role["name"] != member:
         raise IsolationError(f"member marker for {member} is missing or stale; {repair}")
-    return checkout, str(role["project"]), entry
+    return checkout, str(role["project"])
 
 
 def member_bound_checkout(coordinator: Path, member: str) -> Dict[str, object]:
