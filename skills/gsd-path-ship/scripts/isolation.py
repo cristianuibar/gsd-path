@@ -705,6 +705,7 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
         removed = run_git(checkout, "worktree", "remove", str(destination))
         if removed.returncode != 0:
             raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
+    run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
     if tip.returncode == 0:
         deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
         if deleted.returncode != 0:
@@ -712,6 +713,99 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
 
 
 MEMBER_LANDING_DIR = ("gsd-path", "member-landings")
+# A running member task's live task file sits in its member sidecar, untracked
+# and excluded, so the coordinator stays clean while member work runs.
+MEMBER_TASK_COPY_DIR = ".gsd-path-coordinator"
+CONTRACT_FIELDS = ("id", "title", "repo", "files", "deps", "wave")
+
+
+def member_task_copy(sidecar: Path, task_file: str) -> Path:
+    return sidecar / MEMBER_TASK_COPY_DIR / relative_posix(task_file)
+
+
+def member_task_authorization_ref(project: str, task_id: str) -> str:
+    return f"{TASK_AUTHORIZATION_PREFIX}{project}-{validate_task_id(task_id)}"
+
+
+def activate_member_task(
+    coordinator: Path, member: str, task_id: str, agent: str, task_file: str, base: str
+) -> Dict[str, object]:
+    """Write the live task copy into the member sidecar and authorize its member base."""
+    coordinator = require_directory(coordinator, "coordinator")
+    task_file = relative_posix(task_file)
+    if not task_file.startswith(".project/tasks/"):
+        raise IsolationError("task activation file must stay under .project/tasks/")
+    checkout, project, entry = _member_context(coordinator, member)
+    sidecar = sidecar_root(checkout, "task", f"{project}-{validate_task_id(task_id)}")
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{task_id}"
+    if require_attached(sidecar) != branch:
+        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+    member_base = current_sha(sidecar)
+    if run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").stdout.strip() != member_base \
+            or run_git(checkout, "merge-base", "--is-ancestor", member_base,
+                       f"refs/heads/{entry['branch']}").returncode != 0:
+        raise IsolationError("member task activation requires the sidecar at its member base")
+    if uncommitted_paths(sidecar):
+        raise IsolationError("member task activation requires a clean member sidecar")
+    resolved_base = require_commit(coordinator, require_full_sha(base))
+    _member_contract(coordinator, resolved_base, task_file, member)
+    contract = git_text(coordinator, "show", f"{resolved_base}:{task_file}")
+    activated = _activated_task_text(contract, task_id, agent, resolved_base, sidecar, branch)
+    head, body = split_frontmatter(activated)
+    head = [line for line in head if not line.startswith("member_base:")]
+    head.insert(next(i for i, line in enumerate(head) if line.startswith("base:")) + 1,
+                f"member_base: {member_base}")
+    activated = "---\n" + "\n".join(head) + "\n---\n" + body
+    exclude = common_git_dir(checkout) / "info" / "exclude"
+    rule = f"/{MEMBER_TASK_COPY_DIR}/"
+    existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    if rule not in existing.splitlines():
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        _common.atomic_write(exclude, existing + ("" if not existing or existing.endswith("\n") else "\n") + rule + "\n")
+    copy = member_task_copy(sidecar, task_file)
+    if copy.is_file() and copy.read_text(encoding="utf-8") != activated:
+        current, _ = task_frontmatter(copy.read_text(encoding="utf-8"))
+        if not current or current.get("agent") != agent or current.get("member_base") != member_base:
+            raise IsolationError(f"member task is already active with another agent or base: {copy}")
+    elif not copy.is_file():
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        _common.atomic_write(copy, activated)
+    ref = member_task_authorization_ref(project, task_id)
+    created = run_git(checkout, "update-ref", ref, member_base, "0" * 40)
+    if created.returncode != 0 and run_git(checkout, "rev-parse", "--verify", "--quiet", ref).stdout.strip() != member_base:
+        raise IsolationError("could not record member task authorization")
+    return {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
+            "member_base": member_base, "status": "in-progress", "task_branch": branch,
+            "task_file": task_file, "worktree": str(sidecar)}
+
+
+def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
+    """The live copy, checked against the contract: same contract fields, Log only grows."""
+    copy = Path(str(journal["copy"]))
+    if copy.is_symlink() or not copy.is_file():
+        raise IsolationError(f"member task is not activated: {copy}")
+    text = copy.read_text(encoding="utf-8")
+    contract = git_text(coordinator, "show", f"{journal['base']}:{journal['task_file']}")
+    fields, error = task_frontmatter(text)
+    expected, _ = task_frontmatter(contract)
+    if error or fields is None or expected is None:
+        raise IsolationError(error or "unreadable member task copy")
+    if any(fields.get(key) != expected.get(key) for key in CONTRACT_FIELDS):
+        raise IsolationError("member task copy changes contract fields")
+    if (fields.get("status"), fields.get("base"), fields.get("member_base")) != (
+            "in-progress", journal["base"], journal["member_base"]):
+        raise IsolationError("member task copy is not the activated task for this landing")
+    if not _normalize_newlines(split_frontmatter(text)[1]).startswith(
+            _normalize_newlines(split_frontmatter(contract)[1])):
+        raise IsolationError("member task copy Log is not append-only")
+    return text
+
+
+def _coordinator_clean_for_record(coordinator: Path) -> None:
+    staged = git_output(coordinator, "diff", "--cached", "--name-only").splitlines()
+    dirty = sorted((uncommitted_paths(coordinator) - BOOKKEEPING_PATHS) | set(staged))
+    if dirty:
+        raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
 
 
 def member_commit_body(task_file: str, paths: Sequence[str], member_base: str, contract: str) -> str:
@@ -866,13 +960,9 @@ def _prove_member_landing(bound: Path, journal: Dict[str, object], landing: str,
 def _write_member_record(coordinator: Path, journal: Dict[str, object]) -> str:
     task_file = str(journal["task_file"])
     task_path = coordinator / task_file
-    text, mode = _read_task_text(task_path)
-    stamped = _landed_task_text(text, str(journal["base"]))
-    head, body = split_frontmatter(stamped)
-    head = [line for line in head if not line.startswith("member_base:")]
-    index = next(i for i, line in enumerate(head) if line.startswith("base:")) + 1
-    head.insert(index, f"member_base: {journal['member_base']}")
-    _replace_regular_file(task_path, ("---\n" + "\n".join(head) + "\n---\n" + body).encode("utf-8"), mode)
+    _, mode = _read_task_text(task_path)
+    stamped = _landed_task_text(_member_copy_text(journal, coordinator), str(journal["base"]))
+    _replace_regular_file(task_path, stamped.encode("utf-8"), mode)
     record = (f"Task: {task_file}\nBase: {journal['base']}\n"
               f"Member: {journal['member']} {journal['landing']} {journal['member_base']}")
     git_output(coordinator, "add", "--", task_file)
@@ -898,9 +988,7 @@ def _existing_member_record(coordinator: Path, journal: Dict[str, object]) -> Op
 
 
 def _finish_member_landing(coordinator: Path, path: Path, journal: Dict[str, object]) -> Dict[str, object]:
-    dirty = sorted(uncommitted_paths(coordinator) - {str(journal["task_file"])})
-    if dirty:
-        raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
+    _coordinator_clean_for_record(coordinator)
     record = _write_member_record(coordinator, journal)
     path.unlink()
     return {"commit": record, "landing": journal["landing"], "member": journal["member"],
@@ -938,13 +1026,18 @@ def land_member(
         contract_title, allowed = _member_contract(coordinator, resolved_base, task_file, member)
         if title != contract_title:
             raise IsolationError(f"title does not match the task contract: {contract_title!r}")
-        dirty = sorted(uncommitted_paths(coordinator) - {task_file})
-        if dirty:
-            raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
+        _coordinator_clean_for_record(coordinator)
+        member_base = require_full_sha(member_base)
+        authorization = run_git(checkout, "rev-parse", "--verify", "--quiet",
+                                member_task_authorization_ref(project, task_id)).stdout.strip()
+        if authorization != member_base:
+            raise IsolationError(f"member task {task_id} is not authorized at its member base")
         journal: Dict[str, object] = {
-            "base": resolved_base, "member": member, "member_base": require_full_sha(member_base),
-            "subject": task_commit_subject(task_id, title), "task_file": task_file, "task_id": task_id,
+            "base": resolved_base, "copy": str(member_task_copy(sidecar, task_file)), "member": member,
+            "member_base": member_base, "subject": task_commit_subject(task_id, title),
+            "task_file": task_file, "task_id": task_id,
         }
+        _member_copy_text(journal, coordinator)
         journal["source"] = _commit_member_source(sidecar, journal, allowed)
         journal["expected_parent"] = current_sha(bound)
         journal["landing"] = None
