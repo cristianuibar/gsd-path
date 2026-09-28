@@ -651,7 +651,7 @@ class GuardHookTests(unittest.TestCase):
                 subprocess.run(
                     ["git", "rev-parse", "--git-common-dir"],
                     cwd=linked,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     capture_output=True,
                     check=True,
                 ).stdout.strip()
@@ -891,7 +891,7 @@ class GuardHookTests(unittest.TestCase):
                         "tool_input": {"file_path": "src/app.py"},
                     }
                 ),
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )
@@ -2105,7 +2105,7 @@ class GuardHookTests(unittest.TestCase):
                 {"tool_name": "Bash", "tool_input": {"command": "git reset --hard"}}
             ),
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
@@ -2122,7 +2122,7 @@ class GuardHookTests(unittest.TestCase):
                 }
             ),
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")

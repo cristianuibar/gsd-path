@@ -84,7 +84,7 @@ class JevReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run([sys.executable, "-B", "-c", program, str(script), self.url],
                                     input=payload if isinstance(payload, str) else json.dumps(payload),
-                                    capture_output=True, text=True, cwd=directory, env=process_env)
+                                    capture_output=True, encoding="utf-8", errors="replace", cwd=directory, env=process_env)
             self.assertEqual(list(Path(directory).iterdir()), [], "helper must not write project files")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")

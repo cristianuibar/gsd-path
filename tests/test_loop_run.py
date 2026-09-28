@@ -68,7 +68,7 @@ class LoopRunTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(SCRIPT), command, "--spec", str(spec), *extra],
             cwd=cwd or spec.parent,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -556,7 +556,7 @@ class LoopRunTests(unittest.TestCase):
                 subprocess.Popen(
                     command,
                     cwd=root,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                 )

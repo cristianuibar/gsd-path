@@ -43,7 +43,7 @@ class ImplicitInvocationTests(unittest.TestCase):
                 [codex, "debug", "prompt-input", "please update this project"],
                 cwd=project,
                 env=environment,
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )

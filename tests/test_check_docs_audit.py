@@ -84,7 +84,7 @@ class CheckDocsAuditTests(unittest.TestCase):
     def run_gate(self, *args):
         result = subprocess.run(
             ["python3", str(Path(check_docs_audit.__file__)), "--repo", str(self.repo), *args],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         return result.returncode, result.stdout, result.stderr
 

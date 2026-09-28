@@ -37,7 +37,7 @@ class CoreMigrationTests(unittest.TestCase):
     def run_command(self, command, *args):
         return subprocess.run(
             [sys.executable, "-B", str(SCRIPT), command, "--repo", str(self.repo), *args],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
 
     def test_preview_is_read_only_and_hashes_all_history(self):
@@ -174,7 +174,7 @@ class CoreMigrationTests(unittest.TestCase):
                     sys.executable, "-B", str(SCRIPT.with_name("core_hook_settings.py")),
                     "plan", "--settings", review[0]["settings"], "--repo", str(self.repo),
                     "--location", json.dumps(item["location"]), "--receipt", str(receipt),
-                ], capture_output=True, text=True)
+                ], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(planned.returncode, 0, planned.stderr)
                 self.assertEqual(json.loads(planned.stdout)["status"], "planned")
                 change = json.loads(receipt.read_text(encoding="utf-8"))
@@ -202,7 +202,7 @@ class CoreMigrationTests(unittest.TestCase):
     def verify(self, output):
         return subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "verify", "--output", str(output)],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
 
     def test_verify_bundle_rejects_changed_missing_and_extra_evidence(self):
@@ -249,7 +249,7 @@ class CoreMigrationTests(unittest.TestCase):
                 installed = subprocess.run([
                     sys.executable, "-B", str(root / "scripts/install.py"),
                     f"--{host}", f"--{host}-root", str(skills),
-                ], capture_output=True, text=True)
+                ], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(installed.returncode, 0, installed.stderr)
                 skill = skills / "gsd-path-migrate"
                 self.assertTrue((skill / "SKILL.md").is_file())
@@ -258,12 +258,12 @@ class CoreMigrationTests(unittest.TestCase):
                 prepared = subprocess.run([
                     sys.executable, "-B", str(helper), "prepare", "--repo", str(self.repo),
                     "--output", str(output),
-                ], capture_output=True, text=True)
+                ], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(prepared.returncode, 0, prepared.stderr)
                 self.assertEqual((output / "core/phases/02/PLAN.md").read_bytes(), self.source["phases/02/PLAN.md"])
                 verified = subprocess.run([
                     sys.executable, "-B", str(helper), "verify", "--output", str(output),
-                ], capture_output=True, text=True)
+                ], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(verified.returncode, 0, verified.stderr)
                 self.assertEqual(json.loads(verified.stdout)["status"], "verified-bundle")
                 settings = self.root / f"{host}-settings.json"
@@ -278,7 +278,7 @@ class CoreMigrationTests(unittest.TestCase):
                     if action == "plan":
                         argv += ["--settings", str(settings), "--repo", str(self.repo),
                                  "--location", '["hooks","PreToolUse",0,"hooks",0,"command"]']
-                    changed = subprocess.run(argv, capture_output=True, text=True)
+                    changed = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace")
                     self.assertEqual(changed.returncode, 0, changed.stderr)
                     if action == "apply":
                         self.assertNotEqual(settings.read_bytes(), original)
@@ -290,7 +290,7 @@ class CoreMigrationTests(unittest.TestCase):
                     gated = subprocess.run([
                         sys.executable, "-B", str(gate), "--repo", str(self.repo), "--command", command,
                         *(["--shell", "bash"] if WINDOWS else []),
-                    ], input=json.dumps({"cwd": str(cwd)}), text=True, capture_output=True)
+                    ], input=json.dumps({"cwd": str(cwd)}), encoding="utf-8", errors="replace", capture_output=True)
                     self.assertEqual(gated.returncode, expected, gated.stderr)
 
 

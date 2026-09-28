@@ -176,7 +176,7 @@ class BoardUITests(unittest.TestCase):
 
     def orca(self, *args):
         result = subprocess.run([os.environ.get("ORCA_CLI_COMMAND", "orca"), *args, "--json"],
-                                capture_output=True, text=True, check=True)
+                                capture_output=True, encoding="utf-8", errors="replace", check=True)
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"], payload)
         return payload["result"]

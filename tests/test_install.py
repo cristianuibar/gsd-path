@@ -258,7 +258,7 @@ class InstallerTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, "-B", str(runtime / "pipeline_state.py"), "approve",
              "--repo", str(repo), "--kind", "plan", "--expected-head", head],
-            cwd=repo, capture_output=True, text=True,
+            cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["status"], "approved")
@@ -273,7 +273,7 @@ class InstallerTests(unittest.TestCase):
                 shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
         subprocess.run(
             ["git", "init", "-b", "main", str(project)],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=True,
         )
@@ -306,7 +306,7 @@ class InstallerTests(unittest.TestCase):
                 "--repo",
                 str(project),
             ],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -2190,10 +2190,10 @@ class InstallerTests(unittest.TestCase):
         cursor_command = cursor["hooks"]["preToolUse"][0]["command"]
 
         codex_result = subprocess.run(
-            codex_command, cwd=subdirectory, shell=True, text=True, capture_output=True
+            codex_command, cwd=subdirectory, shell=True, encoding="utf-8", errors="replace", capture_output=True
         )
         cursor_result = subprocess.run(
-            cursor_command, cwd=project, shell=True, text=True, capture_output=True
+            cursor_command, cwd=project, shell=True, encoding="utf-8", errors="replace", capture_output=True
         )
 
         self.assertEqual(0, codex_result.returncode, codex_result.stderr)
@@ -3352,7 +3352,7 @@ class InstallerTests(unittest.TestCase):
             ["git", "init", "-q", str(project)],
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         (project / "AGENTS.md").write_bytes("agents\n".encode("utf-8"))
         (project / "WORKFLOW.md").write_bytes("workflow\n".encode("utf-8"))
@@ -3413,7 +3413,7 @@ class InstallerTests(unittest.TestCase):
                 str(self.source),
             ],
             env=environment,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3720,7 +3720,7 @@ class InstallerTests(unittest.TestCase):
 
     def run_git(self, *args):
         result = subprocess.run(
-            ["git", *args], capture_output=True, text=True, check=False
+            ["git", *args], capture_output=True, encoding="utf-8", errors="replace", check=False
         )
         self.assertEqual(0, result.returncode, result.stderr)
 

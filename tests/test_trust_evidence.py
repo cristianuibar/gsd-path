@@ -66,7 +66,7 @@ class TrustEvidenceTests(unittest.TestCase):
         result = subprocess.run(
             ["git", *arguments],
             cwd=self.repo,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -94,7 +94,7 @@ class TrustEvidenceTests(unittest.TestCase):
             result = subprocess.run(
                 ["git", *arguments],
                 cwd=repository,
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )
@@ -252,7 +252,7 @@ class TrustEvidenceTests(unittest.TestCase):
                 result = subprocess.run(
                     ["git", *arguments],
                     cwd=integration_worktree,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     capture_output=True,
                     check=False,
                 )
@@ -729,7 +729,7 @@ class TrustEvidenceTests(unittest.TestCase):
             ["bash", str(self.repo / "scripts/prepare_release_evidence.sh"),
              "--candidate", self.git("rev-parse", "HEAD").stdout.strip(),
              "--output-base", str(self.repo.parent / "prepared"), *(["--full"] if full else [])],
-            cwd=self.repo, text=True, capture_output=True,
+            cwd=self.repo, encoding="utf-8", errors="replace", capture_output=True,
         )
         self.assertEqual(0, result.returncode, result.stderr)
         if unchanged:

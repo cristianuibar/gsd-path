@@ -39,7 +39,7 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", "-C", str(repo), *args],
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
 
 
@@ -1503,7 +1503,7 @@ class PipelineStateTests(unittest.TestCase):
                 result = subprocess.run(
                     command,
                     capture_output=True,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     check=False,
                 )
 
@@ -1617,7 +1617,7 @@ class PipelineStateTests(unittest.TestCase):
                 if kind == "roadmap":
                     command.extend(["--milestone", "first"])
 
-                result = subprocess.run(command, capture_output=True, text=True, check=False)
+                result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
 
                 self.assertEqual(result.returncode, 0, result.stderr)
                 payload = json.loads(result.stdout)
@@ -1642,7 +1642,7 @@ class PipelineStateTests(unittest.TestCase):
                 "plan",
             ]
 
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("approve requires --expected-head", result.stderr)
@@ -1863,7 +1863,7 @@ class PipelineStateTests(unittest.TestCase):
             [sys.executable, "-c", program],
             cwd=Path(__file__).resolve().parents[1],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

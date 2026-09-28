@@ -37,7 +37,7 @@ def codex() -> str:
 
 
 def command(arguments: list, cwd: Path) -> str:
-    return subprocess.run(arguments, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(arguments, cwd=cwd, check=True, capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -132,7 +132,7 @@ def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None,
     started_at = dt.datetime.now(dt.timezone.utc).isoformat()
     with (run_dir / "stderr.txt").open("w") as errors, (run_dir / "events.jsonl").open("w") as events:
         process = subprocess.Popen(arguments, cwd=arm / "repo", stdin=subprocess.PIPE,
-                                   stdout=subprocess.PIPE, stderr=errors, text=True)
+                                   stdout=subprocess.PIPE, stderr=errors, encoding="utf-8", errors="replace")
         process.stdin.write(prompt)
         process.stdin.close()
         for line in process.stdout:

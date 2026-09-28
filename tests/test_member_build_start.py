@@ -21,7 +21,7 @@ CHANGES = {"phase": "build", "status": "active"}
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                          cwd=repo, text=True, capture_output=True, check=check)
+                          cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=check)
 
 
 class MemberBuildStartTests(unittest.TestCase):
@@ -47,7 +47,7 @@ class MemberBuildStartTests(unittest.TestCase):
             git(member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
             subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                             "--name", name, "--checkout", str(member)],
-                           text=True, capture_output=True, check=True)
+                           encoding="utf-8", errors="replace", capture_output=True, check=True)
             self.repos[name] = member
 
     def tearDown(self) -> None:

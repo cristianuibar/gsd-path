@@ -17,7 +17,7 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", "-C", str(repo), *args],
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
 
 
@@ -803,7 +803,7 @@ Waves checked: 1
                     str(repo),
                 ],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)

@@ -188,7 +188,7 @@ class DispatchDriverTests(unittest.TestCase):
         env = dict(os.environ, FAKE_MODE=mode, **fake)
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), *args, "--repo", str(root)],
-            capture_output=True, text=True, env=env,
+            capture_output=True, encoding="utf-8", errors="replace", env=env,
         )
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
@@ -206,7 +206,7 @@ class DispatchDriverTests(unittest.TestCase):
              "--child-command", f"{sys.executable} {root / 'fake_reviewer.py'}",
              "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
              "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md"),
-             *extra, "--repo", str(root)], capture_output=True, text=True, env=env)
+             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -217,7 +217,7 @@ class DispatchDriverTests(unittest.TestCase):
              "--advertised", advertised, "--parent-slug", "claude-opus",
              "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
              "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-panel.md"),
-             *extra, "--repo", str(root)], capture_output=True, text=True)
+             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -494,7 +494,7 @@ class DispatchDriverTests(unittest.TestCase):
             prepared = subprocess.run(
                 [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
                  "--repo", str(root), "--expected-head", head, "--task-id", task_id, "--round-size", "2"],
-                check=True, capture_output=True, text=True)
+                check=True, capture_output=True, encoding="utf-8", errors="replace")
             isolate = json.loads(prepared.stdout)["steps"][0]["result"]
             worktree = Path(isolate["worktree"])
             subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"),
@@ -521,7 +521,7 @@ class DispatchDriverTests(unittest.TestCase):
         prepared = subprocess.run(
             [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
              "--repo", str(root), "--expected-head", head, "--task-id", "T001", "--round-size", "2"],
-            check=True, capture_output=True, text=True)
+            check=True, capture_output=True, encoding="utf-8", errors="replace")
         isolate = json.loads(prepared.stdout)["steps"][0]["result"]
         worktree = Path(isolate["worktree"])
         isolation_cli = [sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py")]
@@ -815,7 +815,7 @@ class DispatchDriverTests(unittest.TestCase):
         head = self.head(root)
         completed = subprocess.run(
             [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "build-evidence",
-             "--repo", str(root), "--expected-head", head], capture_output=True, text=True)
+             "--repo", str(root), "--expected-head", head], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         receipt = json.loads(completed.stdout)
         evidence = root / ".project/build/evidence.json"
@@ -1441,7 +1441,7 @@ class DispatchDriverTests(unittest.TestCase):
         probe = subprocess.run(["bash", "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
         self.assertEqual(probe.returncode, 7)
         (root / "tests/test_app.py").write_bytes("raise SystemExit(7)\n".encode("utf-8"))
-        result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
+        result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 7, result)
         options.cycle = 2
         plan = (root / ".project/plan/PLAN.md").read_bytes()

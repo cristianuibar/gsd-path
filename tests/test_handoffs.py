@@ -13,7 +13,7 @@ RESEARCH_HEAD = "a" * 40
 def git(root: Path, *arguments: str) -> None:
     subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     )
@@ -22,7 +22,7 @@ def git(root: Path, *arguments: str) -> None:
 def git_output(root: Path, *arguments: str) -> str:
     return subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     ).stdout.strip()
@@ -297,12 +297,12 @@ Intent: `.project/intent/INTENT.md`
                                    "--expect-branch", "null" if track.endswith("next") else "gsd-path/M001",
                                    "--expect-archive", "null", "--set-phase", "research" if status == "active" else "decide",
                                    "--set-status", "done" if status == "active" else "active", "--event", "research gate"]
-                        failed = subprocess.run(command, capture_output=True, text=True)
+                        failed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                         self.assertNotEqual(failed.returncode, 0, failed.stdout)
                         self.assertIn("Questions assigned", failed.stderr)
                         self.assertEqual(state.read_bytes(), original)
                         evidence.write_bytes(valid.encode("utf-8"))
-                        passed = subprocess.run(command, capture_output=True, text=True)
+                        passed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                         self.assertEqual(passed.returncode, 0, passed.stderr)
                         self.assertNotEqual(state.read_bytes(), original)
 
@@ -329,14 +329,14 @@ Intent: `.project/intent/INTENT.md`
                 self.write_research_handoff(root, track)
                 command = [sys.executable, "-B", str(script), "research",
                            "--repo", str(root), "--project-dir", track]
-                passed = subprocess.run(command, capture_output=True, text=True)
+                passed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(passed.returncode, 0, passed.stderr)
                 self.assertIn('"dispatched": ["domain"]', passed.stdout)
 
                 evidence = root / track / "research/evidence-domain.md"
                 evidence.write_bytes(evidence.read_text(encoding="utf-8").replace(
                     "Questions assigned: Which domain applies?", "Questions assigned: wrong").encode("utf-8"))
-                failed = subprocess.run(command, capture_output=True, text=True)
+                failed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertNotEqual(failed.returncode, 0, failed.stdout)
                 self.assertIn("Questions assigned", failed.stderr)
 

@@ -21,7 +21,7 @@ BOUND = "gsd-path/acme-M001"
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                          cwd=repo, text=True, capture_output=True, check=check)
+                          cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=check)
 
 
 class MemberIsolationTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class MemberIsolationTests(unittest.TestCase):
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                         "--name", "web", "--checkout", str(self.member)],
-                       text=True, capture_output=True, check=True)
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
         pipeline_state.transition_state(
             self.coordinator,
             {"phase": "plan", "status": "done", "branch": "gsd-path/M001", "archive": None},

@@ -24,7 +24,7 @@ suite = unittest.defaultTestLoader.loadTestsFromNames([
 raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
 """
         result = subprocess.run([sys.executable, '-B', '-c', program], cwd=root,
-                                capture_output=True, text=True)
+                                capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_ship_bundle_returns_final_gate_without_review_dispatch(self):
@@ -34,7 +34,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             head, _ = self.fixture(root)
             command = [sys.executable, "-B", str(script), "--repo", str(root), "--expected-head", head]
             for reused in (False, True):
-                result = subprocess.run(command, capture_output=True, text=True)
+                result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 receipt = json.loads(result.stdout)
                 self.assertIn("Ran 1 test", receipt["verification"]["execution"]["stderr"])

@@ -19,7 +19,7 @@ STATE = (
 
 def git(repo: Path, *arguments: str) -> str:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                          cwd=repo, text=True, capture_output=True, check=True).stdout.strip()
+                          cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=True).stdout.strip()
 
 
 def member_task(task_id: str, files: str, context: str, repo: str = "web",
@@ -56,7 +56,7 @@ class MemberTaskBriefTests(unittest.TestCase):
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                         "--name", "web", "--checkout", str(self.member)],
-                       text=True, capture_output=True, check=True)
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
         self.head = git(self.coordinator, "rev-parse", "HEAD")
 
     def tearDown(self) -> None:

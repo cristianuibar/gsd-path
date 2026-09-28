@@ -44,7 +44,7 @@ class DispatchPolicyTests(unittest.TestCase):
             wrapper.return_value.pid = os.getpid()
             result = dispatch_driver.spawn(self.root / 'records', state or self.state,
                                            self.options, lambda _: 'task brief')
-        output = subprocess.run(result['command'], capture_output=True, text=True, check=True)
+        output = subprocess.run(result['command'], capture_output=True, encoding="utf-8", errors="replace", check=True)
         return result, json.loads(output.stdout)
 
     def test_project_choice_reaches_child(self):
@@ -126,7 +126,7 @@ class DispatchPolicyTests(unittest.TestCase):
             sys.executable, '-B', str(script), action, '--repo', str(self.root),
             '--scope', scope, '--assignment', 'plan', '--role', 'plan',
             '--record', str(self.root / 'native.json'), '--capabilities', str(self.caps),
-            *extra], capture_output=True, text=True)
+            *extra], capture_output=True, encoding="utf-8", errors="replace")
         self.assertNotEqual(result.stdout, '', result.stderr)
         return result.returncode, json.loads(result.stdout)
 
@@ -219,7 +219,7 @@ class DispatchPolicyTests(unittest.TestCase):
                     sys.executable, '-B', str(script), 'resolve', '--repo', str(self.root),
                     '--scope', 'M001/active', '--assignment', 'T001', '--role', 'coder',
                     '--record', str(self.root / f'{skill}.json'), '--capabilities', str(self.caps)],
-                    cwd=self.root, capture_output=True, text=True)
+                    cwd=self.root, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
                 self.assertEqual(json.loads(result.stdout)['selection']['native'],
                                  {'model': 'small', 'reasoning_effort': 'low'})
@@ -460,18 +460,18 @@ class DispatchPolicyTests(unittest.TestCase):
         command = [sys.executable, '-B', str(Path(__file__).parents[1] / 'scripts/review_panel.py'),
                    'resolve', '--plan', str(plan), '--advertised', 'gpt-6,claude-opus,grok-4',
                    '--parent-slug', 'gpt-6']
-        original = subprocess.run(command, capture_output=True, text=True, check=True)
+        original = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=True)
         old_roster = json.loads(original.stdout)['selected']
         self.assertEqual([item['family'] for item in old_roster], ['claude', 'grok'])
         with self.assertRaises(model_policy.PolicyError):
             model_policy.validate_panel({'effective_model': old_roster[0]['slug']}, 'claude', ['claude'])
         command += ['--exclude-family', 'claude', '--exclude-family', 'gpt']
-        corrected = subprocess.run(command, capture_output=True, text=True, check=True)
+        corrected = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=True)
         roster = json.loads(corrected.stdout)['selected']
         self.assertEqual(roster, [{'family': 'grok', 'slug': 'grok-4'}])
         model_policy.validate_panel({'effective_model': roster[0]['slug']}, 'grok', ['gpt', 'claude'])
         plan.write_bytes('- review_panel: claude,grok\n'.encode("utf-8"))
-        explicit = subprocess.run(command, capture_output=True, text=True)
+        explicit = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(explicit.returncode, 2)
         self.assertIn('independent family', json.loads(explicit.stdout)['error'])
 

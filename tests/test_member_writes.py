@@ -23,7 +23,7 @@ STATE = (
 
 def git(repo: Path, *arguments: str) -> None:
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                   cwd=repo, text=True, capture_output=True, check=True)
+                   cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=True)
 
 
 def make_repo(path: Path, project: str, remote: str = "") -> Path:
@@ -44,7 +44,7 @@ def make_repo(path: Path, project: str, remote: str = "") -> Path:
 def join(coordinator: Path, member: Path, name: str) -> None:
     subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(coordinator),
                     "--name", name, "--checkout", str(member)],
-                   text=True, capture_output=True, check=True)
+                   encoding="utf-8", errors="replace", capture_output=True, check=True)
 
 
 class MemberWriteTests(unittest.TestCase):

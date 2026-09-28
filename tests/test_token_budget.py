@@ -12,7 +12,7 @@ class TokenBudgetTests(unittest.TestCase):
     def run_cli(self, root, *args):
         return subprocess.run([sys.executable, "-B", str(SCRIPT), *args,
                                "--ledger", str(root / "budget.json")],
-                              capture_output=True, text=True)
+                              capture_output=True, encoding="utf-8", errors="replace")
 
     def test_usage_survives_resume_and_duplicate_observation(self):
         with tempfile.TemporaryDirectory() as tmp:

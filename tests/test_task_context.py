@@ -48,7 +48,7 @@ class TaskContextTests(unittest.TestCase):
             intent.write_bytes(original.encode("utf-8"))
             command = [sys.executable, '-B', str(ROOT / 'scripts/task_context.py'),
                        '--repo', str(repo), '--task', str(task)]
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(prefix, result.stdout)
             self.assertIn(suffix, result.stdout)
@@ -63,19 +63,19 @@ class TaskContextTests(unittest.TestCase):
             for skill in ('gsd-path', 'gsd-path-build', 'path'):
                 bundled = command.copy()
                 bundled[2] = str(ROOT / 'skills' / skill / 'scripts/task_context.py')
-                installed = subprocess.run(bundled, cwd=repo, capture_output=True, text=True)
+                installed = subprocess.run(bundled, cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(installed.returncode, 0, installed.stderr)
                 self.assertEqual(installed.stdout, result.stdout)
 
             intent.write_bytes(original.replace('Keep compatibility.', 'Keep SC1 unchanged.').encode("utf-8"))
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('1. Unrelated export works.', result.stdout)
 
             # Unstructured text could carry a constraint: retain the complete input.
             ambiguous = original.replace('1. Unrelated', 'Never remove any command.\n1. Unrelated')
             intent.write_bytes(ambiguous.encode("utf-8"))
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('Mode: full-intent', result.stdout)
             self.assertIn(ambiguous, result.stdout)
@@ -83,12 +83,12 @@ class TaskContextTests(unittest.TestCase):
             # Provenance hashes identify source bytes, including CRLF files.
             windows_source = original.replace('\n', '\r\n').encode()
             intent.write_bytes(windows_source)
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(hashlib.sha256(windows_source).hexdigest(), result.stdout)
 
             task.write_bytes('## Intent coverage\n\n- SC99\n'.encode("utf-8"))
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('SC99', result.stderr)
             self.assertEqual(result.stdout, '')

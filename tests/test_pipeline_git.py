@@ -20,7 +20,7 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", "-C", str(repo), *args],
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
 
 
@@ -87,12 +87,12 @@ class PipelineGitTests(unittest.TestCase):
             original = path.read_bytes()
             command = [sys.executable, str(PIPELINE_GIT), "bind-initial", "--repo", str(repo),
                        "--branch", "gsd-path/M001", "--remote-default", "origin/main", "--base", base]
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(path.read_bytes(), original)
             self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), base)
             # Recover the interruption after switch, before STATE.branch is persisted.
-            resumed = subprocess.run(command, capture_output=True, text=True)
+            resumed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             self.assertEqual(json.loads(resumed.stdout)["status"], "already-bound")
             state = pipeline_state.validate_state(repo)["state"]
@@ -234,7 +234,7 @@ class PipelineGitTests(unittest.TestCase):
                 base,
             ]
 
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
 
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
@@ -246,7 +246,7 @@ class PipelineGitTests(unittest.TestCase):
             )
             self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), base)
 
-            retry = subprocess.run(command, capture_output=True, text=True)
+            retry = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(retry.returncode, 0, retry.stderr)
             self.assertEqual(json.loads(retry.stdout)["status"], "already-bound")
 
@@ -703,7 +703,7 @@ class PipelineGitTests(unittest.TestCase):
             rejected = subprocess.run(
                 bind_next,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
             self.assertEqual(rejected.returncode, 1)
             self.assertIn("pull-request integration proof", rejected.stderr)
@@ -729,7 +729,7 @@ class PipelineGitTests(unittest.TestCase):
             result = subprocess.run(
                 bind_next,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -746,7 +746,7 @@ class PipelineGitTests(unittest.TestCase):
                 ["git", "-C", str(primary), "show-ref", "--verify", "--quiet",
                  "refs/heads/gsd-path/M001"],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
             self.assertEqual(retired_local.returncode, 1, "gsd-path/M001 not retired")
             self.assertEqual(
@@ -758,12 +758,12 @@ class PipelineGitTests(unittest.TestCase):
                 integrated_main,
             )
 
-            retry = subprocess.run(bind_next, capture_output=True, text=True)
+            retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(retry.returncode, 0, retry.stderr)
             self.assertEqual(json.loads(retry.stdout)["status"], "already-bound")
 
             run_git(origin, "update-ref", "refs/heads/main", m001_ship)
-            stale_retry = subprocess.run(bind_next, capture_output=True, text=True)
+            stale_retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(stale_retry.returncode, 1)
             self.assertIn("stale relative to origin", stale_retry.stderr)
             run_git(origin, "update-ref", "refs/heads/main", integrated_main)
@@ -775,13 +775,13 @@ class PipelineGitTests(unittest.TestCase):
                 "-d",
                 "refs/remotes/origin/gsd-path/M002",
             )
-            collision_retry = subprocess.run(bind_next, capture_output=True, text=True)
+            collision_retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(collision_retry.returncode, 1)
             self.assertIn("refs/heads/gsd-path/M002 on origin", collision_retry.stderr)
             run_git(primary, "push", "origin", "--delete", "gsd-path/M002")
 
             (primary / "untracked.txt").write_bytes("dirty\n".encode("utf-8"))
-            dirty_retry = subprocess.run(bind_next, capture_output=True, text=True)
+            dirty_retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(dirty_retry.returncode, 1)
             self.assertIn("primary worktree is not clean", dirty_retry.stderr)
 
@@ -872,7 +872,7 @@ class PipelineGitTests(unittest.TestCase):
                     "--allow-missing-previous",
                 ],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
 
             self.assertEqual(result.returncode, 1)
@@ -958,7 +958,7 @@ class PipelineGitTests(unittest.TestCase):
                 "refs/heads/gsd-path/M001",
                 integrated_main,
             )
-            moved = subprocess.run(bind_next, capture_output=True, text=True)
+            moved = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(moved.returncode, 1)
             self.assertIn("origin/gsd-path/M001 moved after ship", moved.stderr)
             self.assertEqual(
@@ -971,7 +971,7 @@ class PipelineGitTests(unittest.TestCase):
                 "refs/heads/gsd-path/M001",
                 m001_ship,
             )
-            result = subprocess.run(bind_next, capture_output=True, text=True)
+            result = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
@@ -985,14 +985,14 @@ class PipelineGitTests(unittest.TestCase):
                 gone = subprocess.run(
                     ["git", "-C", str(primary), "show-ref", "--verify", "--quiet", ref],
                     capture_output=True,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                 )
                 self.assertEqual(gone.returncode, 1, f"{ref} not retired")
             remote_gone = subprocess.run(
                 ["git", "-C", str(origin), "show-ref", "--verify", "--quiet",
                  "refs/heads/gsd-path/M001"],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
             self.assertEqual(remote_gone.returncode, 1, "origin branch not retired")
             self.assertEqual(
@@ -1000,7 +1000,7 @@ class PipelineGitTests(unittest.TestCase):
                 integrated_main,
             )
 
-            retry = subprocess.run(bind_next, capture_output=True, text=True)
+            retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(retry.returncode, 0, retry.stderr)
 
 

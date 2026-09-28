@@ -44,7 +44,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.watcher.sessions.records_for.return_value = []
 
     def git(self, *args):
-        return subprocess.check_output(['git', '-C', str(self.root), *args], text=True)
+        return subprocess.check_output(['git', '-C', str(self.root), *args], encoding="utf-8", errors="replace")
 
     def request(self, action='list', headers=None, **fields):
         conn = http.client.HTTPConnection('127.0.0.1', self.port)

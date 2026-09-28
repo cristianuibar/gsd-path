@@ -180,7 +180,7 @@ class ProcessAliveTests(unittest.TestCase):
 
     def test_exited_process_is_not_alive(self) -> None:
         exited = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"],
-                                capture_output=True, text=True, check=True)
+                                capture_output=True, encoding="utf-8", errors="replace", check=True)
         self.assertFalse(_common.process_alive(int(exited.stdout)))
 
     def test_invalid_pids_are_not_alive(self) -> None:
@@ -249,7 +249,7 @@ class BashTests(unittest.TestCase):
     @requires_bash
     def test_runs_a_bash_command(self) -> None:
         result = subprocess.run(_common.bash_argv('printf "%s" "$((1 + 2))"'),
-                                capture_output=True, text=True, check=True)
+                                capture_output=True, encoding="utf-8", errors="replace", check=True)
         self.assertEqual(result.stdout, "3")
 
 
@@ -265,7 +265,7 @@ class ResolveArgvTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
                 argv = _common.resolve_argv(["fakecli", "one"])
                 self.assertEqual(Path(argv[0]).resolve(), shim.resolve())
-                result = subprocess.run(argv, capture_output=True, text=True, check=True)
+                result = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace", check=True)
                 self.assertEqual(result.stdout.strip(), "ok one")
                 with self.assertRaises(ValueError):
                     _common.resolve_argv(["fakecli", "a & calc"])

@@ -50,7 +50,7 @@ class DetectProjectTests(unittest.TestCase):
     def command(self, repo: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(SCRIPT), "classify", "--repo", str(repo)],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -65,7 +65,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
                  "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
-                 "--require-git"], cwd=repo, capture_output=True, text=True,
+                 "--require-git"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
@@ -218,7 +218,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 ['node', str(ROOT / 'scripts/install.mjs'), '--codex', '--local',
                  '--project', str(repo), '--hooks', '--no-color'],
-                cwd=repo, capture_output=True, text=True)
+                cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.git(repo, 'add', '.')
             payload = self.classify(repo)
@@ -423,7 +423,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
                  "--template", str(ROOT / "skills/gsd-path/templates/state.md")],
-                cwd=repo, capture_output=True, text=True,
+                cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(json.loads(result.stdout)["wrote_state"])
@@ -1176,7 +1176,7 @@ class DetectProjectTests(unittest.TestCase):
     def test_cli_help_distinguishes_classify_and_initialize(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--help"],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -1930,7 +1930,7 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
                 env=environment,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
             try:
                 self.assertEqual("ready\n", process.stdout.readline())
@@ -2179,7 +2179,7 @@ class PromoteLookaheadTests(unittest.TestCase):
             cwd=repo,
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         return result.stdout.strip()
 
@@ -2352,7 +2352,7 @@ Integrated: null
                     "--active-milestone",
                     "first",
                 ],
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )

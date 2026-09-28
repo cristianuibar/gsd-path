@@ -24,7 +24,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
             args,
             cwd=cwd,
             env=env,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )

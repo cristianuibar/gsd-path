@@ -18,7 +18,7 @@ BRANCH = "gsd-path/M001"
 def run_git(repo: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(repo), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )
@@ -131,7 +131,7 @@ archive: null
     def cli(self, *arguments: str) -> tuple[subprocess.CompletedProcess[str], dict]:
         result = subprocess.run(
             (sys.executable, str(SCRIPT), *arguments, "--repo", str(self.repo)),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )

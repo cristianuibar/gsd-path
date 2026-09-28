@@ -36,7 +36,7 @@ def help_text(script, subcommand):
     if subcommand:
         argv.append(subcommand)
     argv.append("--help")
-    return subprocess.run(argv, capture_output=True, text=True)
+    return subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace")
 
 
 class SkillCommandTest(unittest.TestCase):

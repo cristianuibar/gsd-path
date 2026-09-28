@@ -71,7 +71,7 @@ files:
 def git(root: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     )

@@ -34,7 +34,7 @@ archive: {archive}
 
 def git(repo: Path, *arguments: str) -> str:
     return subprocess.run(
-        ["git", *arguments], cwd=repo, text=True, capture_output=True, check=True
+        ["git", *arguments], cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=True
     ).stdout.strip()
 
 
@@ -85,7 +85,7 @@ class MemberTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(SCRIPT), arguments[0], "--repo", str(self.coordinator),
              *arguments[1:]],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
 
     def add(self, name: str, checkout: Path, *extra: str):

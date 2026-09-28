@@ -125,7 +125,7 @@ class WorktreePlacementTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, "-B", str(runtime / "isolation.py"), "isolate-verify",
              "--repo", str(self.repo), "--base", self.base, "--name", "runtime"],
-            cwd=runtime, text=True, capture_output=True,
+            cwd=runtime, encoding="utf-8", errors="replace", capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         worktree = Path(json.loads(result.stdout)["worktree"])

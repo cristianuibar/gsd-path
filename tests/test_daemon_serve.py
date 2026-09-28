@@ -198,7 +198,7 @@ class ServeTests(unittest.TestCase):
             handle.write(scripts[0].encode("utf-8"))
             path = handle.name
         self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
-        result = subprocess.run([node, "--check", path], capture_output=True, text=True)
+        result = subprocess.run([node, "--check", path], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_not_found(self) -> None:

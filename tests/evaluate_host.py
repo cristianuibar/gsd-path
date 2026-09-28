@@ -49,7 +49,7 @@ RELEASE-EVIDENCE ADDENDUM (overrides scenario step 5 and refines step 4):
 
 
 def sh(args, cwd):
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
 
 
 def prepare(host, directory, candidate):
@@ -113,7 +113,7 @@ def run(host, directory, resume=None, prompt_file=None):
     started = time.monotonic(); started_at = dt.datetime.now(dt.timezone.utc).isoformat(); lines = []
     with (run_dir / "stderr.txt").open("w") as err, (run_dir / "events.jsonl").open("w") as events:
         proc = subprocess.Popen(args, cwd=arm / "repo", stdin=subprocess.PIPE if spec.prompt_on_stdin else subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=err, text=True)
+                                stdout=subprocess.PIPE, stderr=err, encoding="utf-8", errors="replace")
         if spec.prompt_on_stdin:
             proc.stdin.write(prompt_path.read_text(encoding="utf-8")); proc.stdin.close()
         for line in proc.stdout:

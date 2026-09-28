@@ -37,7 +37,7 @@ class ProjectUpdateTests(unittest.TestCase):
                 subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True)
             (home / 'src').symlink_to(SOURCE, target_is_directory=True)
             def runner(argv, cwd=None):
-                result = subprocess.run(argv, cwd=cwd, env={**os.environ, 'HOME': str(home)}, capture_output=True, text=True)
+                result = subprocess.run(argv, cwd=cwd, env={**os.environ, 'HOME': str(home)}, capture_output=True, encoding="utf-8", errors="replace")
                 return result.returncode, result.stdout, result.stderr
             manager = PluginManager(home=home, user_home=home, runner=runner,
                                     git_runner=lambda argv, **kw: (0, ' M daemon/gsd_daemon/serve.py\n', '') if 'status' in argv else (1, '', 'Your local changes would be overwritten by merge'), environ={})

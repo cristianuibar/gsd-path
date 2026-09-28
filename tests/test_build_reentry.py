@@ -68,7 +68,7 @@ class BuildReentryTests(unittest.TestCase):
     def cli(self, *args, success=True):
         result = subprocess.run([
             sys.executable, "-B", str(SCRIPT), *args, "--repo", str(self.repo),
-        ], capture_output=True, text=True)
+        ], capture_output=True, encoding="utf-8", errors="replace")
         if success:
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(result.stdout)
@@ -325,12 +325,12 @@ class BuildReentryTests(unittest.TestCase):
                     "--expect-phase", "build", "--expect-status", "blocked",
                     "--expect-branch", "gsd-path/M001", "--expect-archive", "null",
                     "--set-phase", phase, "--set-status", "active", "--event", event,
-                ], capture_output=True, text=True)
+                ], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(json.loads(result.stdout)["state"]["phase"], phase)
                 routed = subprocess.run([
                     sys.executable, "-B", str(SCRIPT), "route", "--repo", str(repo),
-                ], capture_output=True, text=True, check=True)
+                ], capture_output=True, encoding="utf-8", errors="replace", check=True)
                 self.assertEqual(json.loads(routed.stdout)["route"]["phase"], phase)
                 self.assertEqual((project / "tasks/T001-demo.md").read_bytes(), original_task)
 

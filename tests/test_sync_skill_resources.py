@@ -39,7 +39,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
             ]
             for command in commands:
                 with self.subTest(command=command[0]):
-                    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+                    result = subprocess.run(command, cwd=root, encoding="utf-8", errors="replace", capture_output=True)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             result = self.run_sync(root)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -49,7 +49,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(root / "scripts" / "sync_skill_resources.py"), "--root", str(root), *args],
             cwd=root,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -127,7 +127,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
             roadmap_help = subprocess.run(
                 [sys.executable, str(roadmap_promote), "--help"],
                 cwd=root,
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )
@@ -323,7 +323,7 @@ archive: null
                 result = subprocess.run(
                     [sys.executable, str(script), "pending", "--repo", str(repo)],
                     cwd=repo,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     capture_output=True,
                     check=False,
                 )

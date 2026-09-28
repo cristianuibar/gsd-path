@@ -30,7 +30,7 @@ class WorkflowProjectionTests(unittest.TestCase):
 
     def status(self, repo):
         result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/pipeline_state.py'),
-                                 'status', '--repo', str(repo)], capture_output=True, text=True)
+                                 'status', '--repo', str(repo)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 

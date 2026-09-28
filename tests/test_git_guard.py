@@ -163,7 +163,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ["git", "rev-parse", "HEAD"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=True,
         ).stdout.strip()
 
@@ -177,7 +177,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), str(message)],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
     def test_blocks_staged_archive_tamper_and_allows_clean_commit(self):
@@ -260,7 +260,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, pre_commit.returncode, pre_commit.stderr)
         self.assertEqual(
@@ -287,7 +287,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         refused = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
              "commit", "-q", "-F", str(malformed_message)],
-            cwd=self.repo, capture_output=True, text=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(1, refused.returncode, refused.stderr)
         self.assertIn("ship commit subject must be", refused.stderr)
@@ -297,7 +297,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 refused = subprocess.run(
                     ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
                      "commit", "-q", "-m", "ship: M002 — next", "-m", invalid_body],
-                    cwd=self.repo, capture_output=True, text=True,
+                    cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
                 )
                 self.assertEqual(1, refused.returncode, refused.stderr)
                 self.assertIn("ship commit body does not match", refused.stderr)
@@ -305,12 +305,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
         accepted = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
              "commit", "-q", "-m", "ship: M002 — next", "-m", body],
-            cwd=self.repo, capture_output=True, text=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, accepted.returncode, accepted.stderr)
         stored = subprocess.run(
             ["git", "show", "-s", "--format=%b", "HEAD"],
-            cwd=self.repo, capture_output=True, text=True, check=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace", check=True,
         ).stdout
         self.assertEqual(body + "\n\n", stored)
 
@@ -394,7 +394,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("read-only", result.stderr)
@@ -429,7 +429,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "feat: change app"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -441,7 +441,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "ship: 002-next"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("only touch .project/", result.stderr)
@@ -463,7 +463,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "chore: first commit"],
             cwd=repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -515,7 +515,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -567,7 +567,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -594,7 +594,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-push", "origin", "https://example.invalid/r.git"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             input="".join(line + "\n" for line in lines),
         )
 
@@ -739,7 +739,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertIn("STATE is ship", result.stderr)
@@ -776,13 +776,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
         hooks = self.repo / ".gsd-path"
         installed = subprocess.run(
             [*installer, "--hooks-init", "--claude", "--project", str(self.repo)],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, installed.returncode, installed.stderr)
         runtime = Path(subprocess.check_output(
             [sys.executable, "-B", str(hooks / "status_runtime.py"),
              "--repo", str(self.repo), "--runtime-path"],
-            text=True,
+            encoding="utf-8", errors="replace",
         ).strip())
         # Fixture history includes deliberate out-of-band STATE rewrites.
         self.git("config", "core.hooksPath", "/dev/null")
@@ -800,7 +800,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         selected = subprocess.run(
             [sys.executable, "-B", str(runtime / "promote_lookahead.py"), "select-base",
              "--repo", str(self.repo), "--base", base, "--remote-default", "origin/main"],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, selected.returncode, selected.stderr)
         self.assertEqual("gsd-path/M003", json.loads(selected.stdout)["branch"])
@@ -835,7 +835,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")],
-                    cwd=self.repo, input=json.dumps(event), capture_output=True, text=True,
+                    cwd=self.repo, input=json.dumps(event), capture_output=True, encoding="utf-8", errors="replace",
                 )
                 with self.subTest(rewritten=rewritten, event=event):
                     self.assertEqual(2, result.returncode, result.stderr)
@@ -866,7 +866,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
                     input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
-                    capture_output=True, text=True,
+                    capture_output=True, encoding="utf-8", errors="replace",
                 )
                 with self.subTest(allowed=command):
                     self.assertEqual(0, result.returncode, result.stderr)
@@ -948,14 +948,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
                                 [sys.executable, str(guard)], cwd=cwd,
                                 input=json.dumps({"tool_name": "Bash", "tool_input": {
                                     "command": command, **({"cwd": str(cwd)} if supplied else {}),
-                                }}), capture_output=True, text=True,
+                                }}), capture_output=True, encoding="utf-8", errors="replace",
                             )
                             self.assertEqual(expected, result.returncode, result.stderr)
             for target in (sibling / "app.py", Path(directory) / "note.md"):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
                     input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}}),
-                    capture_output=True, text=True,
+                    capture_output=True, encoding="utf-8", errors="replace",
                 )
                 self.assertEqual(0, result.returncode, result.stderr)
 
@@ -1032,7 +1032,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 [sys.executable, str(SCRIPT), str(message)],
                 cwd=empty,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 env={"PATH": "/usr/bin:/bin", "HOME": empty,
                      "GIT_CONFIG_GLOBAL": str(Path(empty) / "nogitconfig"),
                      "GIT_CONFIG_SYSTEM": str(Path(empty) / "nogitconfig")},

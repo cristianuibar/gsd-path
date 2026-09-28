@@ -44,7 +44,7 @@ class EvaluationTests(unittest.TestCase):
                 (binary / "codex.cmd").write_bytes(f'@"{sys.executable}" "%~dp0codex" %*\r\n'.encode("utf-8"))
             arguments = [sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"), "run", "--arm", str(arm),
                          "--model", "fixture", "--reasoning", "high", "--sandbox", "danger-full-access"]
-            result = subprocess.run(arguments, capture_output=True, text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
+            result = subprocess.run(arguments, capture_output=True, encoding="utf-8", errors="replace", env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
             self.assertEqual(result.returncode, 0, result.stderr)
             recorded = json.loads(result.stdout)
             self.assertEqual(recorded["sandbox"], "danger-full-access")
@@ -53,7 +53,7 @@ class EvaluationTests(unittest.TestCase):
             self.assertEqual(event["argv"][event["argv"].index("--sandbox") + 1], "danger-full-access")
             self.assertEqual(event["prompt"], "fixture prompt")
             resumed = subprocess.run(arguments + ["--resume", "fixture-thread"], capture_output=True,
-                                     text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
+                                     encoding="utf-8", errors="replace", env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             events = sorted(arm.glob("run-*/events.jsonl"))[-1]
             argv = json.loads(json.loads(events.read_text(encoding="utf-8"))["raw"])["argv"]

@@ -39,7 +39,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
     def git(self, *args, repo=None):
         return subprocess.check_output(
             ["git", "-c", "core.excludesFile=/dev/null", *args],
-            cwd=repo or self.repo, text=True, stderr=subprocess.PIPE,
+            cwd=repo or self.repo, encoding="utf-8", errors="replace", stderr=subprocess.PIPE,
         ).strip()
 
     def provision(self):
@@ -52,7 +52,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, "-B", str(SOURCE / "scripts/install.py"),
              option, "--project", str(self.repo), "--source-root", str(source)],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
 
     def test_workflow_keeps_selected_subprocesses_and_imports(self):
@@ -71,13 +71,13 @@ class RuntimeLifecycleTests(unittest.TestCase):
                 result = subprocess.run(
                     [sys.executable, "-B", str(SOURCE / "scripts/workflow_run.py"), action,
                      "--repo", str(self.repo), "--expected-head", self.git("rev-parse", "HEAD"), *extra],
-                    cwd=self.repo, capture_output=True, text=True)
+                    cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertIn("selected isolation runtime", result.stderr)
                 self.assertEqual(self.pin(), before)
         runtime = install.status_runtime.resolve_runtime(self.repo)
         result = subprocess.run([sys.executable, "-B", str(runtime / "lean_verification.py"),
                                  "--repo", str(self.repo), "--expected-head", self.git("rev-parse", "HEAD")],
-                                cwd=self.repo, capture_output=True, text=True)
+                                cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace")
         self.assertIn("selected isolation runtime", result.stderr)
 
     def test_native_guard_missing_runtime_blocks_protected_edit(self):
@@ -89,7 +89,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         for name, arguments, expected in (("guard_hook.py", [], 2), ("git_guard.py", ["pre-commit"], 1)):
             with self.subTest(name=name):
                 result = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path" / name), *arguments],
-                                        cwd=self.repo, input=json.dumps(payload), capture_output=True, text=True)
+                                        cwd=self.repo, input=json.dumps(payload), capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, expected, result.stderr)
                 self.assertIn("--runtime-restore", result.stderr)
 
@@ -119,7 +119,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.git("worktree", "add", "-b", "gsd-path-verify/runtime", str(sidecar))
         result = subprocess.run(
             [sys.executable, "-B", str(sidecar / ".gsd-path/status_runtime.py"),
-             "--repo", str(sidecar), "--runtime-path"], capture_output=True, text=True,
+             "--repo", str(sidecar), "--runtime-path"], capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(Path(result.stdout.strip()), self.home / ".gsd-path/runtimes" / self.pin()["digest"])
@@ -149,7 +149,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
             command = shlex.split(line.replace("<trusted-gsd-path>", altered.as_posix()).replace("<trust-root>", self.repo.as_posix()))
             if command[0] == "python3":
                 command[0] = sys.executable
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             if "--dry-run" in command:
                 self.assertEqual((self.repo / ".gsd-path/runtime.json").read_bytes(), before)
@@ -193,7 +193,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         shutil.rmtree(self.home / ".gsd-path/runtimes" / pin["digest"])
         result = subprocess.run(
             [sys.executable, "-B", str(self.repo / ".gsd-path/status_runtime.py"),
-             "--repo", str(self.repo)], capture_output=True, text=True,
+             "--repo", str(self.repo)], capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--runtime-restore", result.stderr)
@@ -209,7 +209,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
     def test_node_installer_uses_same_external_store(self):
         script = "import {install} from './scripts/install.mjs'; await install(process.cwd(), [], {project: process.argv[1], migrateLegacy:false});"
         result = subprocess.run(["node", "--input-type=module", "-e", script, str(self.repo)],
-                                cwd=SOURCE, capture_output=True, text=True)
+                                cwd=SOURCE, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((self.repo / ".gsd-path/runtime").exists())
         self.assertTrue((self.home / ".gsd-path/runtimes" / self.pin()["digest"]).is_dir())
@@ -229,7 +229,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertIn(" D .gsd-path/runtime/pipeline_state.py", self.git("status", "--porcelain"))
         self.assertEqual(self.git("diff", "--cached", "--name-only"), "")
         command = subprocess.run([sys.executable, "-B", str(runtime.parent / "git_guard.py"), "pre-commit"],
-                                 cwd=self.repo, capture_output=True, text=True)
+                                 cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(command.returncode, 0, command.stderr)
 
     def test_modified_legacy_runtime_is_preserved(self):
@@ -296,7 +296,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
                 "--claude-root", str(skills), "--project", str(self.repo), "--hooks"]
         version = skills / "gsd-path/VERSION"
         version.write_bytes("0.0.1\n".encode("utf-8"))
-        refused = subprocess.run(args, capture_output=True, text=True)
+        refused = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace")
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn(str(self.repo), refused.stdout + refused.stderr)
         self.assertNotIn("rolled back", refused.stdout + refused.stderr)
@@ -304,19 +304,19 @@ class RuntimeLifecycleTests(unittest.TestCase):
         edited = runtime / "pipeline_state.py"
         original = edited.read_bytes()
         edited.write_bytes(original + b"\n# user edit\n")
-        blocked = subprocess.run([*args, "--runtime-migrate"], capture_output=True, text=True)
+        blocked = subprocess.run([*args, "--runtime-migrate"], capture_output=True, encoding="utf-8", errors="replace")
         self.assertNotEqual(blocked.returncode, 0)
         self.assertIn("locally modified", blocked.stdout + blocked.stderr)
         self.assertEqual(edited.read_bytes(), original + b"\n# user edit\n")
         self.assertEqual(version.read_text(encoding="utf-8"), "0.0.1\n")
         edited.write_bytes(original)
-        preview = subprocess.run([*args, "--runtime-migrate", "--dry-run"], capture_output=True, text=True)
+        preview = subprocess.run([*args, "--runtime-migrate", "--dry-run"], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(preview.returncode, 0, preview.stderr)
         self.assertEqual(self.git("status", "--porcelain"), "")
         self.assertTrue(runtime.exists())
         self.assertEqual(version.read_text(encoding="utf-8"), "0.0.1\n")
         self.assertFalse((self.home / ".gsd-path/runtimes").exists())
-        result = subprocess.run([*args, "--runtime-migrate"], capture_output=True, text=True)
+        result = subprocess.run([*args, "--runtime-migrate"], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Updated.", result.stdout)
         self.assertEqual(version.read_text(encoding="utf-8").strip(), json.loads((SOURCE / "package.json").read_text(encoding="utf-8"))["version"])
@@ -324,10 +324,10 @@ class RuntimeLifecycleTests(unittest.TestCase):
         self.assertTrue((skills.parent / "disabled-gsd-skills").exists())
         self.assertTrue((self.repo / ".claude/settings.json").exists())
         guard = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path/git_guard.py"), "pre-commit"],
-                               cwd=self.repo, capture_output=True, text=True)
+                               cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(guard.returncode, 0, guard.stderr)
         pin = self.pin()
-        repeated = subprocess.run(args, capture_output=True, text=True)
+        repeated = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(self.pin(), pin)
         self.assertFalse(runtime.exists())
@@ -340,7 +340,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         (self.repo / ".claude").write_bytes("user file prevents project wiring\n".encode("utf-8"))
         result = subprocess.run(["node", str(SOURCE / "scripts/install.mjs"), "--update", "--runtime-migrate",
                                  "--claude", "--claude-root", str(skills), "--project", str(self.repo)],
-                                capture_output=True, text=True)
+                                capture_output=True, encoding="utf-8", errors="replace")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Migration completed", result.stdout)
         self.assertIn("unsafe Claude project directory", result.stdout + result.stderr)
@@ -357,7 +357,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         for extra in cases:
             with self.subTest(extra=extra):
                 result = subprocess.run(["node", str(SOURCE / "scripts/install.mjs"), "--update",
-                                         "--runtime-migrate", *extra], capture_output=True, text=True)
+                                         "--runtime-migrate", *extra], capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
                 self.assertIn("requires --project", result.stdout + result.stderr)
         self.assertEqual(self.git("status", "--porcelain"), "")
@@ -450,11 +450,11 @@ runtime_store.operate(Path(sys.argv[1]), Path(sys.argv[2]), 'migrate')
                 self.git("worktree", "add", "-b", branch, str(checkout))
                 # Status reads the inherited project state from this worktree.
                 result = subprocess.run([sys.executable, "-B", str(checkout / ".gsd-path/status_runtime.py"),
-                                         "--repo", str(checkout)], cwd=checkout, capture_output=True, text=True)
+                                         "--repo", str(checkout)], cwd=checkout, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIsInstance(json.loads(result.stdout), dict)
                 guard = subprocess.run([sys.executable, "-B", str(checkout / ".gsd-path/git_guard.py"), "pre-commit"],
-                                       cwd=checkout, capture_output=True, text=True)
+                                       cwd=checkout, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(guard.returncode, 0, guard.stderr)
                 self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all", repo=checkout), "")
 
@@ -495,7 +495,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         runtime = self.home / ".gsd-path/runtimes" / self.pin()["digest"]
         shutil.rmtree(runtime)
         result = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path/git_guard.py"), "pre-commit"],
-                                cwd=self.repo, text=True, capture_output=True)
+                                cwd=self.repo, encoding="utf-8", errors="replace", capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--runtime-restore", result.stderr)
         self.assertFalse(runtime.exists())
@@ -515,7 +515,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
                     "workdir": str(self.repo),
                 }}
                 result = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path/guard_hook.py")],
-                                        cwd=self.repo, input=json.dumps(payload), text=True, capture_output=True)
+                                        cwd=self.repo, input=json.dumps(payload), encoding="utf-8", errors="replace", capture_output=True)
                 self.assertEqual(result.returncode, expected, result.stderr)
 
 
@@ -530,7 +530,7 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             with self.subTest(helper=name):
                 result = subprocess.run([sys.executable, "-X", "pycache_prefix=", str(runtime / name), "--help"],
-                                        cwd=self.repo, env=environment, text=True, capture_output=True)
+                                        cwd=self.repo, env=environment, encoding="utf-8", errors="replace", capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertFalse((runtime / "__pycache__").exists(), name)
         self.assertEqual(install.status_runtime.resolve_runtime(self.repo), runtime)

@@ -42,7 +42,7 @@ class DiscussionRecordTests(unittest.TestCase):
             )
         if input_path is not None:
             arguments.extend(("--input", str(input_path)))
-        return subprocess.run(arguments, text=True, capture_output=True, check=False)
+        return subprocess.run(arguments, encoding="utf-8", errors="replace", capture_output=True, check=False)
 
     def make_repo(self, root: Path) -> None:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
