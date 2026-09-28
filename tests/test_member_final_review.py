@@ -70,6 +70,11 @@ class MemberFinalReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
             contracts.validate_final(self.root)
 
+    def test_commented_heading_does_not_end_visible_header(self) -> None:
+        self.write_final("<!--\n## Hidden heading\n-->",
+                         f"Member reviewed HEAD: web {self.member_tip}")
+        self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
+
     def archive(self) -> Path:
         self.use_member_verify_command()
         self.assertTrue(lean_verification.verify_project(self.root, self.head)["passed"])

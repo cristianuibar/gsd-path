@@ -562,7 +562,7 @@ def member_reviewed_heads(text: str, source: str) -> Dict[str, str]:
     """`Member reviewed HEAD: <member> <sha>` lines, one per member of a multi-repo milestone."""
     heads: Dict[str, str] = {}
     # Only the header binds heads; command output quoted in later sections cannot add one.
-    for value in MEMBER_HEAD_PATTERN.findall(_strip_comments(text.split("\n## ", 1)[0])):
+    for value in MEMBER_HEAD_PATTERN.findall(_strip_comments(text).split("\n## ", 1)[0]):
         name, _, sha = value.strip().partition(" ")
         if not name or not SHA_PATTERN.fullmatch(sha.strip()):
             raise HandoffError(
