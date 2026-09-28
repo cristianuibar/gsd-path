@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -613,11 +614,14 @@ def _runtime_status(root: str) -> Optional[dict]:
     if not runtime.is_file():
         return None
     try:
+        # The daemon's own interpreter: python3 is usually absent on Windows,
+        # where process start and git are also slow enough to need the margin.
         result = subprocess.run(
-            ["python3", "-B", str(runtime), "status", "--repo", root],
+            [sys.executable, "-B", str(runtime), "status", "--repo", root],
             capture_output=True,
-            text=True,
-            timeout=3,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):

@@ -58,7 +58,8 @@ try:
         if args: rows = [r for r in rows if r['name'].startswith(args[1])]
         if action == 'total': print(sum(r['amount'] for r in rows))
         else:
-            writer = csv.writer(sys.stdout)
+            # csv ends rows with CRLF; Windows text-mode stdout would add another CR.
+            writer = csv.writer(sys.stdout, lineterminator='\\n')
             writer.writerow(['name','amount'])
             writer.writerows((r['name'],r['amount']) for r in sorted(rows,key=lambda r:r['name']))
 except (ValueError, IndexError) as error:

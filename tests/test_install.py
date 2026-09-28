@@ -3373,6 +3373,8 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((self.source / "scripts" / "__pycache__").exists())
 
+    @unittest.skipIf(os.name == "nt", "Windows CreateProcess also searches the calling "
+                     "program's directory, so an empty PATH still finds python")
     def test_doctor_uses_the_reentry_interpreter_probe(self):
         project = self.root / "doctor-without-path-python"
         state = project / ".project" / "STATE.md"

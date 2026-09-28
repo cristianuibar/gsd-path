@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import sys
 
@@ -215,7 +216,12 @@ def _state_template() -> Path:
 
 def _command(module: object, *arguments: object) -> str:
     script = Path(str(getattr(module, "__file__"))).resolve()
-    return shlex.join([sys.executable, str(script), *map(str, arguments)])
+    def text(value: object) -> str:
+        # Agents paste this into Git Bash on Windows, where unquoted
+        # backslashes are escapes; forward slashes need no quoting.
+        return value.as_posix() if isinstance(value, Path) and os.name == "nt" else str(value)
+
+    return shlex.join([text(Path(sys.executable)), text(script), *map(text, arguments)])
 
 
 def _route_retry(
