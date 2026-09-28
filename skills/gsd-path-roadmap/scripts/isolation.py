@@ -1298,6 +1298,50 @@ def isolate_verify(primary: Path, base: str, name: str, historical_task: Optiona
     }
 
 
+def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, str]:
+    """Check out each locked member's bound tip beside the coordinator verify sidecar."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    lock = coordinator / members.LOCK_PATH
+    entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    heads: Dict[str, str] = {}
+    try:
+        for item in entries:
+            checkout, project, entry = _member_context(coordinator, item["name"])
+            tip = git_output(checkout, "rev-parse", "--verify", f"refs/heads/{entry['branch']}^{{commit}}")
+            # The sibling folder name is what `../<member>` resolves to in project Verify.
+            create_named_worktree(checkout, f"{VERIFY_BRANCH_PREFIX}{project}-{entry['name']}",
+                                  sidecar.parent / checkout.name, tip, bound=entry["branch"])
+            heads[entry["name"]] = tip
+    except BaseException:
+        retire_member_verify(coordinator, sidecar)
+        raise
+    return heads
+
+
+def retire_member_verify(coordinator: Path, sidecar: Path) -> None:
+    """Remove the member siblings of a coordinator verify sidecar; they hold no output."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    lock = coordinator / members.LOCK_PATH
+    locked = {item["name"] for item in json.loads(lock.read_text(encoding="utf-8"))["members"]} if lock.is_file() else set()
+    for item in members.read_members(coordinator):
+        checkout = Path(item["checkout"]).resolve()
+        role = members.member_role(checkout)
+        if item["name"] not in locked or role is None:
+            continue
+        branch = f"{VERIFY_BRANCH_PREFIX}{role['project']}-{item['name']}"
+        destination = sidecar.parent / checkout.name
+        if destination.exists():
+            run_git(checkout, "worktree", "remove", "--force", str(destination))
+        run_git(checkout, "worktree", "prune")
+        run_git(checkout, "branch", "-D", branch)
+
+
 def clean_verify(primary: Path, worktree: Path, base: str, branch: str) -> Dict[str, object]:
     """Discard command-created files only in the named verification sidecar."""
     primary = require_directory(primary, "primary worktree")

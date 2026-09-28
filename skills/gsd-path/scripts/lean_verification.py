@@ -101,10 +101,18 @@ def _final_view(relative, text, criteria, reviewed, head):
     return "\n".join(lines)
 
 
+def _locked_members(repo):
+    lock = repo / ".project/build/members.json"
+    return json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+
+
 def reuse_final(repo, expected_head):
     """Materialize a final view only when the existing proof still covers it."""
     repo = Path(repo).resolve()
     try:
+        # ponytail: wave reviews name only the coordinator head; S4a2 adds member reviewed heads.
+        if _locked_members(repo):
+            raise contracts.HandoffError("member milestone needs a final review of the member heads")
         relative, text, criteria, reviewed = _reusable_wave(repo, expected_head)
         final = _final_view(relative, text, criteria, reviewed, expected_head)
         contracts.validate_final(repo, final_text=final)
@@ -123,6 +131,14 @@ def reuse_final(repo, expected_head):
 
 def _gap_view(command, head, execution, waves):
     passed = execution["exit_code"] == 0
+    members = execution.get("members")
+    if members:
+        observed = "exact stdout and stderr are in the verify result; member heads are not in the ledger key"
+        reference = "project Verify at " + head + " with members " + ", ".join(
+            f"{name} {tip}" for name, tip in members.items())
+    else:
+        observed = "exact stdout and stderr are in the command/commit ledger entry"
+        reference = f".project/build/verify-ledger.jsonl — {head}, command above"
     return f"""# Gap Review — 1: project Verify
 
 Reviewed HEAD: {head}
@@ -133,8 +149,8 @@ Waves checked: {', '.join(str(wave) for wave in waves)}
 ## Checked evidence
 
 - **Check**: `{command}`
-- **Observed**: Exit {execution['exit_code']}; exact stdout and stderr are in the command/commit ledger entry.
-- **Reference**: .project/build/verify-ledger.jsonl — {head}, command above
+- **Observed**: Exit {execution['exit_code']}; {observed}.
+- **Reference**: {reference}
 
 ## Finding
 
@@ -179,8 +195,9 @@ def verify_project(repo, expected_head):
     plan = contracts._read(repo, ".project/plan/PLAN.md")
     command = contracts._line_value(plan, "Project verify:")
     _, waves = contracts._plan_waves(plan)
-    lookup = build_state.verify_lookup(str(repo), command, expected_head)
-    entry = lookup["entry"]
+    # Member heads are not in the ledger key, so a member milestone always runs again.
+    members = _locked_members(repo)
+    entry = None if members else build_state.verify_lookup(str(repo), command, expected_head)["entry"]
     relative = ".project/review/final-gap-1.md"
     destination = repo / relative
     if destination.is_symlink():
@@ -208,13 +225,25 @@ def verify_project(repo, expected_head):
                 "path": str(destination), "execution": execution}
     sidecar = isolation.isolate_verify(repo, expected_head, "project-verify")
     worktree = Path(sidecar["worktree"])
-    completed = subprocess.run(["bash", "-c", command], cwd=worktree,
-                               text=True, capture_output=True)
+    try:
+        heads = isolation.isolate_member_verify(repo, worktree) if members else None
+    except BaseException:
+        isolation.retire(repo, worktree, sidecar["branch"], force=False)
+        raise
+    try:
+        completed = subprocess.run(["bash", "-c", command], cwd=worktree,
+                                   text=True, capture_output=True)
+    finally:
+        if members:
+            isolation.retire_member_verify(repo, worktree)
     execution = {"exit_code": completed.returncode, "stdout": completed.stdout,
                  "stderr": completed.stderr, "worktree": str(worktree), "branch": sidecar["branch"]}
     passed = completed.returncode == 0
-    build_state.verify_record(str(repo), command, expected_head,
-                              "pass" if passed else "fail", execution=execution)
+    if members:
+        execution["members"] = heads
+    else:
+        build_state.verify_record(str(repo), command, expected_head,
+                                  "pass" if passed else "fail", execution=execution)
     isolation.clean_verify(repo, worktree, expected_head, sidecar["branch"])
     _common.atomic_write(worktree / relative, _gap_view(command, expected_head, execution, waves))
     collection = isolation.collect_artifact(repo, worktree, expected_head, sidecar["branch"],
