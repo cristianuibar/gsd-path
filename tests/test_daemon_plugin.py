@@ -1,5 +1,6 @@
 import http.client
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -103,7 +104,7 @@ class ArgvTests(unittest.TestCase):
         self.assertIn("--all", argv)
         self.assertNotIn("--update", argv)
         self.assertTrue(argv[0].endswith("python3") or "python" in Path(argv[0]).name)
-        self.assertTrue(argv[1].endswith("scripts/install.py"))
+        self.assertEqual(Path(argv[1]).parts[-2:], ("scripts", "install.py"))
 
     def test_install_global_hosts(self):
         self.manager.install_global(["claude", "kimi"])
@@ -130,7 +131,7 @@ class ArgvTests(unittest.TestCase):
         self.manager.install_project("/tmp/proj")
         argv = self.argv()
         self.assertIn("--project", argv)
-        self.assertEqual(argv[argv.index("--project") + 1], "/tmp/proj")
+        self.assertEqual(argv[argv.index("--project") + 1], os.path.abspath("/tmp/proj"))
         self.assertIn("--all", argv)
         self.assertNotIn("--local", argv)
 

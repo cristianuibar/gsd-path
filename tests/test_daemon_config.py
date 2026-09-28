@@ -62,7 +62,7 @@ class ConfigTests(unittest.TestCase):
         Config(parents=["/tmp/from-env"]).save(self.path)
         with mock.patch.dict(os.environ, {config_module.ENV_CONFIG: str(self.path)}):
             loaded = Config.load(other)
-        self.assertEqual(loaded.parents, ["/tmp/from-explicit"])
+        self.assertEqual(loaded.parents, [os.path.abspath("/tmp/from-explicit")])
 
     def test_malformed_json_returns_defaults(self) -> None:
         self.path.write_bytes("{not json".encode("utf-8"))

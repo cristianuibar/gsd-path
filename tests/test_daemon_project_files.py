@@ -59,6 +59,7 @@ class ProjectFilesTests(unittest.TestCase):
             body = raw
         return response.status, body
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_real_files_raw_and_revision_history(self):
         archive = self.root / '.project/archive/001/FINAL.md'
         archive.parent.mkdir(parents=True)
@@ -166,6 +167,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), '')
         self.assertEqual(self.js("document.querySelector('[data-file-revision]').selectedOptions[0].textContent"), 'Working tree')
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_full_records_and_missing_coverage(self):
         build = self.root / '.project/build'
         build.mkdir()
@@ -207,6 +209,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertIn('data-document-link=".project/STATE.md"', rendered)
         self.assertEqual(body['text'], text)
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_untracked_binary_missing_and_literal_path(self):
         (self.root / 'image.bin').write_bytes(b'abc\x00def')
         (self.root / 'a [draft].md').write_bytes('literal name'.encode("utf-8"))

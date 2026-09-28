@@ -101,6 +101,7 @@ class PlistTests(unittest.TestCase):
             self.assertEqual(loaded["StandardOutPath"], str(logs / "stdout.log"))
             self.assertEqual(loaded["StandardErrorPath"], str(logs / "stderr.log"))
 
+    @unittest.skipUnless(hasattr(os, "getuid"), "launchctl domains need a POSIX uid")
     def test_install_writes_parseable_plist(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_repo(tmp)
@@ -115,6 +116,7 @@ class PlistTests(unittest.TestCase):
 
 
 class DryRunTests(unittest.TestCase):
+    @unittest.skipUnless(hasattr(os, "getuid"), "launchctl domains need a POSIX uid")
     def test_dry_run_darwin(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_repo(tmp)
@@ -158,6 +160,7 @@ class DryRunTests(unittest.TestCase):
             self.assertIn("Restart=always", output)
             self.assertNotIn("launchctl", output)
 
+    @unittest.skipUnless(hasattr(os, "getuid"), "launchctl domains need a POSIX uid")
     def test_dry_run_uninstall_executes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             runner = FakeRunner()

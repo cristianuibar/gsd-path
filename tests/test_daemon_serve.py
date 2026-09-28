@@ -194,8 +194,8 @@ class ServeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         scripts = re.findall(r"<script>([\s\S]*?)</script>", body.decode("utf-8"))
         self.assertEqual(len(scripts), 1)
-        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
-            handle.write(scripts[0])
+        with tempfile.NamedTemporaryFile("wb", suffix=".js", delete=False) as handle:
+            handle.write(scripts[0].encode("utf-8"))
             path = handle.name
         self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
         result = subprocess.run([node, "--check", path], capture_output=True, text=True)
