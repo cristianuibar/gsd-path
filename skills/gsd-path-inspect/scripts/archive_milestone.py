@@ -10,12 +10,14 @@ requires network access to verify live origin publication.
 
 import argparse
 import filecmp
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -382,18 +384,25 @@ else:  # standalone script or sibling import
 @contextmanager
 def discussion_lock(active_root: Path) -> Iterator[None]:
     if sys.platform == "win32":
-        lock_value = require_git_success(
-            run_git(
-                active_root.parent,
-                "rev-parse",
-                "--git-path",
-                "gsd-path-discussion.lock",
-            ),
-            "resolve discussion lock",
+        # Windows cannot flock a directory, so lock a file in the git dir,
+        # where it never shows up as an untracked project file.
+        resolved = run_git(
+            active_root.parent,
+            "rev-parse",
+            "--git-path",
+            "gsd-path-discussion.lock",
         )
-        lock_path = Path(lock_value)
-        if not lock_path.is_absolute():
-            lock_path = active_root.parent / lock_path
+        if resolved.returncode == 0 and resolved.stdout.strip():
+            lock_path = Path(resolved.stdout.strip())
+            if not lock_path.is_absolute():
+                lock_path = active_root.parent / lock_path
+        else:
+            # Outside git (which the POSIX directory lock allows), key a temp
+            # file to this project instead.
+            key = hashlib.sha256(
+                os.path.normcase(str(active_root.resolve())).encode("utf-8")
+            ).hexdigest()[:16]
+            lock_path = Path(tempfile.gettempdir()) / f"gsd-path-discussion-{key}.lock"
         with _common.exclusive_lock(lock_path):
             yield
         return
