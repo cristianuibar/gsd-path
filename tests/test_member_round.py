@@ -133,6 +133,45 @@ class MemberRoundTests(unittest.TestCase):
         steps = [step for step in receipt["steps"] if step.get("script") == "isolation.recover_member_landing"]
         self.assertEqual([step["result"]["state"] for step in steps], ["landed"])
         self.assertIn("status: done", git(self.root, "show", f"HEAD:{self.task_file}"))
+        self.assertFalse(Path(isolated["worktree"]).exists())
+        self.assertEqual(git(self.member, "branch", "--list", isolated["task_branch"]), "")
+
+    def test_round_reuses_an_activated_member_task_without_a_dispatch_record(self) -> None:
+        from scripts import isolation, pipeline_state
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
+                                          "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
+            state, _, _ = pipeline_state.load_state(self.root)
+            pipeline_state.transition_state(
+                self.root, {"phase": "plan", "status": "done", "branch": state.branch, "archive": None},
+                {"phase": "build", "status": "active"}, "build started")
+            git(self.root, "add", "-A")
+            git(self.root, "commit", "-q", "-m", "build: start milestone")
+            head = git(self.root, "rev-parse", "HEAD")
+            isolated = isolation.isolate_member_task(self.root, "web", "T002")
+            isolation.activate_member_task(self.root, "web", "T002", "build_t002", self.task_file, head)
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
+        self.assertIn("T002", {item["task"] for item in receipt["landed"]})
+        self.assertFalse(Path(isolated["worktree"]).exists())
+
+    def test_round_recreates_an_unused_member_isolate(self) -> None:
+        from scripts import isolation, pipeline_state
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
+                                          "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
+            state, _, _ = pipeline_state.load_state(self.root)
+            pipeline_state.transition_state(
+                self.root, {"phase": "plan", "status": "done", "branch": state.branch, "archive": None},
+                {"phase": "build", "status": "active"}, "build started")
+            git(self.root, "add", "-A")
+            git(self.root, "commit", "-q", "-m", "build: start milestone")
+            isolation.isolate_member_task(self.root, "web", "T002")
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
+        self.assertIn("T002", {item["task"] for item in receipt["landed"]})
 
     def test_member_tasks_stay_refused_without_the_gate(self) -> None:
         receipt = self.round(gate=False)

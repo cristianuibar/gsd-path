@@ -719,6 +719,7 @@ MEMBER_LANDING_DIR = ("gsd-path", "member-landings")
 # and excluded, so the coordinator stays clean while member work runs.
 MEMBER_TASK_COPY_DIR = ".gsd-path-coordinator"
 MEMBER_IMMUTABLE_FIELDS = ("id", "title", "repo", "files", "deps", "wave")
+MEMBER_ACTIVATION_FIELDS = {"status", "agent", "base", "member_base", "worktree", "task_branch"}
 
 
 def member_task_copy(sidecar: Path, task_file: str) -> Path:
@@ -802,6 +803,44 @@ def activate_member_task(
             "task_file": task_file, "worktree": str(sidecar)}
 
 
+def retained_member_task(
+    coordinator: Path, member: str, task_id: str, task_file: str, base: str
+) -> Optional[Dict[str, object]]:
+    """Inspect an interrupted member isolate before another dispatch uses its name."""
+    checkout, project, _ = _member_context(coordinator, member)
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{validate_task_id(task_id)}"
+    sidecar = sidecar_root(checkout, "task", f"{project}-{task_id}")
+    tip = run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").stdout.strip()
+    authorization = run_git(checkout, "rev-parse", "--verify", "--quiet",
+                            member_task_authorization_ref(project, task_id)).stdout.strip()
+    if not tip:
+        if os.path.lexists(sidecar) or authorization:
+            raise IsolationError(f"member task {task_id} has a sidecar or authorization without its branch")
+        return None
+    if _registered_worktrees(checkout).get(sidecar.resolve()) != f"refs/heads/{branch}":
+        raise IsolationError(f"member task branch has no matching sidecar: {branch}")
+    if require_attached(sidecar) != branch or current_sha(sidecar) != tip:
+        raise IsolationError(f"member task sidecar does not match its branch: {branch}")
+    bound = member_bound_checkout(coordinator, member)
+    if tip != current_sha(Path(str(bound["checkout"]))) or uncommitted_paths(sidecar):
+        raise IsolationError(f"member task branch is used or its member base moved: {branch}")
+    copy = _safe_member_task_copy(sidecar, task_file)
+    isolate = {"task_branch": branch, "member_base": tip, "worktree": str(sidecar)}
+    if not copy.is_file() and not authorization:
+        return {"state": "unused", "isolate": isolate}
+    if not copy.is_file() or authorization != tip:
+        raise IsolationError(f"member task {task_id} has an incomplete activation")
+    journal = {"member": member, "task_id": task_id, "task_file": task_file,
+               "base": base, "member_base": tip, "copy": str(copy)}
+    text = _member_copy_text(journal, coordinator)
+    contract = git_text(coordinator, "show", f"{base}:{task_file}")
+    fields, _ = task_frontmatter(text)
+    if fields is None or fields.get("agent") != f"build_{task_id.lower()}" or member_log_delta(contract, text):
+        raise IsolationError(f"member task {task_id} has a used or changed activation")
+    return {"state": "active", "isolate": isolate,
+            "active": {"copy": str(copy), "worktree": str(sidecar)}}
+
+
 def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
     """The live copy, checked against the contract: same contract fields, Log only grows."""
     checkout, project, _ = _member_context(coordinator, str(journal["member"]))
@@ -815,16 +854,15 @@ def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
     expected, _ = task_frontmatter(contract)
     if error or fields is None or expected is None:
         raise IsolationError(error or "unreadable member task copy")
-    if any(fields.get(key) != expected.get(key) for key in MEMBER_IMMUTABLE_FIELDS):
-        raise IsolationError("member task copy changes contract fields")
+    member_log_delta(contract, text)
     if not isinstance(fields.get("agent"), str) or fields["agent"] in {"", "null"}:
         raise IsolationError("member task copy has no assigned agent")
     if (fields.get("status"), fields.get("base"), fields.get("member_base")) != (
             "in-progress", journal["base"], journal["member_base"]):
         raise IsolationError("member task copy is not the activated task for this landing")
-    if not _normalize_newlines(split_frontmatter(text)[1]).startswith(
-            _normalize_newlines(split_frontmatter(contract)[1])):
-        raise IsolationError("member task copy Log is not append-only")
+    if (fields.get("worktree"), fields.get("task_branch")) != (
+            str(sidecar), f"{TASK_BRANCH_PREFIX}{project}-{journal['task_id']}"):
+        raise IsolationError("member task copy is not the activated task for this landing")
     return text
 
 
@@ -2334,6 +2372,13 @@ def deactivate_member_task(coordinator: Path, member: str, task_id: str) -> None
 
 def member_log_delta(contract: str, copy: str) -> str:
     """The Log a coder appended to a member task's live copy since its contract."""
+    expected, expected_error = task_frontmatter(contract)
+    fields, error = task_frontmatter(copy)
+    if expected_error or error or expected is None or fields is None:
+        raise IsolationError(error or expected_error or "unreadable member task copy")
+    if {key: value for key, value in fields.items() if key not in MEMBER_ACTIVATION_FIELDS} != {
+            key: value for key, value in expected.items() if key not in MEMBER_ACTIVATION_FIELDS}:
+        raise IsolationError("member task copy changes contract fields")
     base_body = _normalize_newlines(split_frontmatter(contract)[1])
     body = _normalize_newlines(split_frontmatter(copy)[1])
     if not body.startswith(base_body):

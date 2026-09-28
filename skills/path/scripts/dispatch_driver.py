@@ -631,8 +631,11 @@ class Round:
         # A journaled member landing is safe to finish; it never lands the same work twice.
         journals = isolation.common_git_dir(self.primary).joinpath(*isolation.MEMBER_LANDING_DIR)
         for journal in sorted(journals.glob("*.json")) if journals.is_dir() else []:
+            result = isolation.recover_member_landing(self.primary, journal.stem)
             self.receipt["steps"].append({"script": "isolation.recover_member_landing", "task": journal.stem,
-                                          "result": isolation.recover_member_landing(self.primary, journal.stem)})
+                                          "result": result})
+            if result["state"] == "landed":
+                isolation.retire_member_task(self.primary, str(result["member"]), journal.stem)
         report = recover_report(self.primary, self.project_dir, self.receipt)
         for task in report["tasks"]:
             worktree = task.get("worktree")
@@ -835,9 +838,17 @@ class Round:
         for task in selected:
             if task.get("repo"):
                 member = str(task["repo"])
-                isolate = isolation.isolate_member_task(self.primary, member, task["id"])
-                active = isolation.activate_member_task(self.primary, member, task["id"],
-                                                        f"build_{task['id'].lower()}", task["task_file"], head)
+                retained = isolation.retained_member_task(self.primary, member, task["id"],
+                                                          task["task_file"], head)
+                if retained and retained["state"] == "unused":
+                    isolation.retire_member_task(self.primary, member, task["id"])
+                    retained = None
+                if retained:
+                    isolate, active = retained["isolate"], retained["active"]
+                else:
+                    isolate = isolation.isolate_member_task(self.primary, member, task["id"])
+                    active = isolation.activate_member_task(self.primary, member, task["id"],
+                                                            f"build_{task['id'].lower()}", task["task_file"], head)
                 sidecar_path = Path(str(active["worktree"]))
                 self.launch({"task_id": task["id"], "title": task["title"],
                              "task_file": Path(str(active["copy"])).relative_to(sidecar_path).as_posix(),

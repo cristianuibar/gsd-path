@@ -21,7 +21,7 @@ STATE = (
 TASK_FILE = ".project/tasks/T001-change.md"
 TASK = (
     "---\nid: T001\ntitle: Change app\nwave: 1\ndeps: []\nstatus: pending\nagent: null\n"
-    "base: null\nworktree: null\ntask_branch: null\nrepo: web\nfiles:\n  - app.py\n---\n# T001 — Change app\n\n## Log\n\n- created\n"
+    "base: null\nworktree: null\ntask_branch: null\nrepo: web\nmodel: preferred\nfiles:\n  - app.py\n---\n# T001 — Change app\n\n## Log\n\n- created\n"
 )
 IDENTITY = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
             "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
@@ -130,6 +130,18 @@ class MemberLandingTests(unittest.TestCase):
     def test_member_task_lands_once_with_a_coordinator_record(self) -> None:
         self.edit()
         self.assert_landed_once(self.land())
+
+    def test_member_copy_refuses_changed_dispatch_model(self) -> None:
+        self.edit()
+        copy = isolation.member_task_copy(self.sidecar, TASK_FILE)
+        changed = copy.read_text(encoding="utf-8").replace("model: preferred\n", "model: other\n")
+        copy.write_text(changed + "- coder Log\n", encoding="utf-8")
+        contract = git(self.coordinator, "show", f"{self.base}:{TASK_FILE}") + "\n"
+        with self.assertRaisesRegex(isolation.IsolationError, "changes contract fields"):
+            isolation.member_log_delta(contract, changed)
+        with self.assertRaisesRegex(isolation.IsolationError, "changes contract fields"):
+            self.land()
+        self.assertEqual(self.bound_tip(), self.member_base)
 
     def test_parallel_member_landings_use_successive_bound_parents(self) -> None:
         second_file = self.prepare_second_task()
