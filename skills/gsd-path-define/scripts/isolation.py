@@ -2499,7 +2499,7 @@ def _recover_task(
     except IsolationError as exc:
         return result("block", reason=str(exc))
     if fields.get("repo"):
-        # Only the landing record proves a member task; unfinished ones block until member dispatch (S3c3).
+        # Only the landing record proves member task completion.
         if status in ("pending", "in-progress"):
             if any(MEMBER_RECORD_RE.fullmatch(body.strip()) and f"Task: {task_file}\n" in body
                    for _, body in history.get(subject, [])):
