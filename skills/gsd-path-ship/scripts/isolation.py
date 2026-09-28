@@ -684,9 +684,10 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
     name = f"{project}-{validate_task_id(task_id)}"
     ref = f"refs/heads/{TASK_BRANCH_PREFIX}{name}"
     tip = run_git(checkout, "rev-parse", "--verify", "--quiet", ref)
-    if tip.returncode == 0 and run_git(
-        checkout, "merge-base", "--is-ancestor", tip.stdout.strip(), f"refs/heads/{entry['branch']}"
-    ).returncode != 0:
+    # Landed commits arrive on the bound branch by cherry-pick, so compare patches.
+    cherry = run_git(checkout, "cherry", f"refs/heads/{entry['branch']}", ref) if tip.returncode == 0 else None
+    if cherry is not None and (cherry.returncode != 0 or any(
+            not line.startswith("- ") for line in cherry.stdout.splitlines())):
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
     registered = _registered_worktrees(checkout)
@@ -2158,6 +2159,53 @@ def _resume_task_error(
     return _retained_task_contract_error(current_text, isolate_text)
 
 
+MEMBER_RECORD_RE = re.compile(
+    r"Task: (?P<task>\S+)\nBase: (?P<base>[0-9a-f]{40})\n"
+    r"Member: (?P<member>\S+) (?P<landing>[0-9a-f]{40}) (?P<member_base>[0-9a-f]{40})"
+)
+
+
+def _prove_member_task(
+    coordinator: Path, task_file: str, fields: Dict[str, object], subject: str,
+    history: Dict[str, list[tuple[str, str]]],
+) -> Dict[str, object]:
+    """A done member task: one coordinator record naming a proven member landing."""
+    member = str(fields.get("repo"))
+    records = []
+    for sha, body in history.get(subject, []):
+        match = MEMBER_RECORD_RE.fullmatch(body.strip())
+        if match and match["task"] == task_file and match["member"] == member:
+            records.append((sha, match))
+    if len(records) != 1:
+        return {"verdict": "block", "reason": f"expected one coordinator record for {task_file}, found {len(records)}"}
+    record, match = records[0]
+    if git_output(coordinator, "diff-tree", "--no-commit-id", "--name-only", "-r", record).splitlines() != [task_file]:
+        return {"verdict": "block", "reason": "the coordinator record touches more than the task file"}
+    for field in ("base", "member_base"):
+        if fields.get(field) != match[field]:
+            return {"verdict": "block", "reason": f"task {field} does not match the coordinator record"}
+    try:
+        checkout, _, entry = _member_context(coordinator, member)
+        _, allowed = _member_contract(coordinator, match["base"], task_file, member)
+    except IsolationError as error:
+        return {"verdict": "block", "reason": str(error)}
+    landing = match["landing"]
+    history_on_bound = git_output(checkout, "rev-list", "--first-parent", f"refs/heads/{entry['branch']}").split()
+    if landing not in history_on_bound:
+        return {"verdict": "block", "reason": f"landing {landing[:12]} is not on the member bound branch"}
+    parent, error = _single_parent(checkout, landing)
+    if error or parent is None or run_git(
+            checkout, "merge-base", "--is-ancestor", match["member_base"], parent).returncode != 0:
+        return {"verdict": "block", "reason": error or "member landing does not descend from member_base"}
+    paths = git_output(checkout, "diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames",
+                       parent, landing).splitlines()
+    body = member_commit_body(task_file, paths, match["member_base"], match["base"])
+    error = _prove_member_commit(checkout, landing, parent, subject, body, allowed)
+    if error:
+        return {"verdict": "block", "reason": f"member landing proof failed: {error}"}
+    return {"verdict": "recovered", "commit": record, "base": match["base"], "landing": landing}
+
+
 def _recover_task(
     primary: Path,
     path: Path,
@@ -2189,6 +2237,9 @@ def _recover_task(
         return result("block", reason=str(error))
     except IsolationError as exc:
         return result("block", reason=str(exc))
+    if fields.get("repo"):
+        # Only the landing record proves a member task; unfinished ones block until member dispatch (S3c3).
+        return result(**_prove_member_task(primary, task_file, fields, subject, history))
     task_branch = task_branch_name(task_id)
     branch_exists = task_branch in branches
     worktree, worktree_error = _worktree_report(
