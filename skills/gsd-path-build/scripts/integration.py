@@ -717,8 +717,9 @@ def update_pull_request_body(
     archive_path: str,
     ship_commit: str,
     branch: str,
+    expected_body: Optional[str] = None,
 ) -> dict:
-    expected = pull_request_body(archive_path, ship_commit, branch)
+    expected = expected_body if expected_body is not None else pull_request_body(archive_path, ship_commit, branch)
     current = pull.get("body")
     if isinstance(current, str) and current.rstrip().endswith(PR_CREDIT_LINE):
         return pull
@@ -1496,6 +1497,26 @@ def _member_merge_body(archive_path: str, member: str, reviewed_head: str) -> st
     return f"Archive: {archive_path}\nMember: {member}\nReviewed-HEAD: {reviewed_head}"
 
 
+def member_pull_request_tag_message(tag_name: str, pull_request: str, reviewed_head: str, landing: str) -> str:
+    return (f"milestone {tag_name.removeprefix('milestone/')}\n\nMode: pull-request\n"
+            f"Pull-Request: {pull_request}\nReviewed-HEAD: {reviewed_head}\nLanding: {landing}")
+
+
+def member_pull_request_tag_metadata(contents: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in contents.splitlines():
+        match = re.fullmatch(r"(Mode|Pull-Request|Reviewed-HEAD|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise ArchiveError("pull-request member tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    if set(fields) != {"Mode", "Pull-Request", "Reviewed-HEAD", "Landing"}:
+        raise ArchiveError("pull-request member tag is missing metadata")
+    if fields["Mode"] != "pull-request":
+        raise ArchiveError("pull-request member tag has the wrong mode")
+    return fields
+
+
 def _find_member_merge(checkout: Path, subject: str, body: str, reviewed_head: str) -> Optional[str]:
     """The member merge in origin/main's first-parent history, if published."""
     log = archive_milestone.require_git_success(
@@ -1643,6 +1664,11 @@ def integrate_member_pull_request(coordinator: Path, member: str, archive_path: 
                 f"repos/{repository}/pulls", "--method", "POST", "-f", f"title={subject}",
                 "-f", f"head={bound}", "-f", "base=main", "-f", f"body={body}\n\n---\n{PR_CREDIT_LINE}"))
             require_pull_request_identity(repository, pull, bound, reviewed_head)
+        else:
+            pull = update_pull_request_body(
+                repository, pull, archive_path, reviewed_head, bound,
+                f"{body}\n\n---\n{PR_CREDIT_LINE}",
+            )
         require_pull_request_merge_provenance(repository, pull["number"])
         return {"status": "awaiting-merge", "mode": "pull-request", "member": member,
                 "pull_request": pull["html_url"]}
@@ -1652,8 +1678,7 @@ def integrate_member_pull_request(coordinator: Path, member: str, archive_path: 
     require_pull_request_merge_provenance(repository, pull["number"], merge)
     refresh_origin(checkout)
     require_pull_request_merge(checkout, merge, reviewed_head, "origin/main")
-    message = (f"milestone {tag_name.removeprefix('milestone/')}\n\nMode: pull-request\n"
-               f"Pull-Request: {pull['html_url']}\nReviewed-HEAD: {reviewed_head}\nLanding: {merge}")
+    message = member_pull_request_tag_message(tag_name, pull["html_url"], reviewed_head, merge)
     tag_object, tag_published = ensure_integration_tag(checkout, tag_name, merge, message)
     if not tag_published:
         _push_member_ref(checkout, project, f"refs/tags/{tag_name}", f"refs/tags/{tag_name}", tag_object, None)
@@ -1665,7 +1690,7 @@ def integrate_member_pull_request(coordinator: Path, member: str, archive_path: 
 
 def validate_member_integrated(coordinator: Path, member: str, archive_path: str, reviewed_head: str) -> dict:
     """Prove the member merge is on origin/main and its published tag points at it."""
-    checkout, _, _, subject, tag_name = _member_names(coordinator, member, archive_path)
+    checkout, _, bound, subject, tag_name = _member_names(coordinator, member, archive_path)
     refresh_origin(checkout)
     tracking = f"refs/remotes/origin/tags/{tag_name}"
     published = live_remote_ref(checkout, f"refs/tags/{tag_name}")
@@ -1675,12 +1700,29 @@ def validate_member_integrated(coordinator: Path, member: str, archive_path: str
             run_git(checkout, "update-ref", tracking, published), "refresh member milestone-tag ref")
         contents = run_git(checkout, "for-each-ref", "--format=%(contents)", tracking).stdout
     if "Mode: pull-request" in contents.splitlines():
-        # GitHub names the merge, so the tag metadata carries the reviewed HEAD it merged.
-        if f"Reviewed-HEAD: {reviewed_head}" not in contents.splitlines():
+        metadata = member_pull_request_tag_metadata(contents)
+        if metadata["Reviewed-HEAD"] != reviewed_head:
             raise ArchiveError(f"member {member} tag {tag_name} names a different reviewed HEAD")
         merge = archive_milestone.require_git_success(
             run_git(checkout, "rev-parse", f"{tracking}^{{commit}}"), "resolve member tag target")
+        if metadata["Landing"] != merge:
+            raise ArchiveError(f"member {member} tag {tag_name} names a different landing")
+        require_github_authentication()
+        repository = github_repository(checkout)
+        pull = find_pull_request(repository, bound, reviewed_head)
+        if pull is None:
+            raise ArchiveError(f"member {member} GitHub pull request is missing")
+        if pull["html_url"] != metadata["Pull-Request"]:
+            raise ArchiveError(f"member {member} tag {tag_name} names the wrong pull request")
+        if (pull["state"] != "closed" or pull["merged_at"] is None
+                or pull["merge_commit_sha"] != merge):
+            raise ArchiveError(f"member {member} GitHub pull request is not merged at the tagged landing")
+        require_pull_request_merge_provenance(repository, pull["number"], merge)
         require_pull_request_merge(checkout, merge, reviewed_head, "origin/main")
+        require_annotated_tag(
+            checkout, tracking, merge, f"member tag {tag_name}",
+            member_pull_request_tag_message(tag_name, pull["html_url"], reviewed_head, merge),
+        )
     else:
         merge = _find_member_merge(checkout, subject, _member_merge_body(archive_path, member, reviewed_head),
                                    reviewed_head)
@@ -1688,5 +1730,5 @@ def validate_member_integrated(coordinator: Path, member: str, archive_path: str
             raise ArchiveError(f"member {member} has no {subject!r} merge on origin/main")
         if published is None:
             raise ArchiveError(f"member {member} tag {tag_name} is not published")
-    require_annotated_tag(checkout, tracking, merge, f"member tag {tag_name}")
+        require_annotated_tag(checkout, tracking, merge, f"member tag {tag_name}")
     return {"member": member, "merge": merge, "tag": tag_name, "tag_object": published}

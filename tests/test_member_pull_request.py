@@ -19,7 +19,8 @@ class MemberPullRequestTests(unittest.TestCase):
 
     def setUp(self) -> None:
         member_integration.MemberIntegrationTests.setUp(self)
-        self.pulls, self.posts = [], []
+        self.pulls, self.posts, self.patches = [], [], []
+        self.merge_queue = False
 
     remote_ref = member_integration.MemberIntegrationTests.remote_ref
 
@@ -36,11 +37,19 @@ class MemberPullRequestTests(unittest.TestCase):
             nodes = [{"__typename": "MergedEvent", "actor": {"__typename": "User", "login": "owner"},
                       "commit": {"oid": merged[0]}}] if merged else []
             return reply({"data": {"repository": {"pullRequest": {
-                "mergeQueue": {"nodes": []}, "autoMerge": {"nodes": []}, "mergeAction": {"nodes": nodes}}}}})
+                "mergeQueue": {"nodes": [{"__typename": "AddedToMergeQueueEvent"}] if self.merge_queue else []},
+                "autoMerge": {"nodes": []}, "mergeAction": {"nodes": nodes}}}}})
+        if "PATCH" in arguments:
+            self.patches.append(arguments)
+            self.pulls[0]["body"] = next(argument.removeprefix("body=") for argument in arguments
+                                         if argument.startswith("body="))
+            return reply(self.pulls[0])
         if "POST" in arguments:
             self.posts.append(arguments)
             self.pulls.append({"number": 7, "state": "open", "html_url": URL, "merged_at": None,
                                "merge_commit_sha": None, "base": {"ref": "main"},
+                               "body": next(argument.removeprefix("body=") for argument in arguments
+                                            if argument.startswith("body=")),
                                "head": {"ref": "gsd-path/demo-M001", "sha": self.member_tip,
                                         "repo": {"full_name": "acme/web"}}})
             return reply(self.pulls[-1])
@@ -95,10 +104,38 @@ class MemberPullRequestTests(unittest.TestCase):
         self.assertIn(f"Reviewed-HEAD: {self.member_tip}", message)
         self.assertTrue(members.authorized(self.member, "demo", "push", f"refs/tags/{TAG}",
                                            self.remote_ref(f"refs/tags/{TAG}")))
-        self.assertEqual(integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip),
-                         result)
-        with self.assertRaisesRegex(ArchiveError, "different reviewed HEAD"):
-            integration.validate_member_integrated(self.root, "web", ARCHIVE, self.main)
+        with mock.patch.object(integration, "github_repository", return_value="acme/web"), \
+                mock.patch.object(integration, "run_command", side_effect=self.gh):
+            self.assertEqual(integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip),
+                             result)
+            with self.assertRaisesRegex(ArchiveError, "different reviewed HEAD"):
+                integration.validate_member_integrated(self.root, "web", ARCHIVE, self.main)
+
+    def test_reused_open_pull_request_repairs_body_without_rewriting_title(self) -> None:
+        self.integrate()
+        self.pulls[0].update(title="Existing title", body="Missing credit")
+        result = self.integrate()
+        self.assertEqual(result["status"], "awaiting-merge")
+        self.assertEqual(len(self.posts), 1)
+        self.assertEqual(len(self.patches), 1)
+        self.assertEqual(self.pulls[0]["title"], "Existing title")
+        self.assertEqual(self.pulls[0]["body"],
+                         f"Archive: {ARCHIVE}\nMember: web\nReviewed-HEAD: {self.member_tip}"
+                         f"\n\n---\n{integration.PR_CREDIT_LINE}")
+
+    def test_validation_rejects_unmatched_merge_and_merge_queue(self) -> None:
+        self.integrate()
+        merge = self.github_merge("--no-ff")
+        self.integrate()
+        with mock.patch.object(integration, "github_repository", return_value="acme/web"), \
+                mock.patch.object(integration, "run_command", side_effect=self.gh):
+            self.pulls[0]["merge_commit_sha"] = self.main
+            with self.assertRaisesRegex(ArchiveError, "not merged at the tagged landing"):
+                integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
+            self.pulls[0]["merge_commit_sha"] = merge
+            self.merge_queue = True
+            with self.assertRaisesRegex(ArchiveError, "merge queue"):
+                integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
 
     def test_squash_merge_is_refused(self) -> None:
         self.integrate()
