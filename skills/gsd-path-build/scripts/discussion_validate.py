@@ -607,8 +607,29 @@ def parse_final_review(archive: Path) -> tuple:
     return reviewed_head.lower(), criteria
 
 
+def _member_heads(text: str, source: str) -> dict:
+    if __package__:
+        from . import check_handoffs
+    else:
+        try:
+            import check_handoffs
+        except ImportError:  # pragma: no cover - package import used by tests
+            from scripts import check_handoffs
+    try:
+        return check_handoffs.member_reviewed_heads(text, source)
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
+
+
 def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
     review = archive / "review"
+    member_heads = _member_heads((review / "FINAL.md").read_text(encoding="utf-8"), "FINAL.md")
+    lock = archive / "build" / "members.json"
+    locked = [item["name"] for item in json.loads(lock.read_text(encoding="utf-8"))["members"]] if lock.is_file() else []
+    if sorted(member_heads) != sorted(locked):
+        raise ArchiveError(
+            "FINAL.md Member reviewed HEAD lines must name each locked member: " + (", ".join(locked) or "none")
+        )
     candidates = sorted(path for path in review.iterdir() if path.name.startswith("final-gap-"))
     if not candidates:
         raise ArchiveError("final review requires at least one final-gap-N.md artifact")
@@ -636,6 +657,8 @@ def validate_gap_reviews(archive: Path, reviewed_head: str) -> None:
         gap_head = completed_field(lines, "Reviewed HEAD:", path.name).lower()
         if gap_head != reviewed_head:
             raise ArchiveError(f"{path.name} Reviewed HEAD does not match FINAL.md")
+        if _member_heads("\n".join(lines), path.name) != member_heads:
+            raise ArchiveError(f"{path.name} Member reviewed HEAD lines do not match FINAL.md")
         if completed_field(lines, "Gap verdict:", path.name) != "pass":
             raise ArchiveError(f"{path.name} gap review did not pass")
         risk = completed_field(lines, "Risk:", path.name)

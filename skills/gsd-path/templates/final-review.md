@@ -4,7 +4,10 @@
      criterion appears exactly once and carries checked evidence. A criterion
      listed in PLAN.md's Surface contract also names its Surface, and its
      Check is the walkthrough performed — never internal test output. Embedded
-     angle brackets are valid in concrete Check and Observed values. -->
+     angle brackets are valid in concrete Check and Observed values.
+     When .project/build/members.json locks members, add one line per locked
+     member after Reviewed HEAD: `Member reviewed HEAD: <member> <full SHA>`,
+     naming that member's bound branch tip. -->
 
 Reviewed HEAD: <full SHA>
 Overall verdict: <pass | blocked>

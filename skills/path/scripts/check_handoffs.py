@@ -555,6 +555,45 @@ def _reviewed_head(text: str, source: str) -> str:
     return value
 
 
+MEMBER_HEAD_PATTERN = re.compile(r"(?m)^Member reviewed HEAD:(.*)$")
+
+
+def member_reviewed_heads(text: str, source: str) -> Dict[str, str]:
+    """`Member reviewed HEAD: <member> <sha>` lines, one per member of a multi-repo milestone."""
+    heads: Dict[str, str] = {}
+    # Only the header binds heads; command output quoted in later sections cannot add one.
+    for value in MEMBER_HEAD_PATTERN.findall(text.split("\n## ", 1)[0]):
+        name, _, sha = value.strip().partition(" ")
+        if not name or not SHA_PATTERN.fullmatch(sha.strip()):
+            raise HandoffError(
+                f"{source} Member reviewed HEAD must be '<member> <full commit SHA>', not {value.strip() or 'empty'}"
+            )
+        if name in heads:
+            raise HandoffError(f"{source} repeats Member reviewed HEAD for {name}")
+        heads[name] = sha.strip()
+    return heads
+
+
+def _member_tips(root: Path) -> Dict[str, str]:
+    """Each locked member's bound branch tip; empty when the milestone locks no member."""
+    try:
+        import isolation
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import isolation
+    lock = root / ".project/build/members.json"
+    if not lock.is_file():
+        return {}
+    tips: Dict[str, str] = {}
+    try:
+        for item in json.loads(lock.read_text(encoding="utf-8"))["members"]:
+            checkout, _, entry = isolation._member_context(root, item["name"])
+            tips[entry["name"]] = isolation.git_output(
+                checkout, "rev-parse", "--verify", f"refs/heads/{entry['branch']}^{{commit}}")
+    except isolation.IsolationError as error:
+        raise HandoffError(str(error)) from error
+    return tips
+
+
 def _strip_comments(text: str) -> str:
     return COMMENT_PATTERN.sub("", text)
 
@@ -1640,6 +1679,14 @@ def validate_final(
             f"FINAL.md Reviewed HEAD {reviewed_head} is not the current HEAD "
             f"{current_head}; re-run the final review on the current commit"
         )
+    member_heads = member_reviewed_heads(text, relative)
+    tips = _member_tips(root)
+    if member_heads != tips:
+        expected = ", ".join(f"{name} {tip}" for name, tip in tips.items()) or "none"
+        raise HandoffError(
+            f"FINAL.md Member reviewed HEAD lines must name each locked member head ({expected}); "
+            "re-run the final review on the current member heads"
+        )
     overall = _line_value(text, "Overall verdict:")
     if overall not in {"pass", "blocked"}:
         raise HandoffError("FINAL.md Overall verdict is invalid")
@@ -1714,6 +1761,8 @@ def validate_final(
             raise HandoffError(f"{gap_relative} heading does not match its file number")
         if _reviewed_head(gap, gap_relative) != reviewed_head:
             raise HandoffError(f"{gap_relative} Reviewed HEAD differs from FINAL.md")
+        if member_reviewed_heads(gap, gap_relative) != member_heads:
+            raise HandoffError(f"{gap_relative} Member reviewed HEAD lines differ from FINAL.md")
         verdict = _line_value(gap, "Gap verdict:")
         if verdict not in {"pass", "blocked"}:
             raise HandoffError(f"{gap_relative} Gap verdict is invalid")
