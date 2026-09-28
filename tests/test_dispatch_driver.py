@@ -29,7 +29,7 @@ FAKE_CODER = textwrap.dedent(
     """
     import os, re, sys, time
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     worktree = Path(re.search(r"^Work only in this worktree root: (.+)$", brief, re.M).group(1))
     task_path = Path(re.search(r"^Task file: (.+)$", brief, re.M).group(1))
     task_id = re.search(r"task (T\\d+)\\.", brief).group(1)
@@ -70,7 +70,7 @@ FAKE_REVIEWER = textwrap.dedent(
     """
     import os, re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     name = re.search(r"logical task name (\\S+)\\.", brief).group(1)
     wave, cycle = re.search(r"wave (\\d+), cycle (\\d+)", brief).groups()
@@ -107,7 +107,7 @@ FAKE_SKEPTIC = textwrap.dedent(
     """
     import os, re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     locator = re.search(r"^Criterion locator: (\\S+)$", brief, re.M).group(1)
     observations = re.findall(r"^- \\[(\\w+)\\] (.+)$", brief, re.M)
@@ -130,7 +130,7 @@ FAKE_PANELIST = textwrap.dedent(
     """
     import re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     family = re.search(r"Family: (\\w+)\\.", brief).group(1)
     model = re.search(r"Model: (\\S+)\\.", brief).group(1)
@@ -599,7 +599,8 @@ class DispatchDriverTests(unittest.TestCase):
         task.unlink()
         self.assertFalse(current.classify(state))
         self.assertEqual(current.receipt["blocked"][0]["task_id"], "T001")
-        self.assertIn(str(task), current.receipt["blocked"][0]["reason"])
+        # The OSError text shows the path repr, which doubles Windows backslashes.
+        self.assertIn(repr(str(task))[1:-1], current.receipt["blocked"][0]["reason"])
         self.assertEqual(dispatch_driver.latest_states(current.root)[0]["outcome"], "blocked")
 
     def test_finish_refuses_a_running_child_and_a_recovered_landing_is_recorded(self) -> None:
@@ -723,7 +724,7 @@ class DispatchDriverTests(unittest.TestCase):
             self.assertEqual(self.branches(root), ["gsd-path/M001"])
             worktrees = run_git(root, "worktree", "list", "--porcelain").stdout.splitlines()
             self.assertEqual([line for line in worktrees if line.startswith("worktree ")],
-                             [f"worktree {root.resolve()}"])
+                             [f"worktree {root.resolve().as_posix()}"])  # git prints /
 
     def test_budget_stops_when_child_output_cannot_prove_usage(self) -> None:
         root = self.root.parent / "plain"
