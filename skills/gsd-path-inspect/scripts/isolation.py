@@ -748,6 +748,17 @@ def member_task_authorization_ref(project: str, task_id: str) -> str:
     return f"{TASK_AUTHORIZATION_PREFIX}{project}-{validate_task_id(task_id)}"
 
 
+def _activated_member_text(
+    contract: str, task_id: str, agent: str, base: str, sidecar: Path, branch: str, member_base: str
+) -> str:
+    activated = _activated_task_text(contract, task_id, agent, base, sidecar, branch)
+    head, body = split_frontmatter(activated)
+    head = [line for line in head if not line.startswith("member_base:")]
+    head.insert(next(i for i, line in enumerate(head) if line.startswith("base:")) + 1,
+                f"member_base: {member_base}")
+    return "---\n" + "\n".join(head) + "\n---\n" + body
+
+
 def activate_member_task(
     coordinator: Path, member: str, task_id: str, agent: str, task_file: str, base: str
 ) -> Dict[str, object]:
@@ -773,12 +784,7 @@ def activate_member_task(
     resolved_base = require_commit(coordinator, require_full_sha(base))
     _member_contract(coordinator, resolved_base, task_file, member)
     contract = git_text(coordinator, "show", f"{resolved_base}:{task_file}")
-    activated = _activated_task_text(contract, task_id, agent, resolved_base, sidecar, branch)
-    head, body = split_frontmatter(activated)
-    head = [line for line in head if not line.startswith("member_base:")]
-    head.insert(next(i for i, line in enumerate(head) if line.startswith("base:")) + 1,
-                f"member_base: {member_base}")
-    activated = "---\n" + "\n".join(head) + "\n---\n" + body
+    activated = _activated_member_text(contract, task_id, agent, resolved_base, sidecar, branch, member_base)
     copy = _safe_member_task_copy(sidecar, task_file)
     exclude = common_git_dir(checkout) / "info" / "exclude"
     rule = f"/{MEMBER_TASK_COPY_DIR}/"
@@ -822,14 +828,30 @@ def retained_member_task(
     if require_attached(sidecar) != branch or current_sha(sidecar) != tip:
         raise IsolationError(f"member task sidecar does not match its branch: {branch}")
     bound = member_bound_checkout(coordinator, member)
-    if tip != current_sha(Path(str(bound["checkout"]))) or uncommitted_paths(sidecar):
+    bound_tip = current_sha(Path(str(bound["checkout"])))
+    if (run_git(checkout, "merge-base", "--is-ancestor", tip, bound_tip).returncode != 0
+            or uncommitted_paths(sidecar)):
         raise IsolationError(f"member task branch is used or its member base moved: {branch}")
     copy = _safe_member_task_copy(sidecar, task_file)
     isolate = {"task_branch": branch, "member_base": tip, "worktree": str(sidecar)}
-    if not copy.is_file() and not authorization:
+    if not authorization:
+        if copy.is_file():
+            text = copy.read_text(encoding="utf-8")
+            fields, error = task_frontmatter(text)
+            if error or fields is None:
+                raise IsolationError(error or f"member task {task_id} has an unreadable activation")
+            copy_base = require_commit(coordinator, require_full_sha(str(fields.get("base", ""))))
+            _member_contract(coordinator, copy_base, task_file, member)
+            contract = git_text(coordinator, "show", f"{copy_base}:{task_file}")
+            expected = _activated_member_text(contract, task_id, f"build_{task_id.lower()}",
+                                              copy_base, sidecar, branch, tip)
+            if text != expected:
+                raise IsolationError(f"member task {task_id} has a changed activation")
         return {"state": "unused", "isolate": isolate}
     if not copy.is_file() or authorization != tip:
         raise IsolationError(f"member task {task_id} has an incomplete activation")
+    if tip != bound_tip:
+        raise IsolationError(f"member task {task_id} has a used activation at an older member base")
     journal = {"member": member, "task_id": task_id, "task_file": task_file,
                "base": base, "member_base": tip, "copy": str(copy)}
     text = _member_copy_text(journal, coordinator)

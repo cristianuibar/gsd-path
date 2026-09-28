@@ -173,6 +173,69 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
         self.assertIn("T002", {item["task"] for item in receipt["landed"]})
 
+    def test_round_recreates_an_isolate_after_activation_loses_its_authorization(self) -> None:
+        from scripts import isolation, pipeline_state
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
+                                          "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
+            state, _, _ = pipeline_state.load_state(self.root)
+            pipeline_state.transition_state(
+                self.root, {"phase": "plan", "status": "done", "branch": state.branch, "archive": None},
+                {"phase": "build", "status": "active"}, "build started")
+            git(self.root, "add", "-A")
+            git(self.root, "commit", "-q", "-m", "build: start milestone")
+            head = git(self.root, "rev-parse", "HEAD")
+            isolated = isolation.isolate_member_task(self.root, "web", "T002")
+            original = isolation.run_git
+
+            def stop_before_authorization(repo, *arguments):
+                if arguments[:2] == ("update-ref", "refs/gsd-path/task-authorizations/demo-T002"):
+                    raise RuntimeError("stopped before authorization")
+                return original(repo, *arguments)
+
+            with mock.patch.object(isolation, "run_git", side_effect=stop_before_authorization):
+                with self.assertRaisesRegex(RuntimeError, "stopped before authorization"):
+                    isolation.activate_member_task(self.root, "web", "T002", "build_t002", self.task_file, head)
+            self.assertTrue(isolation.member_task_copy(Path(isolated["worktree"]), self.task_file).is_file())
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
+        self.assertIn("T002", {item["task"] for item in receipt["landed"]})
+        self.assertFalse(Path(isolated["worktree"]).exists())
+
+    def test_round_recreates_an_unused_isolate_after_another_member_task_lands(self) -> None:
+        from scripts import isolation, pipeline_state
+        from unittest import mock
+        first_file = ".project/tasks/T001-demo.md"
+        first_task = self.root / first_file
+        first_task.write_text(first_task.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
+                              encoding="utf-8")
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
+                                          "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
+            state, _, _ = pipeline_state.load_state(self.root)
+            pipeline_state.transition_state(
+                self.root, {"phase": "plan", "status": "done", "branch": state.branch, "archive": None},
+                {"phase": "build", "status": "active"}, "build started")
+            git(self.root, "add", "-A")
+            git(self.root, "commit", "-q", "-m", "build: start milestone")
+            head = git(self.root, "rev-parse", "HEAD")
+            waiting = isolation.isolate_member_task(self.root, "web", "T002")
+            first = isolation.isolate_member_task(self.root, "web", "T001")
+            isolation.activate_member_task(self.root, "web", "T001", "build_t001", first_file, head)
+            first_product = Path(first["worktree"]) / "src/app.py"
+            first_product.parent.mkdir(parents=True, exist_ok=True)
+            first_product.write_text("print('first')\n", encoding="utf-8")
+            landed = isolation.land_member(self.root, "web", "T001", "Demo task T001", first_file,
+                                           head, first["member_base"])
+            isolation.retire_member_task(self.root, "web", "T001")
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
+        self.assertIn("T002", {item["task"] for item in receipt["landed"]})
+        self.assertEqual(git(self.member, "rev-parse", f"{receipt['landed'][-1]['landing']}^"),
+                         landed["landing"])
+        self.assertNotEqual(waiting["member_base"], landed["landing"])
+
     def test_member_tasks_stay_refused_without_the_gate(self) -> None:
         receipt = self.round(gate=False)
         self.assertNotEqual(receipt["status"], "done")
