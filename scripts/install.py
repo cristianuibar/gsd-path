@@ -1518,6 +1518,90 @@ def _validate_project_git_root(project: Path) -> None:
         raise InstallerError(f"project path is not the Git worktree root: {project}")
 
 
+GIT_ATTRIBUTES_BEGIN = "# gsd-path:begin"
+GIT_ATTRIBUTES_END = "# gsd-path:end"
+# Pipeline state is compared and hashed byte for byte. Git for Windows installs
+# with core.autocrlf=true, which would check .project files out as CRLF in
+# every worktree; this local rule keeps them LF without touching product files.
+GIT_ATTRIBUTES_BLOCK = (
+    f"{GIT_ATTRIBUTES_BEGIN}\n/.project/** text eol=lf\n{GIT_ATTRIBUTES_END}\n"
+)
+
+
+def _git_attributes_path(project: Path) -> Optional[Path]:
+    """The repository's local attributes file, shared by every worktree.
+
+    `--git-path info/attributes` resolves to the common git directory, so
+    managed worktrees see the same rule. None when git cannot resolve it.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel", "--git-path", "info/attributes"],
+            cwd=os.fspath(project), capture_output=True,
+            encoding="utf-8", errors="replace", check=False,
+        )
+    except OSError:
+        return None
+    lines = [line for line in result.stdout.splitlines() if line]
+    if result.returncode != 0 or len(lines) != 2 or not _same_path(Path(lines[0]), project):
+        return None
+    return Path(os.path.abspath(os.path.join(os.fspath(project), lines[1])))
+
+
+def _merged_git_attributes(raw: Optional[bytes], destination: Path) -> bytes:
+    """The attributes file with Path's block inserted or replaced; other lines kept."""
+    if raw is None:
+        return GIT_ATTRIBUTES_BLOCK.encode("utf-8")
+    text = raw.decode("utf-8", "surrogateescape")
+    lines = text.splitlines(keepends=True)
+    begins = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == GIT_ATTRIBUTES_BEGIN]
+    ends = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == GIT_ATTRIBUTES_END]
+    if not begins and not ends:
+        separator = "" if not text or text.endswith("\n") else "\n"
+        merged = text + separator + GIT_ATTRIBUTES_BLOCK
+    elif len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+        raise InstallerError(
+            f"{destination} needs exactly one {GIT_ATTRIBUTES_BEGIN} line followed by "
+            f"one {GIT_ATTRIBUTES_END} line; fix the markers by hand, then rerun"
+        )
+    else:
+        merged = "".join(lines[:begins[0]]) + GIT_ATTRIBUTES_BLOCK + "".join(lines[ends[0] + 1:])
+    return merged.encode("utf-8", "surrogateescape")
+
+
+def _read_git_attributes(destination: Path) -> Optional[bytes]:
+    if not _lexists(destination):
+        return None
+    if destination.is_symlink() or not destination.is_file():
+        raise InstallerError(f"unsafe git attributes file: {destination}")
+    try:
+        return destination.read_bytes()
+    except OSError as error:
+        raise InstallerError(f"cannot read {destination}: {error}") from error
+
+
+def _apply_git_attributes(project: Path, transaction: "ProjectTransaction") -> None:
+    destination = _git_attributes_path(project)
+    if destination is None:
+        return
+    original = _read_git_attributes(destination)
+    merged = _merged_git_attributes(original, destination)
+    if original == merged:
+        return
+    _create_directory(destination.parent, transaction.created_directories)
+    if original is None:
+        try:
+            with destination.open("xb") as output:
+                transaction.copied.append(destination)
+                output.write(merged)
+        except FileExistsError as error:
+            raise InstallerError(f"{destination} changed during install; rerun") from error
+        return
+    mode = destination.stat().st_mode & 0o777
+    _atomic_write(destination, merged, mode)
+    transaction.replaced.append((destination, original, mode))
+
+
 def _validate_project(
     source_root: Path,
     project: Path,
@@ -1564,6 +1648,9 @@ def _validate_project(
         runtime_store.prepare(source_root, project, dry_run=True)
     except (OSError, ValueError) as error:
         raise InstallerError(str(error)) from error
+    attributes = _git_attributes_path(project)
+    if attributes is not None:
+        _merged_git_attributes(_read_git_attributes(attributes), attributes)
     mergers = _native_settings_mergers(project, selected, hooks)
     for destination, _, _, _ in _project_destinations(
         project, selected, hooks, interpreter, hooks_dir
@@ -1664,6 +1751,7 @@ def _apply_project(
             if created:
                 _remove_path(destination)
             raise
+    _apply_git_attributes(project, transaction)
 
 
 def _rollback_project(transaction: ProjectTransaction) -> None:
@@ -2611,6 +2699,29 @@ def doctor(
 
     if project is None:
         return findings
+
+    attributes = _git_attributes_path(project)
+    if attributes is not None:
+        try:
+            current = _read_git_attributes(attributes)
+            if current is None or _merged_git_attributes(current, attributes) != current:
+                push("warn", f"git: {attributes} lacks the GSD Path LF rule for .project — "
+                             f'run --update --project "{project}"')
+            else:
+                push("ok", "git: .project is checked out LF in every worktree")
+        except InstallerError as error:
+            push("fail", f"git: {error}")
+        crlf = sorted(
+            path.relative_to(project).as_posix()
+            for path in (project / ".project").rglob("*")
+            if path.is_file() and not path.is_symlink() and b"\r\n" in path.read_bytes()
+        ) if (project / ".project").is_dir() else []
+        if crlf:
+            # git checkout skips files it considers clean, so delete them first.
+            push("warn", f"git: {len(crlf)} .project file(s) were checked out as CRLF "
+                         f"(first: {crlf[0]}); with the LF rule in place and changes "
+                         "committed, run `git ls-files -z .project | xargs -0 rm -f && "
+                         "git checkout -- .project` to restore LF")
 
     for name, heading in PROJECT_CONTRACTS:
         contract = project / name

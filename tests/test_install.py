@@ -14,8 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import install
-from tests._platform import posix_permissions_only
-from tests._platform import requires_symlink
+from tests._platform import posix_permissions_only, requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
