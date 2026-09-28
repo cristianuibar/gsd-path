@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from tests.hosts import HostSpec
@@ -58,7 +59,9 @@ def session_row(session_id, db=None):
     db = Path(db or SESSION_DB)
     if not session_id or not db.exists():
         return None
-    with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
+    # sqlite3's context manager only commits; closing() releases the handle so
+    # Windows can delete or replace the store afterwards.
+    with closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True)) as conn:
         row = conn.execute("select id, parent_id, title, agent, model, time_created, time_updated from session where id = ?",
                            (session_id,)).fetchone()
     if row is None:

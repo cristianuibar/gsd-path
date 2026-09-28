@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from tests.hosts import opencode
@@ -49,7 +50,8 @@ class BindChildTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.addCleanup(self.temporary.cleanup)
         self.db = self.root / "opencode.db"
-        with sqlite3.connect(self.db) as conn:
+        # closing() so the temporary store can be deleted on Windows.
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("create table session (id text primary key, parent_id text, title text, agent text, model text, time_created integer, time_updated integer)")
             conn.execute("insert into session values (?,?,?,?,?,?,?)",
                          ("ses_f862acbf6ffeN5ZyNDh1ZoH8H3", "ses_f862af7a3ffevN3Tk3ERMJVWDO", "build_probe (@general subagent)", "general", None, 1, 2))
