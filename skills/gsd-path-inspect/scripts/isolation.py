@@ -2463,7 +2463,8 @@ def _prove_member_task(
     error = _prove_member_commit(checkout, landing, parent, subject, body, allowed)
     if error:
         return {"verdict": "block", "reason": f"member landing proof failed: {error}"}
-    return {"verdict": "recovered", "commit": record, "base": match["base"], "landing": landing}
+    return {"verdict": "recovered", "commit": record, "base": match["base"],
+            "landing": landing, "member": member}
 
 
 def _recover_task(

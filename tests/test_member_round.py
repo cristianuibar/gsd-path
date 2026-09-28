@@ -136,6 +136,38 @@ class MemberRoundTests(unittest.TestCase):
         self.assertFalse(Path(isolated["worktree"]).exists())
         self.assertEqual(git(self.member, "branch", "--list", isolated["task_branch"]), "")
 
+    def test_round_retires_a_member_task_after_its_record_was_committed(self) -> None:
+        from unittest import mock
+        from scripts import isolation, pipeline_state
+        with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
+                                          "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                                          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
+            state, _, _ = pipeline_state.load_state(self.root)
+            pipeline_state.transition_state(
+                self.root, {"phase": "plan", "status": "done", "branch": state.branch, "archive": None},
+                {"phase": "build", "status": "active"}, "build started")
+            git(self.root, "add", "-A")
+            git(self.root, "commit", "-q", "-m", "build: start milestone")
+            head = git(self.root, "rev-parse", "HEAD")
+            isolated = isolation.isolate_member_task(self.root, "web", "T002")
+            isolation.activate_member_task(self.root, "web", "T002", "build_t002", self.task_file, head)
+            target = Path(isolated["worktree"]) / "tests" / "test_app.py"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("print('hello')\n", encoding="utf-8")
+            landed = isolation.land_member(self.root, "web", "T002", "Demo task T002", self.task_file,
+                                           head, isolated["member_base"])
+        self.assertTrue(Path(isolated["worktree"]).exists())
+        self.assertIn(isolated["task_branch"], git(self.member, "branch", "--list", isolated["task_branch"]))
+        journal = isolation.common_git_dir(self.root).joinpath(*isolation.MEMBER_LANDING_DIR, "T002.json")
+        self.assertFalse(journal.exists())
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:4000])
+        self.assertEqual(git(self.root, "log", "--format=%s", f"{head}..HEAD").splitlines().count(
+            "T002: Demo task T002"), 1)
+        self.assertIn("status: done", git(self.root, "show", f"{landed['commit']}:{self.task_file}"))
+        self.assertFalse(Path(isolated["worktree"]).exists())
+        self.assertEqual(git(self.member, "branch", "--list", isolated["task_branch"]), "")
+
     def test_round_reuses_an_activated_member_task_without_a_dispatch_record(self) -> None:
         from scripts import isolation, pipeline_state
         from unittest import mock

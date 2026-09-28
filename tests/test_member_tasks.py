@@ -141,6 +141,25 @@ class MemberTaskBriefTests(unittest.TestCase):
                         '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
         self.assertEqual(self.problems(), "")
 
+    def test_plan_recovery_brief_uses_the_existing_build_lock(self) -> None:
+        git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
+        (self.member / "src" / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        git(self.member, "add", "-A")
+        git(self.member, "commit", "-q", "-m", "earlier landing")
+        git(self.member, "checkout", "-q", "main")
+        (self.coordinator / ".project" / "plan").mkdir()
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_text(
+            PLAN_WAVE.format(title="demo"), encoding="utf-8")
+        self.write("T001", member_task("T001", "src/new.py", "Follow `src/landed.py`.",
+                                       verify="test -f src/landed.py"))
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "src/landed.py"):
+            state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+        lock = self.coordinator / ".project" / "build" / "members.json"
+        lock.parent.mkdir(parents=True)
+        lock.write_text('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
+                        '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
+        state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+
     def test_repo_must_name_a_member(self) -> None:
         self.write("T001", member_task("T001", "src/app.py", "Edit `src/app.py`.", repo="sdk"))
         self.assertIn("repo: names no member in MEMBERS.md: sdk", self.problems())

@@ -630,18 +630,22 @@ class Round:
     def recover(self) -> None:
         # A journaled member landing is safe to finish; it never lands the same work twice.
         journals = isolation.common_git_dir(self.primary).joinpath(*isolation.MEMBER_LANDING_DIR)
+        retired_members = set()
         for journal in sorted(journals.glob("*.json")) if journals.is_dir() else []:
             result = isolation.recover_member_landing(self.primary, journal.stem)
             self.receipt["steps"].append({"script": "isolation.recover_member_landing", "task": journal.stem,
                                           "result": result})
             if result["state"] == "landed":
                 isolation.retire_member_task(self.primary, str(result["member"]), journal.stem)
+                retired_members.add(journal.stem)
         report = recover_report(self.primary, self.project_dir, self.receipt)
         for task in report["tasks"]:
             worktree = task.get("worktree")
             verdict = task["verdict"]
             if verdict in ("recovered", "attested"):
                 self.proven[str(task.get("task_id"))] = str(task.get("commit"))
+            if verdict == "recovered" and task.get("member") and task.get("task_id") not in retired_members:
+                isolation.retire_member_task(self.primary, str(task["member"]), str(task["task_id"]))
             if verdict == "recovered" and worktree and worktree["clean"] and task.get("task_branch"):
                 isolation.retire(self.primary, Path(str(worktree["path"])),
                                  str(task["task_branch"]), False)

@@ -205,8 +205,8 @@ def _member_bases(root: Path):
                 if checkout is None:
                     cache[name] = None
                 else:
-                    # During build a member task starts from its locked bound branch, which holds
-                    # earlier landings; before build it starts from origin/main.
+                    # A build lock selects the bound tip, including during Plan recovery;
+                    # without the lock, use origin/main before the first build start.
                     lock = root / members.LOCK_PATH
                     locked = [entry for entry in (json.loads(lock.read_text(encoding="utf-8"))["members"]
                                                   if lock.is_file() else []) if entry["name"] == name]
