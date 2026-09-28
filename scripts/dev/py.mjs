@@ -8,6 +8,8 @@
 // python3, python, or the `py -3` launcher (GSD_PATH_PYTHON overrides) and
 // prepends each --path directory, relative to the repository, to PYTHONPATH.
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,6 +50,13 @@ function main(argv) {
   env[`GIT_CONFIG_KEY_${count}`] = "core.autocrlf";
   env[`GIT_CONFIG_VALUE_${count}`] = "false";
   env.GIT_CONFIG_COUNT = String(count + 1);
+  // No repository script run here may reach a real GitHub account: tests fake
+  // gh, and a fake that fails to shadow the real one must fail unauthenticated.
+  // (On Windows an extensionless fake was once skipped for the real gh.exe.)
+  for (const name of ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]) {
+    delete env[name];
+  }
+  env.GH_CONFIG_DIR = mkdtempSync(path.join(tmpdir(), "gsd-path-no-gh-"));
   const [command, ...args] = python;
   const result = spawnSync(command, [...args, ...argv], { stdio: "inherit", env });
   if (result.error) {

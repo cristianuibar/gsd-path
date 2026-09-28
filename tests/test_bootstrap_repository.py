@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -113,6 +114,13 @@ class BootstrapRepositoryTests(unittest.TestCase):
             ).encode("utf-8"),
         )
         gh.chmod(0o755)
+        if os.name == "nt":
+            # Windows lookup ignores the extensionless script; without a shim the
+            # real gh.exe would run against the developer's GitHub account.
+            (binary / "gh.cmd").write_bytes(f'@"{sys.executable}" "%~dp0gh" %*\r\n'.encode("utf-8"))
+        found = shutil.which("gh", path=f"{binary}{os.pathsep}{os.environ.get('PATH', '')}")
+        if found is None or Path(found).resolve().parent != binary.resolve():
+            raise AssertionError(f"fake gh does not shadow the real gh: {found}")
         return binary, remotes
 
     def bootstrap_command(
