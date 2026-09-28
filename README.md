@@ -77,6 +77,16 @@ published release.
 Requires **Node.js 18.17+** for the npm installer and **Python 3.9+** for
 project contracts and pipeline helpers. Install and sign in to a supported
 coding-agent host separately; GSD Path installs its skills, not the host itself.
+
+**Windows** runs natively; WSL is not required. Install
+[Git for Windows](https://git-scm.com/download/win): git hooks and task Verify
+commands run in its Git Bash, never the System32 WSL launcher (`GSD_PATH_BASH`
+overrides the path). Install a real Python from python.org or
+`winget install Python.Python.3.12`; the Microsoft Store `python` alias stub
+does not count. The installer accepts `python3`, `python`, or the `py -3`
+launcher. For deep managed-worktree paths, turn on long paths
+(`git config --global core.longpaths true` and Windows' `LongPathsEnabled`);
+`--doctor` warns about both.
 The public npm package is **[@opengsd/gsd-path](https://www.npmjs.com/package/@opengsd/gsd-path)**.
 
 ```bash
