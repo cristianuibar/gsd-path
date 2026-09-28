@@ -725,6 +725,24 @@ def member_task_copy(sidecar: Path, task_file: str) -> Path:
     return sidecar / MEMBER_TASK_COPY_DIR / relative_posix(task_file)
 
 
+def _safe_member_task_copy(sidecar: Path, task_file: str) -> Path:
+    copy = member_task_copy(sidecar, task_file)
+    if git_output(sidecar, "ls-files", "--", MEMBER_TASK_COPY_DIR):
+        raise IsolationError("member task copy directory is tracked")
+    parent = sidecar
+    for part in (MEMBER_TASK_COPY_DIR, *PurePosixPath(task_file).parts[:-1]):
+        parent = parent / part
+        if os.path.lexists(parent) and (parent.is_symlink() or not parent.is_dir()):
+            raise IsolationError(f"member task copy parent is not a real directory: {parent}")
+        try:
+            parent.resolve().relative_to(sidecar.resolve())
+        except ValueError as error:
+            raise IsolationError(f"member task copy parent escapes the sidecar: {parent}") from error
+    if os.path.lexists(copy) and (copy.is_symlink() or not copy.is_file()):
+        raise IsolationError(f"member task copy is not a regular file: {copy}")
+    return copy
+
+
 def member_task_authorization_ref(project: str, task_id: str) -> str:
     return f"{TASK_AUTHORIZATION_PREFIX}{project}-{validate_task_id(task_id)}"
 
@@ -760,13 +778,13 @@ def activate_member_task(
     head.insert(next(i for i, line in enumerate(head) if line.startswith("base:")) + 1,
                 f"member_base: {member_base}")
     activated = "---\n" + "\n".join(head) + "\n---\n" + body
+    copy = _safe_member_task_copy(sidecar, task_file)
     exclude = common_git_dir(checkout) / "info" / "exclude"
     rule = f"/{MEMBER_TASK_COPY_DIR}/"
     existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
     if rule not in existing.splitlines():
         exclude.parent.mkdir(parents=True, exist_ok=True)
         _common.atomic_write(exclude, existing + ("" if not existing or existing.endswith("\n") else "\n") + rule + "\n")
-    copy = member_task_copy(sidecar, task_file)
     if copy.is_file() and copy.read_text(encoding="utf-8") != activated:
         current, _ = task_frontmatter(copy.read_text(encoding="utf-8"))
         if (not current or current.get("agent") != agent or current.get("base") != resolved_base
@@ -786,8 +804,10 @@ def activate_member_task(
 
 def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
     """The live copy, checked against the contract: same contract fields, Log only grows."""
-    copy = Path(str(journal["copy"]))
-    if copy.is_symlink() or not copy.is_file():
+    checkout, project, _ = _member_context(coordinator, str(journal["member"]))
+    sidecar = sidecar_root(checkout, "task", f"{project}-{journal['task_id']}")
+    copy = _safe_member_task_copy(sidecar, str(journal["task_file"]))
+    if copy != Path(str(journal["copy"])) or not copy.is_file():
         raise IsolationError(f"member task is not activated: {copy}")
     text = copy.read_text(encoding="utf-8")
     contract = git_text(coordinator, "show", f"{journal['base']}:{journal['task_file']}")
