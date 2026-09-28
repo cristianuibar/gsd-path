@@ -83,6 +83,17 @@ class MemberSidecarHookTests(unittest.TestCase):
         self.assertEqual(local.read_text(encoding="utf-8"), '{"mine": true}')
         self.assertEqual(git(self.member, "rev-parse", "--verify", "--quiet", AUTH, check=False), "")
 
+    def test_plain_untracked_host_config_names_collision_before_cleanliness(self) -> None:
+        local = self.sidecar / ".claude" / "settings.json"
+        local.parent.mkdir()
+        local.write_text('{"mine": true}', encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, ".claude/settings.json"):
+            self.activate()
+        self.assertEqual(local.read_text(encoding="utf-8"), '{"mine": true}')
+        self.assertFalse((self.sidecar / ".cursor" / "hooks.json").exists())
+        self.assertFalse((self.sidecar / ".gsd-path-coordinator").exists())
+        self.assertEqual(git(self.member, "rev-parse", "--verify", "--quiet", AUTH, check=False), "")
+
     def test_reactivation_keeps_the_generated_hooks(self) -> None:
         self.activate()
         before = (self.sidecar / ".claude" / "settings.json").read_bytes()

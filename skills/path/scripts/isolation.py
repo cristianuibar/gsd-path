@@ -753,8 +753,7 @@ def _member_hook_configs(coordinator: Path) -> Dict[str, str]:
     return configs
 
 
-def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path) -> None:
-    configs = _member_hook_configs(coordinator)
+def _check_member_hook_collisions(configs: Dict[str, str], sidecar: Path) -> None:
     for relative, content in configs.items():
         # A member's own config (tracked or local) would run instead of the guard; never replace it.
         target = sidecar / relative
@@ -762,6 +761,11 @@ def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path)
                 target.exists() and target.read_bytes() != content.encode("utf-8")):
             raise IsolationError(f"member sidecar already has its own {relative}; its host would run "
                                  "without the coordinator guard")
+
+
+def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path) -> None:
+    configs = _member_hook_configs(coordinator)
+    _check_member_hook_collisions(configs, sidecar)
     exclude = common_git_dir(checkout) / "info" / "exclude"
     existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
     missing = [f"/{relative}" for relative in configs if f"/{relative}" not in existing.splitlines()]
@@ -841,6 +845,7 @@ def activate_member_task(
             or run_git(checkout, "merge-base", "--is-ancestor", member_base,
                        f"refs/heads/{entry['branch']}").returncode != 0:
         raise IsolationError("member task activation requires the sidecar at its member base")
+    _check_member_hook_collisions(_member_hook_configs(coordinator), sidecar)
     if uncommitted_paths(sidecar):
         raise IsolationError("member task activation requires a clean member sidecar")
     resolved_base = require_commit(coordinator, require_full_sha(base))
