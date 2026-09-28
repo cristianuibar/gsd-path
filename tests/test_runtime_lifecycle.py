@@ -131,9 +131,9 @@ class RuntimeLifecycleTests(unittest.TestCase):
         altered = self.root / "source"
         shutil.copytree(SOURCE / "scripts", altered / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(SOURCE / "package.json", altered / "package.json")
-        with (altered / "scripts/pipeline_state.py").open("a") as handle:
+        with (altered / "scripts/pipeline_state.py").open("a", encoding="utf-8", newline="\n") as handle:
             handle.write("\n# different runtime version\n")
-        with (altered / "scripts/status_runtime.py").open("a") as handle:
+        with (altered / "scripts/status_runtime.py").open("a", encoding="utf-8", newline="\n") as handle:
             handle.write("\n# compatible bootstrap update\n")
         install.install(SOURCE, [], project=self.repo, migrate_legacy=False, update=True)
         self.assertEqual((self.repo / ".gsd-path/runtime.json").read_bytes(), before)
@@ -145,7 +145,8 @@ class RuntimeLifecycleTests(unittest.TestCase):
         for line in (upgrade + resolver).splitlines():
             if not line.strip():
                 continue
-            command = shlex.split(line.replace("<trusted-gsd-path>", str(altered)).replace("<trust-root>", str(self.repo)))
+            # POSIX shlex would eat Windows backslashes; forward slashes work on every host.
+            command = shlex.split(line.replace("<trusted-gsd-path>", altered.as_posix()).replace("<trust-root>", self.repo.as_posix()))
             if command[0] == "python3":
                 command[0] = sys.executable
             result = subprocess.run(command, capture_output=True, text=True)
@@ -169,7 +170,7 @@ class RuntimeLifecycleTests(unittest.TestCase):
         altered = self.root / "new-source"
         shutil.copytree(SOURCE / "scripts", altered / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(SOURCE / "package.json", altered / "package.json")
-        with (altered / "scripts/status_runtime.py").open("a") as handle:
+        with (altered / "scripts/status_runtime.py").open("a", encoding="utf-8", newline="\n") as handle:
             handle.write("\n# compatible bootstrap update\n")
         pin = (self.repo / ".gsd-path/runtime.json").read_bytes()
         launcher = (self.repo / ".gsd-path/status_runtime.py").read_bytes()
@@ -377,8 +378,9 @@ process.exitCode = await main([]);
         environment = {key: value for key, value in os.environ.items() if key not in {
             "CLAUDE_CONFIG_DIR", "GROK_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG",
             "XDG_CONFIG_HOME", "COPILOT_HOME", "QWEN_HOME", "KIRO_HOME", "KIMI_CODE_HOME", "CODEX_HOME"}}
+        # Node writes UTF-8; text=True would decode with the Windows code page.
         declined = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.repo,
-                                  env=environment, input="\r\r\r\r\x1b[B\r\x1b[B\r", capture_output=True, text=True)
+                                  env=environment, input="\r\r\r\r\x1b[B\r\x1b[B\r", capture_output=True, encoding="utf-8")
         self.assertEqual(declined.returncode, 0, declined.stdout + declined.stderr)
         self.assertTrue(runtime.exists())
         self.assertEqual(self.git("status", "--porcelain"), "")
@@ -386,7 +388,7 @@ process.exitCode = await main([]);
         self.assertFalse((self.home / ".gsd-path/runtimes").exists())
         # global, selected Claude, update, project, no hooks, consent, install
         result = subprocess.run(["node", "--input-type=module", "-e", script], cwd=self.repo,
-                                env=environment, input="\r\r\r\r\x1b[B\r\r\r", capture_output=True, text=True)
+                                env=environment, input="\r\r\r\r\x1b[B\r\r\r", capture_output=True, encoding="utf-8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Migrate and continue upgrade", result.stdout)
         self.assertIn("Updated.", result.stdout)
@@ -461,7 +463,7 @@ runtime_store.operate(Path(sys.argv[1]), Path(sys.argv[2]), 'migrate')
         altered = self.root / "wrong-source"
         shutil.copytree(SOURCE / "scripts", altered / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(SOURCE / "package.json", altered / "package.json")
-        with (altered / "scripts/pipeline_state.py").open("a") as handle:
+        with (altered / "scripts/pipeline_state.py").open("a", encoding="utf-8", newline="\n") as handle:
             handle.write("\n# another version\n")
         before = self.pin()
         result = self.runtime_command("--runtime-restore", altered)
@@ -508,7 +510,8 @@ with publication_lock(Path(sys.argv[1]).parent, Path(sys.argv[1]).name):
         for candidate, expected in ((helper, 0), (foreign, 2)):
             with self.subTest(candidate=candidate):
                 payload = {"tool_name": "Bash", "tool_input": {
-                    "command": f"python3 -B {shlex.quote(str(candidate))} --archive .project/archive/001-x",
+                    # The guard refuses backslashes in helper commands, so pass a POSIX-form path.
+                    "command": f"python3 -B {shlex.quote(candidate.as_posix())} --archive .project/archive/001-x",
                     "workdir": str(self.repo),
                 }}
                 result = subprocess.run([sys.executable, "-B", str(self.repo / ".gsd-path/guard_hook.py")],
