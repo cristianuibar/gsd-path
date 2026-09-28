@@ -99,9 +99,11 @@ def task_verify_command(task_text: str) -> str:
     return block.group("block").removesuffix("\n") if block else ""
 
 
-def latest_verify_entry(entries: list, command: str, commit: str) -> Optional[dict]:
+def latest_verify_entry(entries: list, command: str, commit: str,
+                        repo: Optional[str] = None) -> Optional[dict]:
+    """Rows are keyed by (command, repo, commit); a row without `repo` is a coordinator row."""
     for entry in reversed(entries):
-        if (entry.get("schema") == VERIFY_LEDGER_SCHEMA
+        if (entry.get("schema") == VERIFY_LEDGER_SCHEMA and entry.get("repo") == repo
                 and entry["command"] == command and entry["commit"] == commit):
             return entry
     return None
@@ -129,6 +131,7 @@ def parse_verify_ledger(text: str) -> list:
             or not isinstance(entry.get("commit"), str)
             or entry.get("result") not in VERIFY_RESULTS
             or not isinstance(entry.get("recorded_at"), str)
+            or ("repo" in entry and not isinstance(entry["repo"], str))
         ):
             raise ValueError(f"{VERIFY_LEDGER_PATH} line {number} has invalid fields")
         entries.append(entry)

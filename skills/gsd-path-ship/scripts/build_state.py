@@ -753,6 +753,22 @@ def _ledger_path(repo: Path) -> Path:
     return path
 
 
+def _member_checkout(repo: Path, member: Optional[str]) -> Path:
+    if member is None:
+        return repo
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    try:
+        listed = {item["name"]: Path(item["checkout"]) for item in members.read_members(repo)}
+    except members.MembersError as error:
+        raise BuildStateError("invalid-member", str(error)) from error
+    if member not in listed:
+        raise BuildStateError("invalid-member", f"{member} is not in MEMBERS.md")
+    return listed[member]
+
+
 def _ledger_key(repo: Path, command: str, commit: str) -> Tuple[str, str]:
     if not command.strip():
         raise BuildStateError("invalid-command", "--command must not be empty")
@@ -769,13 +785,17 @@ def _ledger_entries(path: Path) -> List[Dict[str, object]]:
 
 
 def verify_record(repo: str, command: str, commit: str, result: str,
-                  execution: Optional[Dict[str, object]] = None) -> Dict[str, object]:
-    """Append one verify run (command, commit, result, timestamp) to the ledger."""
+                  execution: Optional[Dict[str, object]] = None,
+                  member: Optional[str] = None) -> Dict[str, object]:
+    """Append one verify run (command, commit, result, timestamp) to the ledger.
+
+    A member run names its member and a commit in that member's repository.
+    """
 
     repository = _repo_root(repo)
     if result not in VERIFY_RESULTS:
         raise BuildStateError("invalid-result", "--result must be pass or fail")
-    normalized, commit = _ledger_key(repository, command, commit)
+    normalized, commit = _ledger_key(_member_checkout(repository, member), command, commit)
     ignore_error = _common.project_ignore_error(repository)
     if ignore_error:
         raise BuildStateError("ignored-ledger", ignore_error)
@@ -787,6 +807,7 @@ def verify_record(repo: str, command: str, commit: str, result: str,
         "commit": commit,
         "result": result,
         "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        **({"repo": member} if member else {}),
     }
     if execution is not None:
         if (not isinstance(execution.get("stdout"), str)
@@ -801,12 +822,12 @@ def verify_record(repo: str, command: str, commit: str, result: str,
     return {"command": "verify-record", "ledger": VERIFY_LEDGER_PATH, "entry": entry}
 
 
-def verify_lookup(repo: str, command: str, commit: str) -> Dict[str, object]:
+def verify_lookup(repo: str, command: str, commit: str, member: Optional[str] = None) -> Dict[str, object]:
     """Return the latest recorded run of this command at this commit, or a miss."""
 
     repository = _repo_root(repo)
-    normalized, commit = _ledger_key(repository, command, commit)
-    entry = _common.latest_verify_entry(_ledger_entries(_ledger_path(repository)), normalized, commit)
+    normalized, commit = _ledger_key(_member_checkout(repository, member), command, commit)
+    entry = _common.latest_verify_entry(_ledger_entries(_ledger_path(repository)), normalized, commit, member)
     return {
         "command": "verify-lookup",
         "ledger": VERIFY_LEDGER_PATH,
