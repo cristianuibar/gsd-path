@@ -65,6 +65,11 @@ class MemberFinalReviewTests(unittest.TestCase):
                          encoding="utf-8")
         self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
 
+    def test_member_head_in_header_comment_does_not_bind(self) -> None:
+        self.write_final(f"<!--\nMember reviewed HEAD: web {self.member_tip}\n-->")
+        with self.assertRaisesRegex(contracts.HandoffError, "Member reviewed HEAD"):
+            contracts.validate_final(self.root)
+
     def archive(self) -> Path:
         self.use_member_verify_command()
         self.assertTrue(lean_verification.verify_project(self.root, self.head)["passed"])
