@@ -164,9 +164,10 @@ class InstallerTests(unittest.TestCase):
         claude = install.default_root("claude", {"CLAUDE_CONFIG_DIR": "/tmp/c"})
         grok = install.default_root("grok", {"GROK_HOME": "/tmp/g"})
         xdg = install.default_root("opencode", {"XDG_CONFIG_HOME": "/tmp/x"})
-        self.assertEqual(Path("/tmp/c/skills"), claude)
-        self.assertEqual(Path("/tmp/g/skills"), grok)
-        self.assertEqual(Path("/tmp/x/opencode/skills"), xdg)
+        # Roots are made absolute, which adds the current drive on Windows.
+        self.assertEqual(Path(os.path.abspath("/tmp/c/skills")), claude)
+        self.assertEqual(Path(os.path.abspath("/tmp/g/skills")), grok)
+        self.assertEqual(Path(os.path.abspath("/tmp/x/opencode/skills")), xdg)
         config = self.root / "opencode.json"
         config.write_bytes("{}".encode("utf-8"))
         self.assertEqual(
@@ -187,19 +188,19 @@ class InstallerTests(unittest.TestCase):
             Path.home() / ".agents" / "skills", install.default_root("zed", {})
         )
         self.assertEqual(
-            Path("/tmp/copilot/skills"),
+            Path(os.path.abspath("/tmp/copilot/skills")),
             install.default_root("copilot", {"COPILOT_HOME": "/tmp/copilot"}),
         )
         self.assertEqual(
-            Path("/tmp/qwen/skills"),
+            Path(os.path.abspath("/tmp/qwen/skills")),
             install.default_root("qwen", {"QWEN_HOME": "/tmp/qwen"}),
         )
         self.assertEqual(
-            Path("/tmp/kiro/skills"),
+            Path(os.path.abspath("/tmp/kiro/skills")),
             install.default_root("kiro", {"KIRO_HOME": "/tmp/kiro"}),
         )
         self.assertEqual(
-            Path("/tmp/kimi-code/skills"),
+            Path(os.path.abspath("/tmp/kimi-code/skills")),
             install.default_root("kimi", {"KIMI_CODE_HOME": "/tmp/kimi-code"}),
         )
         self.assertEqual(
@@ -2180,7 +2181,9 @@ class InstallerTests(unittest.TestCase):
         codex = json.loads(
             (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
         )
-        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        # Codex runs commandWindows on Windows; the POSIX command needs sh.
+        codex_key = "commandWindows" if os.name == "nt" else "command"
+        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0][codex_key]
         cursor = json.loads(
             (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
         )
@@ -3966,9 +3969,11 @@ class InstallerParityTests(unittest.TestCase):
             result = subprocess.run(
                 self.INSTALLERS[kind] + step,
                 cwd=project,
-                text=True,
+                # Node always writes UTF-8; make Python match so glyphs decode
+                # identically instead of through the Windows code page.
+                encoding="utf-8",
                 capture_output=True,
-                env={**os.environ, "NO_COLOR": "1"},
+                env={**os.environ, "NO_COLOR": "1", "PYTHONIOENCODING": "utf-8"},
             )
             outputs.append((result.returncode, self.result_lines(result, project)))
         return outputs, self.snapshot(project)

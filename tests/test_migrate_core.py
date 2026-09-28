@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from tests._platform import posix_permissions_only
+from tests._platform import WINDOWS, posix_permissions_only
 from tests._platform import requires_symlink
 
 
@@ -286,8 +286,10 @@ class CoreMigrationTests(unittest.TestCase):
                 gate = skill / "scripts/core_hook_gate.py"
                 command = shlex.join([sys.executable, "-c", "raise SystemExit(7)"])
                 for cwd, expected in ((self.repo, 0), (self.root, 7)):
+                    # The command is POSIX-quoted, so run it through bash rather than cmd.exe on Windows.
                     gated = subprocess.run([
                         sys.executable, "-B", str(gate), "--repo", str(self.repo), "--command", command,
+                        *(["--shell", "bash"] if WINDOWS else []),
                     ], input=json.dumps({"cwd": str(cwd)}), text=True, capture_output=True)
                     self.assertEqual(gated.returncode, expected, gated.stderr)
 
