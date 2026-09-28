@@ -126,7 +126,11 @@ class MemberIsolationTests(unittest.TestCase):
 
     def test_bound_checkout_refuses_an_invalid_registered_checkout(self) -> None:
         bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
-        (bound / ".git").write_bytes("invalid gitfile\n".encode("utf-8"))
+        # Rewrite in place: Git for Windows hides .git, and Windows refuses to
+        # truncate-create a hidden file (write_bytes raises PermissionError).
+        with (bound / ".git").open("r+b") as gitfile:
+            gitfile.write("invalid gitfile\n".encode("utf-8"))
+            gitfile.truncate()
         with self.assertRaisesRegex(isolation.IsolationError, "bound checkout.*missing or invalid"):
             isolation.member_bound_checkout(self.coordinator, "web")
 

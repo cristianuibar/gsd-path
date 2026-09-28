@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+import os
 import shutil
 import tempfile
 import unittest
@@ -86,6 +87,8 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         hook.write_bytes("#!/bin/sh\nexit 0\n".encode("utf-8"))
         for mode, executable, verdict in ((0o644, False, "fail"), (0o755, True, "pass")):
             with self.subTest(mode=mode):
+                if not executable and os.name == "nt":
+                    self.skipTest("POSIX permission bits are not enforced on Windows")
                 hook.chmod(mode)
                 result = self.check_hooks(self.fixture, self.reference)
                 self.assertEqual(verdict, result["git_hooks"])
