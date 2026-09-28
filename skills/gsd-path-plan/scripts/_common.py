@@ -37,6 +37,23 @@ except ImportError:
 # Windows opens descriptors in text mode unless asked otherwise.
 O_BINARY = getattr(os, "O_BINARY", 0)
 
+
+def utf8_stdio() -> None:
+    """Write stdout and stderr as UTF-8, as every caller of these CLIs reads them.
+
+    A Windows pipe defaults to the locale code page (cp1252), so an em dash
+    reaches the parent as byte 0x97. Streams a caller substituted are left alone.
+    """
+    if os.name != "nt":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower() != "utf-8":
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+# Every runtime script imports this module before producing output.
+utf8_stdio()
+
 PIPELINE_MARKER = "gsd-path/v2"
 BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
 
@@ -584,27 +601,19 @@ def resolve_argv(argv: Sequence[str]) -> List[str]:
 
 
 def split_command(text: str) -> List[str]:
-    """Split a command line with the host platform's own rules."""
+    """Split a command string with POSIX quoting.
+
+    Agents write these in a POSIX shell (Git Bash on Windows), so single and
+    double quotes group as in sh. On Windows backslash is not an escape, so a
+    path such as C:\\Python312\\python.exe keeps its separators.
+    """
     if os.name != "nt":
         return shlex.split(text)
-    if not text.strip():
-        return []
-    import ctypes
-    from ctypes import wintypes
-
-    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    shell32.CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
-    shell32.CommandLineToArgvW.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int))
-    kernel32.LocalFree.argtypes = (wintypes.HLOCAL,)
-    count = ctypes.c_int()
-    pointer = shell32.CommandLineToArgvW(text, ctypes.byref(count))
-    if not pointer:
-        raise ValueError(f"cannot split command: {text!r}")
-    try:
-        return [pointer[index] for index in range(count.value)]
-    finally:
-        kernel32.LocalFree(ctypes.cast(pointer, wintypes.HLOCAL))
+    lexer = shlex.shlex(text, posix=True)
+    lexer.whitespace_split = True
+    lexer.escape = ""
+    lexer.commenters = ""
+    return list(lexer)
 
 
 def rmtree_force(path: Path) -> None:

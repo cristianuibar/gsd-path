@@ -284,6 +284,10 @@ class SplitCommandTests(unittest.TestCase):
     def test_empty(self) -> None:
         self.assertEqual(_common.split_command("   "), [])
 
+    def test_single_quotes_group_as_in_sh(self) -> None:
+        self.assertEqual(_common.split_command("codex exec '{model_args}' --json -"),
+                         ["codex", "exec", "{model_args}", "--json", "-"])
+
     @windows_only
     def test_keeps_windows_backslashes(self) -> None:
         self.assertEqual(
