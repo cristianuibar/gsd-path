@@ -1538,9 +1538,12 @@ def _create_member_merge(checkout: Path, project: str, archive_path: str, subjec
     remove_registered_worktree(checkout, branch, worktree)
     tip = optional_ref(checkout, f"refs/heads/{branch}")
     if tip is not None:
-        # Only an unpublished canonical merge may be reused or rebuilt on a newer main.
-        if _require_member_merge(checkout, tip, subject, body, reviewed_head) == origin_main:
-            return tip
+        base_tip = run_git(checkout, "merge-base", "--is-ancestor", tip, origin_main)
+        if base_tip.returncode != 0:
+            if base_tip.returncode != 1:
+                archive_milestone.require_git_success(base_tip, "inspect interrupted member integration base")
+            if _require_member_merge(checkout, tip, subject, body, reviewed_head) == origin_main:
+                return tip
         delete_integration_branch(checkout, branch, tip)
     archive_milestone.require_git_success(
         run_git(checkout, "worktree", "add", "--quiet", "-b", branch, str(worktree), origin_main),
@@ -1556,6 +1559,8 @@ def _create_member_merge(checkout: Path, project: str, archive_path: str, subjec
         raise ArchiveError("member integration merge failed; Git aborted it without resolving files: "
                            + (", ".join(conflicts) or (merged.stderr or merged.stdout).strip()))
     merge = archive_milestone.require_git_success(run_git(worktree, "rev-parse", "HEAD"), "resolve member merge")
+    if _require_member_merge(worktree, merge, subject, body, reviewed_head) != origin_main:
+        raise ArchiveError("member merge first parent is not origin/main")
     remove_registered_worktree(checkout, branch, worktree)
     return merge
 
@@ -1585,6 +1590,11 @@ def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed
     if merge is None:
         origin_main = archive_milestone.require_git_success(
             run_git(checkout, "rev-parse", "origin/main"), "resolve member origin/main")
+        ancestry = run_git(checkout, "merge-base", "--is-ancestor", reviewed_head, origin_main)
+        if ancestry.returncode == 0:
+            raise ArchiveError("member reviewed HEAD reached origin/main outside Path; user-approved recovery required")
+        if ancestry.returncode != 1:
+            archive_milestone.require_git_success(ancestry, "inspect member reviewed HEAD ancestry")
         merge = _create_member_merge(checkout, project, archive_path, subject, body, reviewed_head, origin_main)
     # Publish in order: bound branch, main, tag; a rerun publishes only what is missing.
     bound_ref = f"refs/heads/{bound}"
@@ -1605,15 +1615,13 @@ def integrate_member(coordinator: Path, member: str, archive_path: str, reviewed
             "refresh member milestone-tag ref")
     identifier = milestone_id(milestone_number(PurePosixPath(archive_path).name))
     delete_integration_branch(checkout, f"gsd-path-integrate/{project}-{identifier}", merge)
-    return validate_member_integrated(coordinator, member, archive_path, reviewed_head, refresh=False)
+    return validate_member_integrated(coordinator, member, archive_path, reviewed_head)
 
 
-def validate_member_integrated(coordinator: Path, member: str, archive_path: str, reviewed_head: str,
-                               *, refresh: bool = True) -> dict:
+def validate_member_integrated(coordinator: Path, member: str, archive_path: str, reviewed_head: str) -> dict:
     """Prove the member merge is on origin/main and its published tag points at it."""
     checkout, _, _, subject, tag_name = _member_names(coordinator, member, archive_path)
-    if refresh:
-        refresh_origin(checkout)
+    refresh_origin(checkout)
     merge = _find_member_merge(checkout, subject, _member_merge_body(archive_path, member, reviewed_head),
                                reviewed_head)
     if merge is None:

@@ -1,5 +1,7 @@
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest import mock
 
 from scripts import integration, members
 from scripts.archive_milestone import ArchiveError
@@ -95,6 +97,53 @@ class MemberIntegrationTests(unittest.TestCase):
         self.assertNotEqual(result["merge"], stale_merge)
         self.assertEqual(git(self.remote, "rev-list", "--parents", "-n", "1", result["merge"]).split()[1:],
                          [advanced, self.member_tip])
+
+    def test_reviewed_head_on_main_requires_recovery_before_publishing(self) -> None:
+        git(self.remote, "fetch", "-q", str(self.member), self.member_tip)
+        git(self.remote, "update-ref", "refs/heads/main", self.member_tip)
+        with self.assertRaisesRegex(ArchiveError, "outside Path; user-approved recovery required"):
+            self.integrate()
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.member_tip)
+        self.assertEqual(self.remote_ref("refs/heads/gsd-path/demo-M001"), "")
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_merge_success_without_two_parents_cannot_publish(self) -> None:
+        run_git = integration.run_git
+
+        def no_op_merge(repo, *arguments):
+            if arguments[:2] == ("merge", "--no-ff"):
+                return CompletedProcess(arguments, 0, "", "")
+            return run_git(repo, *arguments)
+
+        with mock.patch.object(integration, "run_git", side_effect=no_op_merge):
+            with self.assertRaises(ArchiveError):
+                self.integrate()
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.main)
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}"), "")
+
+    def test_interrupted_branch_at_creation_base_recreates_merge(self) -> None:
+        interrupted = self.root.parent / "interrupted"
+        branch = "gsd-path-integrate/demo-M001"
+        git(self.member, "worktree", "add", "-q", "-b", branch, str(interrupted), self.main)
+        git(self.member, "worktree", "remove", str(interrupted))
+        result = self.integrate()
+        self.assertEqual(git(self.remote, "rev-list", "--parents", "-n", "1", result["merge"]).split()[1:],
+                         [self.main, self.member_tip])
+        self.assertEqual(self.remote_ref(f"refs/tags/{TAG}^{{commit}}"), result["merge"])
+        self.assertEqual(git(self.member, "branch", "--list", branch), "")
+
+    def test_integrate_refreshes_main_before_returning_validation(self) -> None:
+        publish = integration._push_member_ref
+
+        def publish_then_move(checkout, project, source, ref, sha, lease):
+            publish(checkout, project, source, ref, sha, lease)
+            if ref == f"refs/tags/{TAG}":
+                git(self.remote, "update-ref", "refs/heads/main", self.main)
+
+        with mock.patch.object(integration, "_push_member_ref", side_effect=publish_then_move):
+            with self.assertRaisesRegex(ArchiveError, "has no .* merge on origin/main"):
+                self.integrate()
+        self.assertEqual(self.remote_ref("refs/heads/main"), self.main)
 
     def test_validate_requires_the_published_merge_and_tag(self) -> None:
         with self.assertRaisesRegex(ArchiveError, "integrate: demo M001"):
