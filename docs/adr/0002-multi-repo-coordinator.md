@@ -36,8 +36,8 @@ pinned layout for cross-repo Verify. Ship records a
 `Reviewed-HEAD` for each member. Member close creates no ship commit for this
 milestone: its integration merge must have that reviewed HEAD as second parent,
 and its tag is `milestone/<coord>-<archive-name>`. Member execution stays
-disabled until the two-repo proof passes. A member's remote default must be
-`main`; each member may choose its integration mode. The coordinator may be a
-product repo or a dedicated program repo. Submodules, nested repos, and one
-task across two repos stay out of scope. The work plan is
+disabled for users until S5 activation (see the work plan). A member's remote
+default must be `main`; each member may choose its integration mode. The
+coordinator may be a product repo or a dedicated program repo. Submodules,
+nested repos, and one task across two repos stay out of scope. The work plan is
 [multi-repo-work.md](../multi-repo-work.md).

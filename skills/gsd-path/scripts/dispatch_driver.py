@@ -224,6 +224,7 @@ def child_main(state_path: Path) -> int:
 
 def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) -> str:
     worktree = Path(str(state["worktree"]))
+    project_root = Path(str(state.get("project_root") or worktree))
     task_id = state["task_id"]
     agents = worktree / "AGENTS.md"
     workflow = worktree / "WORKFLOW.md"
@@ -234,12 +235,14 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
         f"Work only in this worktree root: {worktree}",
         f"Task file: {worktree / str(state['task_file'])}",
         f"Task template: {task_template}",
-        f"INTENT.md: {worktree / '.project/intent/INTENT.md'}",
+        f"INTENT.md: {project_root / '.project/intent/INTENT.md'}",
         f"AGENTS.md: {agents if agents.exists() else 'absent'}",
         f"WORKFLOW.md: {workflow if workflow.exists() else 'absent'}",
         f"Recorded base: {state['base']}",
         f"Dispatch mode: {state['mode']} ("
         + ("the primary worktree on the bound branch" if state["mode"] == "serial"
+           else f"an isolated worktree of member {state['member']}; never touch the member team's "
+                "checkout or the coordinator" if state["mode"] == "member"
            else "an isolated task worktree; never touch the primary") + ").",
         "Next consumer: the build orchestrator reruns Verify in an isolated checkout and lands "
         "the task. Gate: Verify passes and only the task's declared files plus its Log changed.",
@@ -248,7 +251,7 @@ def brief_text(state: Dict[str, object], role_brief: Path, task_template: Path) 
     if state.get("answered"):
         lines.append(f"The task Log now records an `{ANSWER_MARK}` to your earlier question; "
                      "continue from it.")
-    lines.append(task_context.render(worktree, worktree / str(state['task_file'])))
+    lines.append(task_context.render(project_root, worktree / str(state['task_file'])))
     return "\n".join(lines) + "\n"
 
 
@@ -356,8 +359,11 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
 
 
 def log_delta(primary: Path, state: Dict[str, object]) -> str:
-    base_text = isolation.git_text(primary, "show", f"{state['base']}:{state['task_file']}")
+    contract_file = state.get("contract_file") or state["task_file"]
+    base_text = isolation.git_text(primary, "show", f"{state['base']}:{contract_file}")
     text = (Path(str(state["worktree"])) / str(state["task_file"])).read_text(encoding="utf-8")
+    if state["mode"] == "member":
+        return isolation.member_log_delta(base_text, text)
     return isolation.task_log_delta(base_text, text)
 
 
@@ -459,7 +465,17 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
     if not passed:
         if state["mode"] == "parallel":
             isolation.deactivate_task(worktree, task_id, str(state["task_branch"]))
+        elif state["mode"] == "member":
+            isolation.deactivate_member_task(primary, str(state["member"]), task_id)
         raise DriverStop("Verify failed in the isolate", task=task_id, execution=execution)
+    if state["mode"] == "member":
+        member = str(state["member"])
+        landed = isolation.land_member(primary, member, task_id, str(state["title"]),
+                                       str(state["contract_file"]), base, str(state["member_base"]))
+        # ponytail: the verify ledger keys on (command, commit) in one repo; member rows wait for S3d.
+        isolation.retire_member_task(primary, member, task_id)
+        return {"task": task_id, "commit": str(landed["commit"]), "mode": "member",
+                "landing": landed["landing"], "verify": execution, "ledger": False}
     landed = isolation.land(primary, worktree, base, task_id, str(state["title"]), task_file,
                             list(state["files"]))
     commit = str(landed["commit"])
@@ -612,12 +628,24 @@ class Round:
     # recovery -------------------------------------------------------------
 
     def recover(self) -> None:
+        # A journaled member landing is safe to finish; it never lands the same work twice.
+        journals = isolation.common_git_dir(self.primary).joinpath(*isolation.MEMBER_LANDING_DIR)
+        retired_members = set()
+        for journal in sorted(journals.glob("*.json")) if journals.is_dir() else []:
+            result = isolation.recover_member_landing(self.primary, journal.stem)
+            self.receipt["steps"].append({"script": "isolation.recover_member_landing", "task": journal.stem,
+                                          "result": result})
+            if result["state"] == "landed":
+                isolation.retire_member_task(self.primary, str(result["member"]), journal.stem)
+                retired_members.add(journal.stem)
         report = recover_report(self.primary, self.project_dir, self.receipt)
         for task in report["tasks"]:
             worktree = task.get("worktree")
             verdict = task["verdict"]
             if verdict in ("recovered", "attested"):
                 self.proven[str(task.get("task_id"))] = str(task.get("commit"))
+            if verdict == "recovered" and task.get("member") and task.get("task_id") not in retired_members:
+                isolation.retire_member_task(self.primary, str(task["member"]), str(task["task_id"]))
             if verdict == "recovered" and worktree and worktree["clean"] and task.get("task_branch"):
                 isolation.retire(self.primary, Path(str(worktree["path"])),
                                  str(task["task_branch"]), False)
@@ -812,6 +840,28 @@ class Round:
         self.runner("lint-round", head)
         round_size = len(selected) + len(in_flight)
         for task in selected:
+            if task.get("repo"):
+                member = str(task["repo"])
+                retained = isolation.retained_member_task(self.primary, member, task["id"],
+                                                          task["task_file"], head)
+                if retained and retained["state"] == "unused":
+                    isolation.retire_member_task(self.primary, member, task["id"])
+                    retained = None
+                if retained:
+                    isolate, active = retained["isolate"], retained["active"]
+                else:
+                    isolate = isolation.isolate_member_task(self.primary, member, task["id"])
+                    active = isolation.activate_member_task(self.primary, member, task["id"],
+                                                            f"build_{task['id'].lower()}", task["task_file"], head)
+                sidecar_path = Path(str(active["worktree"]))
+                self.launch({"task_id": task["id"], "title": task["title"],
+                             "task_file": Path(str(active["copy"])).relative_to(sidecar_path).as_posix(),
+                             "contract_file": task["task_file"], "files": task["files"], "wave": task["wave"],
+                             "verify_heavy": task["verify_heavy"], "base": head, "worktree": str(sidecar_path),
+                             "task_branch": isolate["task_branch"], "mode": "member", "member": member,
+                             "member_base": isolate["member_base"], "project_root": str(self.primary),
+                             "sidecar": None, "answered": False, "model_selection": task['model_selection']})
+                continue
             prepared = self.runner("prepare-task", head, task["id"], round_size)
             isolate = prepared[0]["result"]
             sidecar = prepared[1]["result"] if len(prepared) > 1 else None

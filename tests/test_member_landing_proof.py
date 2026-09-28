@@ -154,10 +154,28 @@ class MemberLandingProofTests(unittest.TestCase):
         self.rewrite_record(unrelated)
         self.assert_blocked("does not descend from member_base")
 
-    def test_unfinished_member_task_is_blocked_until_member_dispatch(self) -> None:
+    def recovered_verdict(self):
+        report = isolation.recover(self.coordinator, self.coordinator / ".project" / "tasks")
+        return next(task for task in report["tasks"] if task["task"] == TASK_FILE)
+
+    def test_unfinished_member_task_without_isolation_has_nothing_to_recover(self) -> None:
+        isolation.retire_member_task(self.coordinator, "web", "T001")
+        self.assertEqual(self.recovered_verdict()["verdict"], "none")
+
+    def test_pending_member_journal_asks_for_a_landing_retry(self) -> None:
+        from unittest import mock
+        self.edit()
+        with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
+            with self.assertRaises(RuntimeError):
+                self.land()
+        verdict = self.recovered_verdict()
+        self.assertEqual((verdict["verdict"], verdict.get("landing_retry")), ("resume", True))
+
+    def test_unfinished_member_task_with_a_retained_sidecar_resumes(self) -> None:
         report = isolation.recover(self.coordinator, self.coordinator / ".project" / "tasks")
         verdict = next(task for task in report["tasks"] if task["task"] == TASK_FILE)
-        self.assertEqual(verdict["verdict"], "block")
+        self.assertEqual(verdict["verdict"], "resume")
+        self.assertFalse(verdict.get("landing_retry"))
 
     def advance_bound(self) -> None:
         (self.bound / "other.py").write_text("earlier landing\n", encoding="utf-8")

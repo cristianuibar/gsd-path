@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import tempfile
@@ -125,9 +126,69 @@ class MemberTaskBriefTests(unittest.TestCase):
                                     "landed task has invalid historical base"):
             state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
 
+    def test_member_brief_during_build_resolves_at_the_bound_branch_tip(self) -> None:
+        git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
+        (self.member / "src" / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        git(self.member, "add", "-A")
+        git(self.member, "commit", "-q", "-m", "earlier landing")
+        git(self.member, "checkout", "-q", "main")
+        self.write("T001", member_task("T001", "src/new.py", "Follow `src/landed.py`.",
+                                       verify="test -f src/landed.py"))
+        self.assertIn("path missing at the layer base: src/landed.py", self.problems())
+        lock = self.coordinator / ".project" / "build" / "members.json"
+        lock.parent.mkdir(parents=True)
+        lock.write_text('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
+                        '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
+        self.assertEqual(self.problems(), "")
+
+    def test_plan_recovery_brief_uses_the_existing_build_lock(self) -> None:
+        git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
+        (self.member / "src" / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        git(self.member, "add", "-A")
+        git(self.member, "commit", "-q", "-m", "earlier landing")
+        git(self.member, "checkout", "-q", "main")
+        (self.coordinator / ".project" / "plan").mkdir()
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_text(
+            PLAN_WAVE.format(title="demo"), encoding="utf-8")
+        self.write("T001", member_task("T001", "src/new.py", "Follow `src/landed.py`.",
+                                       verify="test -f src/landed.py"))
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, "src/landed.py"):
+            state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+        lock = self.coordinator / ".project" / "build" / "members.json"
+        lock.parent.mkdir(parents=True)
+        lock.write_text('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
+                        '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
+        state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+
     def test_repo_must_name_a_member(self) -> None:
         self.write("T001", member_task("T001", "src/app.py", "Edit `src/app.py`.", repo="sdk"))
         self.assertIn("repo: names no member in MEMBERS.md: sdk", self.problems())
+
+
+class MemberTaskReadyTests(unittest.TestCase):
+    def test_same_path_in_different_repos_is_ready_together(self) -> None:
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as temporary, \
+                mock.patch.dict(os.environ, {build_state.MEMBER_EXECUTION_GATE: "1"}):
+            repo = Path(temporary)
+            run_git(repo, "init", "-q")
+            run_git(repo, "config", "user.email", "t@t")
+            run_git(repo, "config", "user.name", "t")
+            run_git(repo, "switch", "-q", "-c", BRANCH)
+            (repo / ".project" / "plan").mkdir(parents=True)
+            (repo / ".project" / "tasks").mkdir()
+            (repo / ".project" / "STATE.md").write_text(STATE.format(phase="build", branch=BRANCH), encoding="utf-8")
+            (repo / ".project" / "plan" / "PLAN.md").write_text(plan_text(((
+                ("T001", "One", (), ("app.py",)), ("T002", "Two", (), ("app.py",))),)), encoding="utf-8")
+            (repo / ".project" / "tasks" / "T001-task.md").write_text(
+                task_text("T001", "One", 1, (), ("app.py",)), encoding="utf-8")
+            (repo / ".project" / "tasks" / "T002-task.md").write_text(
+                task_text("T002", "Two", 1, (), ("app.py",)).replace("files:", "repo: web\nfiles:", 1), encoding="utf-8")
+            run_git(repo, "add", "-A")
+            run_git(repo, "commit", "-q", "-m", "plan")
+            ready = build_state.ready(str(repo))
+            self.assertEqual(sorted(task["id"] for task in ready["ready"]), ["T001", "T002"])
+            self.assertEqual({task["id"]: task.get("repo") for task in ready["ready"]}, {"T001": None, "T002": "web"})
 
 
 class MemberTaskGraphTests(unittest.TestCase):
@@ -156,7 +217,7 @@ class MemberTaskGraphTests(unittest.TestCase):
 
 
 class MemberTaskBuildTests(unittest.TestCase):
-    def test_build_refuses_member_tasks_until_member_landing_exists(self) -> None:
+    def test_build_refuses_member_tasks_without_the_member_execution_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             run_git(repo, "init", "-q")
