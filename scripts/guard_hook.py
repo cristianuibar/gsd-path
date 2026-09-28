@@ -722,10 +722,12 @@ def target_paths(path, working_directories, repo):
 
 
 def resolve_lenient(path):
-    """Path.resolve(strict=False) for paths Windows cannot name, such as rep*.
+    """Path.resolve(strict=False) that still follows links on Windows.
 
-    Python 3.9 raises OSError resolving them on Windows; later versions and
-    os.path.realpath return the unresolved remainder instead.
+    Python 3.9 raises OSError on Windows for names it cannot open (rep*) and
+    for some links to missing files; the archive checks must not skip those
+    (a symlinked archive path would be allowed), so fall back to
+    os.path.realpath, which resolves what it can and keeps the remainder.
     """
     try:
         return path.resolve(strict=False)
@@ -1042,7 +1044,7 @@ def is_absolute_path(path):
 
 def contains_existing_archive(path, working_directories):
     try:
-        target = Path(path).resolve(strict=False)
+        target = resolve_lenient(Path(path))
     except (OSError, RuntimeError):
         return False
     search_paths = [target, Path.cwd(), *(Path(value) for value in working_directories)]
@@ -1050,7 +1052,7 @@ def contains_existing_archive(path, working_directories):
         if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", str(search_path)):
             continue
         try:
-            resolved = search_path.resolve(strict=False)
+            resolved = resolve_lenient(search_path)
         except (OSError, RuntimeError):
             continue
         for parent in (resolved, *resolved.parents):
@@ -1083,7 +1085,7 @@ def path_in_archive(path, working_directories=(), ancestors=True):
             if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", combined):
                 continue
             try:
-                resolved = Path(combined).resolve(strict=False)
+                resolved = resolve_lenient(Path(combined))
             except (OSError, RuntimeError):
                 continue
             if in_archive(resolved.as_posix()) or (
@@ -1107,7 +1109,7 @@ def working_directory_in_archive(path):
         if os.name != "nt" and re.match(r"^[A-Za-z]:[/\\]", value):
             continue
         try:
-            resolved = Path(value).resolve(strict=False)
+            resolved = resolve_lenient(Path(value))
         except (OSError, RuntimeError):
             continue
         if in_archive(resolved.as_posix()):
