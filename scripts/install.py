@@ -2501,8 +2501,12 @@ def _windows_path_warnings() -> List[str]:
     if not enabled:
         warnings.append("windows: long paths are disabled (LongPathsEnabled=0); files deep in "
                         "managed worktrees may exceed 260 characters")
-    result = subprocess.run(["git", "config", "--get", "core.longpaths"], capture_output=True,
-                            encoding="utf-8", errors="replace", check=False)
+    try:
+        result = subprocess.run(["git", "config", "--get", "core.longpaths"], capture_output=True,
+                                encoding="utf-8", errors="replace", check=False)
+    except OSError:
+        # Without git on PATH there is no git setting to advise on.
+        return warnings
     if result.stdout.strip().lower() != "true":
         warnings.append("windows: git core.longpaths is not true; run "
                         "`git config --global core.longpaths true`")
