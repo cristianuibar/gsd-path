@@ -317,6 +317,17 @@ class GitOutputEncodingTests(unittest.TestCase):
             result = _common.run_git(repo, "-c", "core.quotepath=false", "ls-files", "--others", "-z")
             self.assertEqual(result.stdout.split("\0")[0], "café.md")
 
+    def test_input_reaches_git_byte_exact(self) -> None:
+        # A Windows text-mode pipe would send "\r\n" and hash different bytes.
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            text = "one\ntwo — ✓\n"
+            (repo / "file.md").write_bytes(text.encode("utf-8"))
+            from_file = _common.run_git(repo, "hash-object", "file.md").stdout.strip()
+            from_input = _common.run_git(repo, "hash-object", "--stdin", input=text).stdout.strip()
+            self.assertEqual(from_input, from_file)
+
 
 class ProcessAliveCopyTests(unittest.TestCase):
     """status_runtime and install cannot import _common; their copies must not drift."""
