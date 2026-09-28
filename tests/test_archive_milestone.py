@@ -35,7 +35,8 @@ class ArchiveMilestoneTests(unittest.TestCase):
         return subprocess.run(
             args,
             cwd=cwd,
-            text=True,
+            # git and the scripts speak UTF-8; text=True alone decodes cp1252 on Windows.
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )
@@ -5463,7 +5464,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     ("git", "commit", "-q", "-m", message),
                     cwd=repo,
                     env=env,
-                    text=True,
+                    encoding="utf-8",
                     capture_output=True,
                     check=False,
                 )
@@ -5485,7 +5486,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 ("git", "merge", "--no-ff", "-m", "merge side", "side"),
                 cwd=repo,
                 env=env,
-                text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )
