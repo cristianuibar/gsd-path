@@ -1678,6 +1678,10 @@ def integrate_member_pull_request(coordinator: Path, member: str, archive_path: 
     require_pull_request_merge_provenance(repository, pull["number"], merge)
     refresh_origin(checkout)
     require_pull_request_merge(checkout, merge, reviewed_head, "origin/main")
+    pull = update_pull_request_body(
+        repository, pull, archive_path, reviewed_head, bound,
+        f"{body}\n\n---\n{PR_CREDIT_LINE}",
+    )
     message = member_pull_request_tag_message(tag_name, pull["html_url"], reviewed_head, merge)
     tag_object, tag_published = ensure_integration_tag(checkout, tag_name, merge, message)
     if not tag_published:

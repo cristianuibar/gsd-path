@@ -20,6 +20,7 @@ class MemberPullRequestTests(unittest.TestCase):
     def setUp(self) -> None:
         member_integration.MemberIntegrationTests.setUp(self)
         self.pulls, self.posts, self.patches = [], [], []
+        self.tags_at_patch = []
         self.merge_queue = False
 
     remote_ref = member_integration.MemberIntegrationTests.remote_ref
@@ -41,6 +42,7 @@ class MemberPullRequestTests(unittest.TestCase):
                 "autoMerge": {"nodes": []}, "mergeAction": {"nodes": nodes}}}}})
         if "PATCH" in arguments:
             self.patches.append(arguments)
+            self.tags_at_patch.append(self.remote_ref(f"refs/tags/{TAG}"))
             self.pulls[0]["body"] = next(argument.removeprefix("body=") for argument in arguments
                                          if argument.startswith("body="))
             return reply(self.pulls[0])
@@ -119,6 +121,18 @@ class MemberPullRequestTests(unittest.TestCase):
         self.assertEqual(len(self.posts), 1)
         self.assertEqual(len(self.patches), 1)
         self.assertEqual(self.pulls[0]["title"], "Existing title")
+        self.assertEqual(self.pulls[0]["body"],
+                         f"Archive: {ARCHIVE}\nMember: web\nReviewed-HEAD: {self.member_tip}"
+                         f"\n\n---\n{integration.PR_CREDIT_LINE}")
+
+    def test_merged_pull_request_repairs_body_before_tagging(self) -> None:
+        self.integrate()
+        self.github_merge("--no-ff")
+        self.pulls[0]["body"] = "Missing credit"
+        result = self.integrate()
+        self.assertEqual(result["tag"], TAG)
+        self.assertEqual(len(self.patches), 1)
+        self.assertEqual(self.tags_at_patch, [""])
         self.assertEqual(self.pulls[0]["body"],
                          f"Archive: {ARCHIVE}\nMember: web\nReviewed-HEAD: {self.member_tip}"
                          f"\n\n---\n{integration.PR_CREDIT_LINE}")
