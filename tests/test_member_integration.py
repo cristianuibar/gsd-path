@@ -21,6 +21,7 @@ class MemberIntegrationTests(unittest.TestCase):
         # The member keeps its GitHub origin URL; Git rewrites it to a local bare remote.
         self.remote = self.root.parent / "web-remote.git"
         git(self.root.parent, "init", "-q", "--bare", str(self.remote))
+        git(self.remote, "symbolic-ref", "HEAD", "refs/heads/main")
         git(self.member, "config", "url." + str(self.remote) + ".insteadOf", "https://github.com/acme/web.git")
         git(self.member, "push", "-q", "origin", "main")
         git(self.member, "fetch", "-q", "origin")
