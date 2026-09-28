@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import shlex
 import tempfile
+import time
 from contextlib import contextmanager
 
 try:
@@ -25,6 +26,29 @@ RUNTIME_FILES = (
     "path_config.py", "model_policy.py", "loop_run.py", "members.py",
 )
 GUARDS = ("guard_hook.py", "git_guard.py")
+
+# Access denied and sharing violation: on Windows a scanner or indexer that
+# briefly opens a freshly written file blocks renaming the directory holding it.
+_WINDOWS_BUSY_ERRORS = (5, 32)
+_RENAME_ATTEMPTS = 20
+
+
+def _rename_directory(source, destination):
+    """Path.rename, retried while Windows briefly holds a file inside ``source``."""
+    if os.name != "nt":
+        source.rename(destination)
+        return
+    for attempt in range(_RENAME_ATTEMPTS):
+        try:
+            source.rename(destination)
+            return
+        except PermissionError as error:
+            # Never retry onto a directory that appeared meanwhile.
+            if (getattr(error, "winerror", None) not in _WINDOWS_BUSY_ERRORS
+                    or os.path.lexists(destination)
+                    or attempt == _RENAME_ATTEMPTS - 1):
+                raise
+            time.sleep(min(0.01 * 2 ** attempt, 0.25))
 
 
 def guard_launcher(name):
@@ -118,13 +142,13 @@ def publish(source, *, expected=None, dry_run=False, repair=False):
                 except ValueError:
                     if not repair:
                         raise
-                    destination.rename(previous)
+                    _rename_directory(destination, previous)
             try:
-                staging.rename(destination)
+                _rename_directory(staging, destination)
                 status_runtime.validate_runtime(pin)
             except BaseException:
                 if previous.exists() and not destination.exists():
-                    previous.rename(destination)
+                    _rename_directory(previous, destination)
                 raise
     return pin
 
@@ -208,8 +232,10 @@ def operate(source, project, action, *, dry_run=False):
         pin = publish(source, dry_run=dry_run)
         if not dry_run:
             launcher = project / ".gsd-path/status_runtime.py"
-            original = launcher.read_text(encoding="utf-8")
-            replacement = (source / "scripts/status_runtime.py").read_text(encoding="utf-8")
+            # Exact bytes: read_text() would turn CRLF into LF, leaving the
+            # launcher unequal to the runtime's byte-for-byte copy.
+            original = launcher.read_bytes().decode("utf-8")
+            replacement = (source / "scripts/status_runtime.py").read_bytes().decode("utf-8")
             # Both launchers understand the same declaration schema. Publishing
             # the compatible launcher first leaves the old selection usable.
             if replacement != original:
