@@ -41,6 +41,13 @@ function main(argv) {
   if (paths.length) {
     env.PYTHONPATH = [...paths, env.PYTHONPATH].filter(Boolean).join(path.delimiter);
   }
+  // Tests compare checked-out bytes. A developer's global core.autocrlf=true
+  // (the Git for Windows default) would check fixtures out as CRLF; CI runs
+  // with it off, so match that without touching any git config file.
+  const count = Number(env.GIT_CONFIG_COUNT || 0);
+  env[`GIT_CONFIG_KEY_${count}`] = "core.autocrlf";
+  env[`GIT_CONFIG_VALUE_${count}`] = "false";
+  env.GIT_CONFIG_COUNT = String(count + 1);
   const [command, ...args] = python;
   const result = spawnSync(command, [...args, ...argv], { stdio: "inherit", env });
   if (result.error) {

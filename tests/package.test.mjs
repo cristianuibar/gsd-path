@@ -1,13 +1,30 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { findPython } from "../scripts/dev/py.mjs";
 
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PYTHON = findPython() ?? ["python3"];
+
+
+// npm is npm.cmd on Windows, which only cmd.exe can start. The name stays
+// unquoted: cmd.exe resolves a quoted batch name's %~dp0 to the current
+// directory, so npm.cmd would look for npm-cli.js there.
+function npm(args, options) {
+  if (process.platform !== "win32") return execFileSync("npm", args, options);
+  return execSync(["npm", ...args.map((arg) => `"${arg}"`)].join(" "), options);
+}
+
+
+function python(args, options) {
+  const [command, ...prefix] = PYTHON;
+  return execFileSync(command, [...prefix, ...args], options);
+}
 
 
 function resourceManifest() {
@@ -32,7 +49,7 @@ function normalizedScriptGraph(packageJson, scriptName) {
 
 
 test("npm package includes the pipeline helpers", () => {
-  const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+  const output = npm(["pack", "--dry-run", "--json"], {
     cwd: projectRoot,
     encoding: "utf8",
   });
@@ -65,15 +82,15 @@ test("npm package includes the pipeline helpers", () => {
 test("packed Python installer starts with only packaged files", (context) => {
   const scratch = mkdtempSync(path.join(tmpdir(), "gsd-path-package-"));
   context.after(() => rmSync(scratch, { recursive: true, force: true }));
-  const output = execFileSync(
-    "npm",
+  const output = npm(
     ["pack", "--ignore-scripts", "--json", "--pack-destination", scratch],
     { cwd: projectRoot, encoding: "utf8" }
   );
   const [{ filename }] = JSON.parse(output);
-  execFileSync("tar", ["-xzf", path.join(scratch, filename)], { cwd: scratch });
+  // A bare name: GNU tar (Git for Windows) reads "C:" in a path as a remote host.
+  execFileSync("tar", ["-xzf", filename], { cwd: scratch });
 
-  execFileSync("python3", [path.join(scratch, "package", "scripts", "install.py"), "--help"], {
+  python([path.join(scratch, "package", "scripts", "install.py"), "--help"], {
     cwd: scratch,
     encoding: "utf8",
     env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONPATH: "" },
@@ -93,7 +110,7 @@ test("every copied Python helper imports from its own bundle", (context) => {
       // Hooks need a repository and use hook arguments, not --help.
       execFileSync("git", ["init", "--quiet", "--initial-branch=main", cwd]);
     }
-    execFileSync("python3", [path.join(projectRoot, target), isGitGuard ? "pre-commit" : "--help"], {
+    python([path.join(projectRoot, target), isGitGuard ? "pre-commit" : "--help"], {
       cwd,
       encoding: "utf8",
       env: { ...process.env, PYTHONNOUSERSITE: "1", PYTHONPATH: "" },
@@ -103,7 +120,7 @@ test("every copied Python helper imports from its own bundle", (context) => {
 });
 
 test("plugin manifest conforms to the Agent Plugins specification", () => {
-  const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+  const output = npm(["pack", "--dry-run", "--json"], {
     cwd: projectRoot,
     encoding: "utf8",
   });

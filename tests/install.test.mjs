@@ -7,15 +7,29 @@ import { afterEach, beforeEach, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import * as installer from "../scripts/install.mjs";
+import { findPython } from "../scripts/dev/py.mjs";
 
 // Project behavior moved with its implementation to test_install.py and
 // test_runtime_lifecycle.py. This file covers JS host installs and adapter wiring.
 const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+// Windows needs Developer Mode or elevation to create symlinks.
+const CAN_SYMLINK = (() => {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), "gsd-path-symlink-"));
+  try {
+    fs.symlinkSync(probe, path.join(probe, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+})();
 
 let root;
 let source;
 let env;
 let priorHome;
+let priorProfile;
 const originalHooks = { ...installer.hooks };
 
 function makeSource(base) {
@@ -83,7 +97,9 @@ function makeSource(base) {
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gsd-path-test-"));
   priorHome = process.env.HOME;
-  process.env.HOME = path.join(root, "home");
+  priorProfile = process.env.USERPROFILE;
+  // Windows resolves the home directory from USERPROFILE, not HOME.
+  process.env.HOME = process.env.USERPROFILE = path.join(root, "home");
   source = makeSource(root);
   env = { CODEX_HOME: path.join(root, "legacy") };
   installer.hooks.mismatches = () => [];
@@ -101,6 +117,8 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
   if (priorHome === undefined) delete process.env.HOME;
   else process.env.HOME = priorHome;
+  if (priorProfile === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = priorProfile;
 });
 
 function runInstall(plans, options = {}) {
@@ -143,7 +161,7 @@ test("project adapter receives install options and doctor roots", async () => {
 test("Node CLI installs and explicitly restores an external project runtime", () => {
   const project = path.join(root, "real-project");
   fs.mkdirSync(project);
-  const environment = { ...process.env, HOME: path.join(root, "home") };
+  const environment = { ...process.env, HOME: path.join(root, "home"), USERPROFILE: path.join(root, "home") };
   const git = spawnSync("git", ["init", "-q", project], { encoding: "utf8", env: environment });
   assert.equal(git.status, 0, git.stderr);
   const cli = (flag, extra = []) => spawnSync(process.execPath, [
@@ -567,7 +585,7 @@ test("cursor subagent installed and existing copy backed up", async () => {
   assert.equal(fs.readFileSync(path.join(backup, installer.CURSOR_AGENT_BACKUP_NAME), "utf8"), "old agent\n");
 });
 
-test("existing managed entries backed up and unrelated preserved", async () => {
+test("existing managed entries backed up and unrelated preserved", { skip: !CAN_SYMLINK && "symlinks unavailable" }, async () => {
   const target = path.join(root, "codex", "skills");
   fs.mkdirSync(target, { recursive: true });
   for (const name of ["ogsd", "ogsd-old", "gsd-path", "gsd-path-old"]) {
@@ -629,7 +647,7 @@ test("dry run makes no destination changes", async () => {
   const project = path.join(root, "project");
   const results = await installer.install(REPO_ROOT, [installer.targetPlan("claude", target)], {
     project,
-    env: { ...process.env, HOME: path.join(root, "home") },
+    env: { ...process.env, HOME: path.join(root, "home"), USERPROFILE: path.join(root, "home") },
     dryRun: true,
   });
   assert.ok(!fs.existsSync(target));
@@ -674,7 +692,7 @@ test("stale sync fails before mutation", async () => {
 
 test("real mismatches detects a stale generated resource", () => {
   installer.hooks.mismatches = originalHooks.mismatches;
-  const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const repo = REPO_ROOT;
   assert.deepEqual(installer.mismatches(repo), []);
   const copy = path.join(root, "repo-copy");
   fs.cpSync(repo, copy, {
@@ -1127,7 +1145,7 @@ test("doctor reports missing package version", () => {
   assert.ok(findings.some(({ level, text }) => level === "fail" && text === "package: version cannot be read"));
 });
 
-test("doctor reports an unreadable skills root", () => {
+test("doctor reports an unreadable skills root", { skip: process.platform === "win32" && "Windows ignores chmod" }, () => {
   const skills = path.join(root, "unreadable-skills");
   fs.mkdirSync(skills);
   fs.chmodSync(skills, 0);
@@ -1220,7 +1238,8 @@ test("project runtime version install update refresh", () => {
   const installed = () => JSON.parse(fs.readFileSync(stamp, "utf8")).version;
   assert.equal(installed(), "9.9.9");
   // The Node CLI installs the Python-owned runtime file list, so nothing can drift.
-  const missing = spawnSync("python3", ["-c",
+  const [python, ...pythonPrefix] = findPython() ?? ["python3"];
+  const missing = spawnSync(python, [...pythonPrefix, "-c",
     "import json, sys; from pathlib import Path; import runtime_store, status_runtime; "
     + "pin = json.loads((Path(sys.argv[1]) / '.gsd-path/runtime.json').read_text()); "
     + "home = status_runtime.runtime_home() / pin['digest']; "
