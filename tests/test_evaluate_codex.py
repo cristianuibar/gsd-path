@@ -39,6 +39,9 @@ class EvaluationTests(unittest.TestCase):
                             "if '--version' in sys.argv: print('fixture-cli')\n"
                             "else: print(json.dumps({'type':'turn.completed','usage':{'output_tokens':1},'argv':sys.argv,'prompt':sys.stdin.read()}))\n".encode("utf-8"))
             host.chmod(0o755)
+            if os.name == "nt":
+                # Windows lookup ignores the extensionless fake; a real codex would run.
+                (binary / "codex.cmd").write_bytes(f'@"{sys.executable}" "%~dp0codex" %*\r\n'.encode("utf-8"))
             arguments = [sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"), "run", "--arm", str(arm),
                          "--model", "fixture", "--reasoning", "high", "--sandbox", "danger-full-access"]
             result = subprocess.run(arguments, capture_output=True, text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
