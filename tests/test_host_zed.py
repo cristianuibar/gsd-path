@@ -58,10 +58,12 @@ class ZedSpecTests(unittest.TestCase):
         env = {"ZED_EVAL_CLI": "/opt/eval-cli", "ZED_EVAL_MODEL": "openrouter/x"}
         with unittest.mock.patch.dict(os.environ, env, clear=True):
             args = zed.command(Path("/runs/run-1/prompt.txt"))
-        self.assertEqual(args, ["/opt/eval-cli", "--workdir", ".", "--output-dir", "/runs/run-1", "--model", "openrouter/x"])
+        # resolve() anchors the run directory to a drive on Windows.
+        run_dir = str(Path("/runs/run-1").resolve())
+        self.assertEqual(args, ["/opt/eval-cli", "--workdir", ".", "--output-dir", run_dir, "--model", "openrouter/x"])
         with unittest.mock.patch.dict(os.environ, {"ZED_EVAL_CLI": "/opt/eval-cli"}, clear=True):
             resumed = zed.command(Path("/runs/run-2/prompt.txt"), "thread-1")
-        self.assertEqual(resumed, ["/opt/eval-cli", "--workdir", ".", "--output-dir", "/runs/run-2"])
+        self.assertEqual(resumed, ["/opt/eval-cli", "--workdir", ".", "--output-dir", str(Path("/runs/run-2").resolve())])
 
 
 class ZedParseEventsTests(unittest.TestCase):
