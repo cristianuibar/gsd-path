@@ -598,15 +598,23 @@ def isolate_task(
     }
 
 
-def _member_context(coordinator: Path, member: str) -> Tuple[Path, str, Dict[str, str]]:
+def _member_context(
+    coordinator: Path, member: str, lock_at: Optional[str] = None
+) -> Tuple[Path, str, Dict[str, str]]:
     """The checkout, coordinator project, and lock entry of a locked, verified member."""
     try:
         import members
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts import members
     coordinator = require_directory(coordinator, "coordinator")
-    lock = coordinator / members.LOCK_PATH
-    entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    if lock_at is None:
+        lock = coordinator / members.LOCK_PATH
+        entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    else:
+        shown = run_git(coordinator, "show", f"{lock_at}:{members.LOCK_PATH}")
+        if shown.returncode != 0:
+            raise IsolationError(f"member lock is missing at {lock_at}: {members.LOCK_PATH}")
+        entries = json.loads(shown.stdout)["members"]
     entry = next((item for item in entries if item["name"] == member), None)
     if entry is None:
         raise IsolationError(f"member {member} is not locked for this build because no task named it at build start")
@@ -684,9 +692,10 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
     name = f"{project}-{validate_task_id(task_id)}"
     ref = f"refs/heads/{TASK_BRANCH_PREFIX}{name}"
     tip = run_git(checkout, "rev-parse", "--verify", "--quiet", ref)
-    if tip.returncode == 0 and run_git(
-        checkout, "merge-base", "--is-ancestor", tip.stdout.strip(), f"refs/heads/{entry['branch']}"
-    ).returncode != 0:
+    # Landed commits arrive on the bound branch by cherry-pick, so compare patches.
+    cherry = run_git(checkout, "cherry", f"refs/heads/{entry['branch']}", ref) if tip.returncode == 0 else None
+    if cherry is not None and (cherry.returncode != 0 or any(
+            not line.startswith("- ") for line in cherry.stdout.splitlines())):
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
     registered = _registered_worktrees(checkout)
@@ -759,14 +768,19 @@ def _record_member_journal(path: Path, journal: Dict[str, object]) -> None:
     _common.atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
 
 
-def _member_contract(coordinator: Path, base: str, task_file: str, member: str) -> tuple[str, Set[str]]:
+def _member_contract(
+    coordinator: Path, base: str, task_file: str, member: str,
+    current_text: Optional[str] = None,
+) -> tuple[str, Set[str]]:
     shown = run_git(coordinator, "show", f"{base}:{task_file}")
     if shown.returncode != 0:
         raise IsolationError(f"task contract is missing at {base}: {task_file}")
     fields, error = task_frontmatter(shown.stdout)
     if error or fields is None:
         raise IsolationError(error or f"unreadable task contract: {task_file}")
-    current, _ = _read_task_text(coordinator / task_file)
+    current = current_text
+    if current is None:
+        current, _ = _read_task_text(coordinator / task_file)
     current_fields, current_error = task_frontmatter(current)
     if current_error or current_fields is None:
         raise IsolationError(current_error or f"unreadable current task: {task_file}")
@@ -2158,6 +2172,71 @@ def _resume_task_error(
     return _retained_task_contract_error(current_text, isolate_text)
 
 
+MEMBER_RECORD_RE = re.compile(
+    r"Task: (?P<task>\S+)\nBase: (?P<base>[0-9a-f]{40})\n"
+    r"Member: (?P<member>\S+) (?P<landing>[0-9a-f]{40}) (?P<member_base>[0-9a-f]{40})"
+)
+
+
+def _prove_member_task(
+    coordinator: Path, task_file: str, fields: Dict[str, object], subject: str,
+    history: Dict[str, list[tuple[str, str]]],
+) -> Dict[str, object]:
+    """A done member task: one coordinator record naming a proven member landing."""
+    if fields.get("status") != "done":
+        return {"verdict": "block", "reason": "member task must have status: done"}
+    member = str(fields.get("repo"))
+    records = []
+    for sha, body in history.get(subject, []):
+        match = MEMBER_RECORD_RE.fullmatch(body.strip())
+        if match and match["task"] == task_file and match["member"] == member:
+            records.append((sha, match))
+    if len(records) != 1:
+        return {"verdict": "block", "reason": f"expected one coordinator record for {task_file}, found {len(records)}"}
+    record, match = records[0]
+    if git_output(coordinator, "diff-tree", "--no-commit-id", "--name-only", "-r", record).splitlines() != [task_file]:
+        return {"verdict": "block", "reason": "the coordinator record touches more than the task file"}
+    for field in ("base", "member_base"):
+        if fields.get(field) != match[field]:
+            return {"verdict": "block", "reason": f"task {field} does not match the coordinator record"}
+    try:
+        recorded = run_git(coordinator, "show", f"{record}:{task_file}")
+        if recorded.returncode != 0:
+            raise IsolationError(f"task is missing from coordinator record: {task_file}")
+        recorded_fields, error = task_frontmatter(recorded.stdout)
+        if error or recorded_fields is None:
+            raise IsolationError(error or f"unreadable recorded task: {task_file}")
+        if recorded_fields.get("status") != "done":
+            raise IsolationError("recorded task status is not done")
+        for field in ("base", "member_base"):
+            if recorded_fields.get(field) != match[field]:
+                raise IsolationError(f"recorded task {field} does not match the coordinator record")
+        checkout, _, entry = _member_context(coordinator, member, lock_at=record)
+        _, allowed = _member_contract(
+            coordinator, match["base"], task_file, member, current_text=recorded.stdout
+        )
+        immutable = ("id", "title", "repo", "files", "deps", "wave")
+        if any(fields.get(key) != recorded_fields.get(key) for key in immutable):
+            raise IsolationError(f"task artifact contract differs from {match['base']}: {task_file}")
+    except IsolationError as error:
+        return {"verdict": "block", "reason": str(error)}
+    landing = match["landing"]
+    history_on_bound = git_output(checkout, "rev-list", "--first-parent", f"refs/heads/{entry['branch']}").split()
+    if landing not in history_on_bound:
+        return {"verdict": "block", "reason": f"landing {landing[:12]} is not on the member bound branch"}
+    parent, error = _single_parent(checkout, landing)
+    if error or parent is None or run_git(
+            checkout, "merge-base", "--is-ancestor", match["member_base"], parent).returncode != 0:
+        return {"verdict": "block", "reason": error or "member landing does not descend from member_base"}
+    paths = git_output(checkout, "diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames",
+                       parent, landing).splitlines()
+    body = member_commit_body(task_file, paths, match["member_base"], match["base"])
+    error = _prove_member_commit(checkout, landing, parent, subject, body, allowed)
+    if error:
+        return {"verdict": "block", "reason": f"member landing proof failed: {error}"}
+    return {"verdict": "recovered", "commit": record, "base": match["base"], "landing": landing}
+
+
 def _recover_task(
     primary: Path,
     path: Path,
@@ -2189,6 +2268,9 @@ def _recover_task(
         return result("block", reason=str(error))
     except IsolationError as exc:
         return result("block", reason=str(exc))
+    if fields.get("repo"):
+        # Only the landing record proves a member task; unfinished ones block until member dispatch (S3c3).
+        return result(**_prove_member_task(primary, task_file, fields, subject, history))
     task_branch = task_branch_name(task_id)
     branch_exists = task_branch in branches
     worktree, worktree_error = _worktree_report(
