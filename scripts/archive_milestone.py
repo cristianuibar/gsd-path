@@ -10,14 +10,12 @@ requires network access to verify live origin publication.
 
 import argparse
 import filecmp
-import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
@@ -392,17 +390,15 @@ def discussion_lock(active_root: Path) -> Iterator[None]:
             "--git-path",
             "gsd-path-discussion.lock",
         )
-        if resolved.returncode == 0 and resolved.stdout.strip():
-            lock_path = Path(resolved.stdout.strip())
-            if not lock_path.is_absolute():
-                lock_path = active_root.parent / lock_path
-        else:
-            # Outside git (which the POSIX directory lock allows), key a temp
-            # file to this project instead.
-            key = hashlib.sha256(
-                os.path.normcase(str(active_root.resolve())).encode("utf-8")
-            ).hexdigest()[:16]
-            lock_path = Path(tempfile.gettempdir()) / f"gsd-path-discussion-{key}.lock"
+        if resolved.returncode != 0 or not resolved.stdout.strip():
+            # Outside git, which the POSIX directory lock allows: the same
+            # named kernel mutex pipeline_state holds for this directory.
+            with _common.directory_mutex(active_root):
+                yield
+            return
+        lock_path = Path(resolved.stdout.strip())
+        if not lock_path.is_absolute():
+            lock_path = active_root.parent / lock_path
         with _common.exclusive_lock(lock_path):
             yield
         return
