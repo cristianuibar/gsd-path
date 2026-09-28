@@ -1952,7 +1952,8 @@ def bundled_helper_invocation(command, tokens, working_directories, helpers=PIPE
     runtime = runtime.resolve()
     for base in working_directories or [os.getcwd()]:
         try:
-            script = (Path(base) / operand).resolve()
+            # A Git Bash /c/... operand names the C: drive, not a folder named c.
+            script = (Path(base) / native_path_text(operand)).resolve()
             if (
                 script.name in helpers
                 and (script.is_relative_to(runtime) or (
