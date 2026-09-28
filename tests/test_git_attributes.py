@@ -1,5 +1,6 @@
 """The installer's local LF rule for .project (issue #200)."""
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -13,8 +14,11 @@ import install
 
 
 def git(repo: Path, *arguments: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *arguments], check=True,
-                          capture_output=True, text=True).stdout
+    # The dev runner pins core.autocrlf=false through GIT_CONFIG_*, which would
+    # override the repository setting these tests exercise.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_CONFIG_")}
+    return subprocess.run(["git", "-C", str(repo), *arguments], check=True, env=env,
+                          capture_output=True, encoding="utf-8", errors="replace").stdout
 
 
 class MergedAttributesTests(unittest.TestCase):
