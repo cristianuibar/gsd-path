@@ -1298,6 +1298,13 @@ def isolate_verify(primary: Path, base: str, name: str, historical_task: Optiona
     }
 
 
+def check_member_verify_collision(entries: Sequence[Dict[str, str]], sidecar_name: str) -> None:
+    if any(item["name"] == sidecar_name for item in entries):
+        raise IsolationError(
+            f"locked member {sidecar_name} collides with coordinator Verify sidecar folder {sidecar_name}"
+        )
+
+
 def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, Dict[str, str]]:
     """Check out each locked member's bound tip beside the coordinator verify sidecar."""
     try:
@@ -1306,6 +1313,7 @@ def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, Dict[st
         from scripts import members
     lock = coordinator / members.LOCK_PATH
     entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    check_member_verify_collision(entries, sidecar.name)
     created: Dict[str, Dict[str, str]] = {}
     try:
         for item in entries:

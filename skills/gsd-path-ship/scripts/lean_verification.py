@@ -197,6 +197,8 @@ def verify_project(repo, expected_head):
     _, waves = contracts._plan_waves(plan)
     # Member heads are not in the ledger key, so a member milestone always runs again.
     members = _locked_members(repo)
+    if members:
+        isolation.check_member_verify_collision(members, "project-verify")
     entry = None if members else build_state.verify_lookup(str(repo), command, expected_head)["entry"]
     relative = ".project/review/final-gap-1.md"
     destination = repo / relative
@@ -231,13 +233,18 @@ def verify_project(repo, expected_head):
         isolation.retire(repo, worktree, sidecar["branch"], force=False)
         raise
     try:
-        completed = subprocess.run(["bash", "-c", command], cwd=worktree,
-                                   text=True, capture_output=True)
-        if sidecars:
-            isolation.check_member_verify(sidecars)
-    finally:
-        if sidecars:
-            isolation.retire_member_verify(sidecars)
+        try:
+            completed = subprocess.run(["bash", "-c", command], cwd=worktree,
+                                       text=True, capture_output=True)
+            if sidecars:
+                isolation.check_member_verify(sidecars)
+        finally:
+            if sidecars:
+                isolation.retire_member_verify(sidecars)
+    except BaseException:
+        isolation.clean_verify(repo, worktree, expected_head, sidecar["branch"])
+        isolation.retire(repo, worktree, sidecar["branch"], force=False)
+        raise
     execution = {"exit_code": completed.returncode, "stdout": completed.stdout,
                  "stderr": completed.stderr, "worktree": str(worktree), "branch": sidecar["branch"]}
     passed = completed.returncode == 0

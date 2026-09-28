@@ -96,6 +96,26 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.assertEqual(git(self.member, "rev-parse", created["web"]["branch"]), self.member_tip)
         isolation.retire_member_verify(created)
 
+    def test_member_named_project_verify_is_refused_before_sidecar_creation(self) -> None:
+        listed = self.root / ".project" / "MEMBERS.md"
+        listed.write_text(listed.read_text().replace("## web\n", "## project-verify\n"))
+        marker = Path(git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir")) / "gsd-path" / "member.json"
+        role = json.loads(marker.read_text())
+        role["name"] = "project-verify"
+        marker.write_text(json.dumps(role))
+        lock = self.root / ".project" / "build" / "members.json"
+        locked = json.loads(lock.read_text())
+        locked["members"][0]["name"] = "project-verify"
+        lock.write_text(json.dumps(locked))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "lock colliding member name")
+        head = git(self.root, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(isolation.IsolationError, "locked member project-verify collides"):
+            lean_verification.verify_project(self.root, head)
+        self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(git(self.root, "branch", "--list", "gsd-path-verify/*"), "")
+        self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
+
     def test_unlocked_stale_marker_does_not_block_cleanup(self) -> None:
         api = self.root.parent / "api-checkout"
         api.mkdir()
@@ -146,6 +166,11 @@ class MemberProjectVerifyTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "HEAD changed"):
             lean_verification.verify_project(self.root, head)
         self.assertEqual(gap.read_bytes() if gap.exists() else None, before)
+        self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(git(self.root, "branch", "--list", "gsd-path-verify/*"), "")
+        git(self.member, "reset", "--hard", self.member_tip)
+        retry = lean_verification.verify_project(self.root, head)
+        self.assertTrue(retry["passed"], retry)
 
     def test_prepare_final_does_not_accept_existing_member_review(self) -> None:
         self.use_member_verify_command()
