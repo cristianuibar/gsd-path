@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import discussion_records
+from tests._platform import requires_symlink
 
 
 SCRIPT = ROOT / "scripts" / "discussion_records.py"
@@ -354,6 +355,7 @@ archive: null
                         ).exists()
                     )
 
+    @requires_symlink
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

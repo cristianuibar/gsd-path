@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import bootstrap_repository
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -65,7 +66,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
                     remote = root / f"{repository}.git"
                     visibility = remote / "gsd-path-visibility"
                     if visibility.is_file():
-                        print(visibility.read_text().strip())
+                        print(visibility.read_bytes().decode("utf-8").strip())
                         raise SystemExit(0)
                     print("repository visibility unavailable", file=sys.stderr)
                     raise SystemExit(1)
@@ -80,7 +81,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
                         subprocess.run(["git", "init", "-q", "-b", default_branch], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.name", "Fixture"], cwd=seed, check=True)
                         subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=seed, check=True)
-                        (seed / "README.md").write_text("# Demo\\n")
+                        (seed / "README.md").write_bytes(("# Demo\\n").encode("utf-8"))
                         subprocess.run(["git", "add", "README.md"], cwd=seed, check=True)
                         subprocess.run(["git", "commit", "-q", "-m", "Initial commit"], cwd=seed, check=True)
                         subprocess.run(["git", "clone", "-q", "--bare", str(seed), str(remote)], check=True)
@@ -89,7 +90,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
                         for value in args[3:]
                         if value in {"--public", "--private", "--internal"}
                     )
-                    (remote / "gsd-path-visibility").write_text(visibility + "\\n")
+                    (remote / "gsd-path-visibility").write_bytes((visibility + "\\n").encode("utf-8"))
                     raise SystemExit(0)
 
                 if args[:2] == ["repo", "clone"]:
@@ -214,6 +215,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
             repeated = self.run_command(*command, cwd=worktree, env=environment)
             self.assertEqual(repeated.returncode, 0, repeated.stderr)
 
+    @requires_symlink
     def test_create_rejects_unjournaled_remote_and_path_collisions(self) -> None:
         cases = (
             ("remote", "GitHub repository already exists"),
@@ -654,6 +656,7 @@ Primary worktree: <primary-worktree>
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("creation SHA", rejected.stderr)
 
+    @requires_symlink
     def test_create_rejects_symlinked_transaction_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

@@ -12,6 +12,7 @@ from gsd_daemon.config import Config
 from gsd_daemon.plugin import DEFAULT_REPO, HOSTS, PluginManager
 from gsd_daemon.serve import serve
 from gsd_daemon.watcher import Watcher
+from tests._platform import requires_symlink
 
 GUARD_MARKER = "gsd-path guard"
 RUNTIME_MARKER = "gsd-path project runtime"
@@ -445,6 +446,7 @@ class UninstallPlanTests(unittest.TestCase):
             else:
                 self.assertEqual(expected, agents.read_bytes().decode("utf-8"))
 
+    @requires_symlink
     def test_project_uninstall_keeps_symlinked_agents(self):
         shared = Path(self.tmp.name) / "shared-agents.md"
         text = "<!-- gsd-path:begin -->\nx\n<!-- gsd-path:end -->\nshared\n"

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import detect_project, pipeline_git, pipeline_state
+from tests._platform import requires_symlink
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,6 +101,7 @@ class PipelineGitTests(unittest.TestCase):
                 {"branch": "gsd-path/M001"}, "router bound initial milestone")
             self.assertEqual(result["state"]["branch"], "gsd-path/M001")
 
+    @requires_symlink
     def test_initial_state_exception_rejects_other_dirt_and_invalid_state(self) -> None:
         for change in ("product", "extra", "ignored-extra", "staged", "invalid", "noninitial",
                        "symlink", "hardlink", "directory-link"):

@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import guard_hook
 import test_guard_hook
+from tests._platform import requires_symlink
 
 MEMBERS = ROOT / "scripts" / "members.py"
 STATE = (
@@ -119,6 +120,7 @@ class MemberWriteTests(unittest.TestCase):
         for phase in ("plan", "build"):
             self.assert_denied(self.member / "app.py", "members.py repair", phase=phase)
 
+    @requires_symlink
     def test_coordinator_symlink_refuses_stale_member_marker(self) -> None:
         (self.coordinator / ".project" / "MEMBERS.md").unlink()
         link = self.coordinator / "member-app.py"

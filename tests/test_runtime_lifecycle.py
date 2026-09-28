@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from scripts import install
+from tests._platform import requires_symlink
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -401,6 +402,7 @@ process.exitCode = await main([]);
         self.assertEqual((runtime / "pipeline_state.py").read_bytes(), (SOURCE / "scripts/pipeline_state.py").read_bytes())
 
 
+    @requires_symlink
     def test_migration_resumes_after_process_exit(self):
         runtime = self.repo / ".gsd-path/runtime"
         runtime.mkdir(parents=True)

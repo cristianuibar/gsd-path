@@ -15,6 +15,8 @@ import archive_milestone
 import check_handoffs
 import lean_verification
 import members
+from tests._platform import posix_permissions_only
+from tests._platform import requires_symlink
 
 SCRIPT = ROOT / "scripts" / "members.py"
 
@@ -162,6 +164,7 @@ class MemberTests(unittest.TestCase):
         commit_all(member, "path state")
         self.assert_refused(self.add("web", member), "active milestone")
 
+    @requires_symlink
     def test_add_and_validate_refuse_unreadable_member_state(self) -> None:
         for kind in ("broken symlink", "live symlink", "directory"):
             with self.subTest(kind):
@@ -375,6 +378,7 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(self.run_members("repair").returncode, 0)
         self.assertEqual(members.member_role(member)["coordinator"], moved)
 
+    @posix_permissions_only
     def test_repair_skips_valid_read_only_marker_and_fixes_missing_marker(self) -> None:
         first = self.joined("web")
         second = self.joined("sdk")
@@ -428,6 +432,7 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(added.returncode, 0, added.stderr)
         self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
 
+    @posix_permissions_only
     def test_add_marker_write_failure_leaves_members_unchanged_for_retry(self) -> None:
         member = self.make_member("web")
         marker = self.marker_path(member)
@@ -446,6 +451,7 @@ class MemberTests(unittest.TestCase):
         self.assertEqual(retried.returncode, 0, retried.stderr)
         self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
 
+    @requires_symlink
     def test_add_refuses_marker_directory_symlink_to_checkout(self) -> None:
         member = self.make_member("web")
         directory = self.marker_path(member).parent

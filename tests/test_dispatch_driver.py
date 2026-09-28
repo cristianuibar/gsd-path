@@ -33,13 +33,13 @@ FAKE_CODER = textwrap.dedent(
     worktree = Path(re.search(r"^Work only in this worktree root: (.+)$", brief, re.M).group(1))
     task_path = Path(re.search(r"^Task file: (.+)$", brief, re.M).group(1))
     task_id = re.search(r"task (T\\d+)\\.", brief).group(1)
-    text = task_path.read_text()
+    text = task_path.read_bytes().decode("utf-8")
     declared = re.search(r"^files:\\n  - (.+)$", text, re.M).group(1)
     mode = os.environ.get("FAKE_MODE", "ready")
     if mode == "slow":
         time.sleep(3)
     if mode in ("question", "questionjson") and "Orchestrator answer:" not in text:
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which greeting? — readings: hi, hello\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which greeting? — readings: hi, hello\\n").encode("utf-8"))
         if mode == "questionjson":
             import json
             print(json.dumps({"result": f"RESULT: {task_id} blocked", "usage": {"output_tokens": 3}}))
@@ -47,16 +47,16 @@ FAKE_CODER = textwrap.dedent(
             print(f"RESULT: {task_id} blocked")
         sys.exit(0)
     if mode == "question2" and "which file?" not in text:
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n").encode("utf-8"))
         print(f"RESULT: {task_id} blocked")
         sys.exit(0)
     if mode == "questioncrash":
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n").encode("utf-8"))
         sys.exit(2)
     target = worktree / declared
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n")
-    task_path.write_text(text + f"- 2026-09-07 — implemented {declared}; Verify pass\\n")
+    target.write_bytes(("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n").encode("utf-8"))
+    task_path.write_bytes((text + f"- 2026-09-07 — implemented {declared}; Verify pass\\n").encode("utf-8"))
     if mode == "claudejson":
         import json
         print(json.dumps({"result": f"RESULT: {task_id} ready", "usage": {"output_tokens": 3}}))
@@ -97,7 +97,7 @@ FAKE_REVIEWER = textwrap.dedent(
         lines += [f"### {sc} — {criterion}: " + ("fail" if failed else "pass"),
                   ("- ❌ " if failed else "- ✅ ") + criterion + (" — found: wrong output, src/app.py:1\\n  fix: print hello" if failed else " — recorded Verify")]
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text("\\n".join(lines) + "\\n")
+    staged.write_bytes(("\\n".join(lines) + "\\n").encode("utf-8"))
     print(f"RESULT: {name} {verdict}")
     """
 )
@@ -120,7 +120,7 @@ FAKE_SKEPTIC = textwrap.dedent(
         lines += [f"### Observation {n}: {verdict}", "", "checked", ""]
     lines += ["## Verdict", "", verdict, "", "## Evidence", "", "Re-ran Verify in the sidecar.", ""]
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text("\\n".join(lines))
+    staged.write_bytes(("\\n".join(lines)).encode("utf-8"))
     print(f"Verdict: {verdict}")
     """
 )
@@ -137,8 +137,8 @@ FAKE_PANELIST = textwrap.dedent(
     depth = re.search(r"Depth for this brief: (\\w+)\\.", brief).group(1)
     wave, cycle = re.search(r"wave (\\d+), cycle (\\d+)", brief).groups()
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text(f"# Panel — wave {wave}, cycle {cycle}\\n\\n- Family: {family}\\n- Model: {model}\\n"
-                      f"- Depth: {depth}\\n\\n## Findings\\n\\n- none\\n\\n## Summary\\n\\nNo findings.\\n")
+    staged.write_bytes((f"# Panel — wave {wave}, cycle {cycle}\\n\\n- Family: {family}\\n- Model: {model}\\n"
+                        f"- Depth: {depth}\\n\\n## Findings\\n\\n- none\\n\\n## Summary\\n\\nNo findings.\\n").encode("utf-8"))
     print("0 findings")
     """
 )

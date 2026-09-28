@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests._platform import posix_permissions_only
+from tests._platform import requires_symlink
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "migrate_core.py"
@@ -64,6 +66,7 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertNotEqual(repeated.returncode, 0)
         self.assertEqual((output / "core/PROJECT.md").read_bytes(), self.source["PROJECT.md"])
 
+    @requires_symlink
     def test_rejects_empty_core_input_and_symlinks_without_output(self):
         for name in self.source:
             (self.planning / name).unlink()
@@ -97,6 +100,7 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(output.exists())
 
+    @posix_permissions_only
     def test_unreadable_nested_source_rejects_capture_without_output(self):
         phases = self.planning / "phases"
         mode = phases.stat().st_mode
@@ -115,6 +119,7 @@ class CoreMigrationTests(unittest.TestCase):
         finally:
             phases.chmod(mode)
 
+    @posix_permissions_only
     def test_unreadable_nested_bundle_rejects_incomplete_manifest(self):
         output = self.root / "bundle"
         prepared = self.run_command("prepare", "--output", str(output))
@@ -220,6 +225,7 @@ class CoreMigrationTests(unittest.TestCase):
         extra.unlink()
         self.assertEqual(self.verify(output).returncode, 0)
 
+    @requires_symlink
     def test_verify_rejects_unowned_manifest_and_linked_evidence(self):
         output = self.root / "bundle"
         self.assertEqual(self.run_command("prepare", "--output", str(output)).returncode, 0)

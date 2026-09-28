@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import install
 import members
+from tests._platform import requires_symlink
 
 INSTALL = ROOT / "scripts" / "install.py"
 MEMBERS = ROOT / "scripts" / "members.py"
@@ -218,6 +219,7 @@ class MemberInstallTests(unittest.TestCase):
         self.assertIn("coordinator guard is not installed", result.stderr)
         self.assertEqual(list(self.hooks.iterdir()), [])
 
+    @requires_symlink
     def test_existing_temporary_symlink_refuses_without_changing_hooks(self) -> None:
         self.join()
         executable(self.hooks / "pre-commit", "#!/bin/sh\nexit 0\n")

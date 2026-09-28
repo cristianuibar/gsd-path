@@ -9,6 +9,7 @@ from unittest import mock
 from scripts import state_checkpoint
 from scripts import archive_milestone, isolation, pipeline_state, pipeline_undo
 from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
+from tests._platform import requires_symlink
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -716,6 +717,7 @@ Waves checked: 1
             )
             self.assertFalse(next_state.exists())
 
+    @requires_symlink
     def test_lookahead_discard_rejects_target_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = init_repo(Path(tmp))

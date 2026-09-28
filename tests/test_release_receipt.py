@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from tests._platform import posix_permissions_only
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +73,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         result = self.check_hooks(self.reference)
         self.assertEqual("pass", result["git_hooks"])
 
+    @posix_permissions_only
     def test_nonexecutable_fixture_pre_commit_fails(self):
         (self.fixture / self.hook).chmod(0o644)
         result = self.check_hooks(self.fixture, self.reference)
@@ -90,6 +92,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
                 self.assertEqual({"pre-commit": True, "commit-msg": executable},
                                  result["fixture_hook_executable"])
 
+    @posix_permissions_only
     def test_nonexecutable_reference_pre_commit_stays_inert(self):
         (self.reference / self.hook).chmod(0o644)
         result = release_receipt.git_hook_check(self.fixture, self.archive, self.reference)
@@ -98,6 +101,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         self.assertEqual(0, result["steps"][0]["exit_code"])
         self.assertEqual(0, result["steps"][1]["exit_code"])
 
+    @posix_permissions_only
     def test_nonexecutable_commit_msg_stays_inert(self):
         hook = self.reference / ".git/hooks/commit-msg"
         hook.write_bytes("#!/bin/sh\nexit 1\n".encode("utf-8"))

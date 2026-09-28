@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from scripts import build_state, integration, isolation, lean_verification, pipeline_git
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +165,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.assertIn("rebased landing changes different bytes, paths or modes", result.stderr)
         self.assertFalse((self.repo / RECEIPT).exists())
 
+    @requires_symlink
     def test_receipt_symlink_loop_blocks_without_traceback(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from scripts import members, pipeline_state
+from tests._platform import requires_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 MEMBERS = ROOT / "scripts" / "members.py"
@@ -111,6 +112,7 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
         self.assertEqual(self.branch("web"), branch)
 
+    @requires_symlink
     def test_symlinked_build_directory_blocks_member_start(self) -> None:
         self.tasks("web")
         outside = self.root / "outside"
@@ -126,6 +128,7 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertIsNone(self.branch("web"))
         self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
 
+    @requires_symlink
     def test_symlinked_build_directory_blocks_member_free_reentry(self) -> None:
         self.tasks("web")
         self.start()
@@ -145,6 +148,7 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
         self.assertEqual(self.branch("web"), branch)
 
+    @requires_symlink
     def test_symlinked_member_lock_file_blocks_start(self) -> None:
         self.tasks("web")
         build_dir = self.coordinator / ".project" / "build"

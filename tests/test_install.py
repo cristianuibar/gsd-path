@@ -14,6 +14,8 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import install
+from tests._platform import posix_permissions_only
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -846,6 +848,7 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue(hasattr(parsed, target))
             self.assertTrue(hasattr(parsed, f"{target}_root"))
 
+    @requires_symlink
     def test_existing_managed_entries_are_backed_up_and_unrelated_preserved(self):
         target = self.root / "codex" / "skills"
         target.mkdir(parents=True)
@@ -1455,6 +1458,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("source resources are stale", error)
         self.assertEqual(before, runtime.read_bytes())
 
+    @requires_symlink
     def test_target_root_must_not_contain_or_descend_from_source(self):
         parent_alias = self.root / "parent-alias"
         parent_alias.symlink_to(self.root.parent, target_is_directory=True)
@@ -2194,6 +2198,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, cursor_result.returncode, cursor_result.stderr)
         self.assertEqual("guard-ran", cursor_result.stdout.strip())
 
+    @requires_symlink
     def test_native_hook_install_rejects_unsafe_project_directories(self):
         for host in ("codex", "cursor"):
             with self.subTest(host=host):
@@ -2811,6 +2816,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("unreadable runtime", error)
         self.assertNotIn("Traceback", error)
 
+    @requires_symlink
     def test_hooks_refresh_rejects_symlinked_project_runtime(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -2842,6 +2848,7 @@ class InstallerTests(unittest.TestCase):
             outside.read_text(encoding="utf-8"),
         )
 
+    @requires_symlink
     def test_project_install_rejects_symlinked_runtime_directory(self):
         project = self.root / "symlinked-runtime-project"
         outside = self.root / "outside-runtime"
@@ -2869,6 +2876,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([], list(outside.iterdir()))
         self.assertFalse(target.exists())
 
+    @requires_symlink
     def test_project_install_rejects_symlinked_runtime_parent(self):
         project = self.root / "symlinked-runtime-parent-project"
         outside = self.root / "outside-runtime-parent"
@@ -2896,6 +2904,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([], list((outside / "runtime").iterdir()))
         self.assertFalse(target.exists())
 
+    @requires_symlink
     def test_hooks_refresh_rejects_symlinked_runtime_directory(self):
         project = self.root / "refresh-symlinked-runtime-project"
         (project / ".git").mkdir(parents=True)
@@ -3029,6 +3038,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("incomplete install", error)
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_project_runtime(self):
         project = self.root / "doctor-symlinked-runtime"
         runtime_parent = project / install.HOOKS_DIRECTORY
@@ -3055,6 +3065,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_project_contracts(self):
         project = self.root / "doctor-symlinked-contracts"
         project.mkdir()
@@ -3134,6 +3145,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_native_and_git_wiring(self):
         project = self.root / "doctor-symlinked-wiring"
         project.mkdir()
@@ -3171,6 +3183,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_effective_git_hooks(self):
         project = self.root / "doctor-unreadable-git-wiring"
         project.mkdir()
@@ -3204,6 +3217,8 @@ class InstallerTests(unittest.TestCase):
                 )
             )
 
+    @requires_symlink
+    @posix_permissions_only
     def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
         project = self.root / "doctor-unsafe-scripts"
         managed = project / install.HOOKS_DIRECTORY
@@ -3269,6 +3284,7 @@ class InstallerTests(unittest.TestCase):
             {"level": "fail", "text": "package: version cannot be read"}, findings
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_skills_root(self):
         root = self.root / "unreadable-skills"
         root.mkdir()
@@ -3288,6 +3304,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_bridge_and_git_hooks(self):
         project = self.root / "doctor-unreadable-contracts"
         (project / ".git").mkdir(parents=True)
@@ -3603,6 +3620,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("not a managed GSD Path hook settings file", error)
         self.assertEqual(original, settings.read_text(encoding="utf-8"))
 
+    @requires_symlink
     def test_hooks_refresh_full_does_not_follow_legacy_temporary_symlink(self):
         project = self.root / "temporary-symlink-project"
         (project / ".git").mkdir(parents=True)
@@ -3627,6 +3645,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual("outside\n", outside.read_text(encoding="utf-8"))
         self.assertTrue(legacy_temporary.is_symlink())
 
+    @requires_symlink
     def test_hooks_refresh_full_rejects_symlinked_native_parent(self):
         project = self.root / "symlink-parent-project"
         (project / ".git").mkdir(parents=True)
@@ -3662,6 +3681,7 @@ class InstallerTests(unittest.TestCase):
             "{ guard_hook.py .gsd-path\n", settings_path.read_text(encoding="utf-8")
         )
 
+    @posix_permissions_only
     def test_hooks_refresh_full_recreates_missing_git_hooks_and_modes(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -3679,6 +3699,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(os.access(pre_commit, os.X_OK))
         self.assertTrue(os.access(commit_msg, os.X_OK))
 
+    @requires_symlink
     def test_hooks_refresh_full_rejects_symlinked_settings(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)

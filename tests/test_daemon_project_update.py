@@ -15,6 +15,7 @@ from gsd_daemon.model import ProjectStatus
 from gsd_daemon.plugin import PluginManager
 from gsd_daemon.serve import serve_in_thread
 from tests import test_daemon_board_ui as board_ui
+from tests._platform import requires_symlink
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -23,6 +24,7 @@ class ProjectUpdateTests(unittest.TestCase):
     orca = board_ui.BoardUITests.orca
     js = board_ui.BoardUITests.js
 
+    @requires_symlink
     def test_real_update_and_dark_menu(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()

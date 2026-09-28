@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from scripts import detect_project, model_policy
 from tests.test_pipeline_state import state_text
+from tests._platform import requires_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / 'scripts/path_config.py'
@@ -94,6 +95,7 @@ class PathConfigTests(unittest.TestCase):
         self.cli('reset', 'models.roles.coder.effort')
         self.assertEqual(model_policy.resolve(self.repo, '.project', 'coder', CAPS, {})['selected']['effort'], 'high')
 
+    @requires_symlink
     def test_invalid_and_unsafe_writes_leave_files_unchanged(self):
         path = self.profile({'review_panel': 'off'})
         before = path.read_bytes()

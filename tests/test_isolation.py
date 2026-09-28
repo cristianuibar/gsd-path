@@ -11,6 +11,7 @@ from typing import Optional
 from unittest import mock
 
 from scripts import build_state, isolation, pipeline_git
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,7 @@ class IsolationTests(unittest.TestCase):
             check=False,
         )
 
+    @requires_symlink
     def test_prune_host_scratch_removes_only_file_free_claude_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / ".project"
@@ -776,6 +778,7 @@ class IsolationTests(unittest.TestCase):
                 ],
             )
 
+    @requires_symlink
     def test_parallel_land_rejects_a_symlink_task_in_a_clean_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -1010,6 +1013,7 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(report["verdict"], "recovered")
             self.assertEqual(report["commit"], landed["commit"])
 
+    @requires_symlink
     def test_land_rejects_a_symlink_task_without_writing_its_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

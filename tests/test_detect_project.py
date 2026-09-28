@@ -765,6 +765,7 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "git", "path": "app.py"}],
             )
 
+    @requires_symlink
     def test_symlinked_git_metadata_fails_classification(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -1035,6 +1036,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_markdown_symlink_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1052,6 +1054,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_markdown_below_symlinked_directory_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1076,6 +1079,7 @@ class DetectProjectTests(unittest.TestCase):
             ):
                 self.classify(repo)
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_markdown_symlink_replacement_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1117,6 +1121,7 @@ class DetectProjectTests(unittest.TestCase):
                 ):
                     self.classify(repo)
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
     def test_markdown_parent_replacement_stays_anchored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1270,6 +1275,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_nonregular_staged_skill_marker_does_not_verify_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1293,6 +1299,7 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "git", "path": "tools/gsd-path-helper/helper.py"}],
             )
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_source_under_linked_bundle_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1543,6 +1550,7 @@ class DetectProjectTests(unittest.TestCase):
             )
             self.assertFalse((repo / ".project").exists())
 
+    @requires_symlink
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",
@@ -1580,6 +1588,7 @@ class DetectProjectTests(unittest.TestCase):
                     detect_project.initialize(repo, template)
             self.assertFalse((target / "STATE.md").exists())
 
+    @requires_symlink
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",

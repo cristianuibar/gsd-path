@@ -168,6 +168,8 @@ class DryRunTests(unittest.TestCase):
             self.assertIn("delete login item", output)
 
 
+# launchctl addresses the GUI domain by uid; only POSIX has one.
+@unittest.skipUnless(hasattr(os, "getuid"), "launchctl domains need a POSIX uid")
 class DarwinInstallTests(unittest.TestCase):
     def test_command_sequence_and_idempotency(self):
         with tempfile.TemporaryDirectory() as tmp:

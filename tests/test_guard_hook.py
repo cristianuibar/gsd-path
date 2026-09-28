@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import guard_hook
 from install import PROJECT_RUNTIME_SCRIPTS
 import status_runtime
+from tests._platform import requires_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
 
@@ -571,6 +572,7 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    @requires_symlink
     def test_plain_prompt_denies_pipeline_control_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
@@ -667,6 +669,7 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    @requires_symlink
     def test_project_alias_symlink_does_not_spoof_case_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1621,6 +1624,7 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    @requires_symlink
     def test_denies_archive_path_through_symlink(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import git_guard
+from tests._platform import can_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "git_guard.py"
 TASK_FILE = (
@@ -870,6 +871,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 with self.subTest(allowed=command):
                     self.assertEqual(0, result.returncode, result.stderr)
 
+        if not can_symlink():
+            return  # The cross-worktree link cases below need symlink privilege.
         with tempfile.TemporaryDirectory() as directory:
             sibling = Path(directory) / "feature"
             self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
