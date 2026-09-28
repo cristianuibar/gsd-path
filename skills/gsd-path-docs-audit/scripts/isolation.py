@@ -1337,7 +1337,6 @@ def _member_verify_sidecar(record: Dict[str, str]) -> Tuple[Path, Path, str]:
     registered = _registered_worktrees(checkout)
     if (destination.is_symlink() or not destination.is_dir()
             or destination.resolve() not in registered
-            or registered[destination.resolve()] not in (None, f"refs/heads/{branch}")
             or worktree_root(destination) != destination.resolve()
             or common_git_dir(destination) != common_git_dir(checkout)):
         raise IsolationError(f"member Verify sidecar ownership changed: {destination}")

@@ -190,6 +190,27 @@ class MemberProjectVerifyTests(unittest.TestCase):
         retry = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
         self.assertTrue(retry["passed"], retry)
 
+    def test_member_sidecar_on_another_branch_is_retired_before_retry(self) -> None:
+        self.use_member_verify_command()
+        plan = self.root / ".project" / "plan" / "PLAN.md"
+        command = "git -C ../web checkout gsd-path/demo-M001"
+        plan.write_text(plan.read_text().replace(COMMAND, command))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "verify switches member branch")
+        head = git(self.root, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(isolation.IsolationError, "branch changed"):
+            lean_verification.verify_project(self.root, head)
+        self.assertEqual(git(self.member, "rev-parse", "gsd-path/demo-M001"), self.member_tip)
+        self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(git(self.member, "branch", "--list", "gsd-path-verify/*"), "")
+        self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
+        plan.write_text(plan.read_text().replace(command, COMMAND))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "restore verify command")
+        retry = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
+        self.assertTrue(retry["passed"], retry)
+        self.assertEqual(git(self.member, "rev-parse", "gsd-path/demo-M001"), self.member_tip)
+
     def test_failed_member_verify_keeps_exact_output_in_gap(self) -> None:
         self.use_member_verify_command()
         command = "printf 'out\\x60\\x60\\x60\\x60text\\n'; printf 'member failure \\x60\\x60\\x60 detail\\n' >&2; exit 7"
