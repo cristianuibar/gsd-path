@@ -20,7 +20,7 @@ STATE = (
 )
 TASK_FILE = ".project/tasks/T001-change.md"
 TASK = (
-    "---\nid: T001\ntitle: Change app\nwave: 1\ndeps: []\nstatus: in-progress\nagent: coder\n"
+    "---\nid: T001\ntitle: Change app\nwave: 1\ndeps: []\nstatus: pending\nagent: null\n"
     "base: null\nworktree: null\ntask_branch: null\nrepo: web\nfiles:\n  - app.py\n---\n# T001 — Change app\n\n## Log\n\n- created\n"
 )
 IDENTITY = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -70,6 +70,7 @@ class MemberLandingTests(unittest.TestCase):
         self.sidecar = Path(isolated["worktree"])
         self.bound = Path(isolated["bound_checkout"])
         self.member_base = isolated["member_base"]
+        isolation.activate_member_task(self.coordinator, "web", "T001", "coder", TASK_FILE, self.base)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -88,8 +89,9 @@ class MemberLandingTests(unittest.TestCase):
         (self.coordinator / second_file).write_text(second_task, encoding="utf-8")
         git(self.coordinator, "add", second_file)
         git(self.coordinator, "commit", "-q", "-m", "add second task")
-        self.base = git(self.coordinator, "rev-parse", "HEAD")
+        self.second_base = git(self.coordinator, "rev-parse", "HEAD")
         second = isolation.isolate_member_task(self.coordinator, "web", "T002")
+        isolation.activate_member_task(self.coordinator, "web", "T002", "coder", second_file, self.second_base)
         (Path(second["worktree"]) / "config.py").write_text("added\n", encoding="utf-8")
         return second_file
 
@@ -147,7 +149,7 @@ class MemberLandingTests(unittest.TestCase):
         def land_second():
             second_started.set()
             return isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
-                                         self.base, self.member_base)
+                                         self.second_base, self.member_base)
 
         with mock.patch.object(isolation, "_pick_member_landing", side_effect=pause_first):
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
@@ -249,13 +251,13 @@ class MemberLandingTests(unittest.TestCase):
         self.assertEqual(self.bound_tip(), self.member_base)
         with self.assertRaisesRegex(isolation.IsolationError, "T001.*recover_member_landing"):
             isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
-                                  self.base, self.member_base)
+                                  self.second_base, self.member_base)
         self.assertTrue(self.journal().exists())
         self.assertFalse(self.journal().with_name("T002.json").exists())
         self.assertEqual(self.bound_tip(), self.member_base)
         first = isolation.recover_member_landing(self.coordinator, "T001")
         second = isolation.land_member(self.coordinator, "web", "T002", "Add config", second_file,
-                                       self.base, self.member_base)
+                                       self.second_base, self.member_base)
         self.assertEqual(git(self.bound, "rev-parse", f"{second['landing']}^"), first["landing"])
         self.assertEqual(git(self.coordinator, "log", "-2", "--format=%s").splitlines(),
                          ["T002: Add config", "T001: Change app"])
@@ -282,6 +284,43 @@ class MemberLandingTests(unittest.TestCase):
 
     def test_crash_before_the_record_writes_the_record_only(self) -> None:
         self.crash_then_recover("_write_member_record")
+
+    def test_crash_after_staging_the_record_recovers_once(self) -> None:
+        self.edit()
+        original = isolation.git_output
+
+        def crash_before_commit(repo, *arguments):
+            if repo == self.coordinator and arguments[0] == "commit":
+                raise RuntimeError("crash")
+            return original(repo, *arguments)
+
+        with mock.patch.object(isolation, "git_output", side_effect=crash_before_commit):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        self.assertEqual(git(self.coordinator, "diff", "--cached", "--name-only"), TASK_FILE)
+        result = isolation.recover_member_landing(self.coordinator, "T001")
+        self.assert_landed_once(result)
+        self.assertEqual(git(self.coordinator, "rev-list", "--count", f"{self.base}..HEAD"), "1")
+
+    def test_recovery_refuses_a_different_staged_task_file(self) -> None:
+        self.edit()
+        original = isolation.git_output
+
+        def crash_before_commit(repo, *arguments):
+            if repo == self.coordinator and arguments[0] == "commit":
+                raise RuntimeError("crash")
+            return original(repo, *arguments)
+
+        with mock.patch.object(isolation, "git_output", side_effect=crash_before_commit):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        task = self.coordinator / TASK_FILE
+        stamped = task.read_text(encoding="utf-8")
+        task.write_text(stamped + "- unrelated\n", encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        task.write_text(stamped, encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "coordinator worktree is dirty"):
+            isolation.recover_member_landing(self.coordinator, "T001")
 
     def test_recovery_requires_the_coordinator_state_branch(self) -> None:
         self.edit()

@@ -108,7 +108,7 @@ class MemberLandingProofTests(unittest.TestCase):
         forged = git(self.bound, "rev-parse", "HEAD")
         path = self.coordinator / TASK_FILE
         text = path.read_text(encoding="utf-8")
-        text = text.replace("status: in-progress", "status: done").replace(
+        text = text.replace("status: pending", "status: done").replace(
             "base: null", f"base: {self.base}\nmember_base: {self.member_base}")
         path.write_text(text, encoding="utf-8")
         git(self.coordinator, "add", TASK_FILE)
