@@ -734,6 +734,8 @@ def activate_member_task(
 ) -> Dict[str, object]:
     """Write the live task copy into the member sidecar and authorize its member base."""
     coordinator = require_directory(coordinator, "coordinator")
+    if not agent or agent == "null" or "\n" in agent:
+        raise IsolationError("task activation requires an assigned agent")
     task_file = relative_posix(task_file)
     if not task_file.startswith(".project/tasks/"):
         raise IsolationError("task activation file must stay under .project/tasks/")
@@ -795,6 +797,8 @@ def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
         raise IsolationError(error or "unreadable member task copy")
     if any(fields.get(key) != expected.get(key) for key in MEMBER_IMMUTABLE_FIELDS):
         raise IsolationError("member task copy changes contract fields")
+    if not isinstance(fields.get("agent"), str) or fields["agent"] in {"", "null"}:
+        raise IsolationError("member task copy has no assigned agent")
     if (fields.get("status"), fields.get("base"), fields.get("member_base")) != (
             "in-progress", journal["base"], journal["member_base"]):
         raise IsolationError("member task copy is not the activated task for this landing")

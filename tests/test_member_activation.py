@@ -36,6 +36,16 @@ class MemberActivationTests(unittest.TestCase):
         isolation.activate_member_task(self.coordinator, "web", "T001", "coder", TASK_FILE, self.base)
         self.assertEqual(self.copy().read_bytes(), before)
 
+    def test_activation_requires_an_assigned_single_line_agent(self) -> None:
+        self.copy().unlink()
+        git(self.member, "update-ref", "-d", AUTH)
+        for agent in ("", "null", "coder\nother"):
+            with self.subTest(agent=agent):
+                with self.assertRaisesRegex(isolation.IsolationError, "assigned agent"):
+                    isolation.activate_member_task(self.coordinator, "web", "T001", agent, TASK_FILE, self.base)
+                self.assertFalse(self.copy().exists())
+                self.assertEqual(git(self.member, "rev-parse", "--verify", "--quiet", AUTH, check=False), "")
+
     def test_activation_rejects_a_copy_from_an_older_coordinator_base(self) -> None:
         before = self.copy().read_bytes()
         (self.coordinator / "other.txt").write_text("unrelated\n", encoding="utf-8")
@@ -87,6 +97,17 @@ class MemberActivationTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "append-only"):
             self.land()
         self.assertEqual(git(self.bound, "rev-parse", "HEAD"), self.member_base)
+
+    def test_landing_rejects_a_copy_without_an_assigned_agent(self) -> None:
+        self.edit()
+        original = self.copy().read_text(encoding="utf-8")
+        for agent in ("null", ""):
+            with self.subTest(agent=agent):
+                self.copy().write_text(original.replace("agent: coder\n", f"agent: {agent}\n"), encoding="utf-8")
+                with self.assertRaisesRegex(isolation.IsolationError, "assigned agent"):
+                    self.land()
+                self.assertEqual(git(self.bound, "rev-parse", "HEAD"), self.member_base)
+                self.assertFalse(landing.MemberLandingTests.journal(self).exists())
 
     def test_unstaged_bookkeeping_may_stay_dirty_while_landing(self) -> None:
         ledger = self.coordinator / ".project" / "build" / "verify-ledger.jsonl"
