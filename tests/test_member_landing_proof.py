@@ -45,6 +45,15 @@ class MemberLandingProofTests(unittest.TestCase):
         report = isolation.recover(self.coordinator, self.coordinator / ".project" / "tasks")
         self.assertEqual(report["tasks"][0]["verdict"], "block")
 
+    def test_changed_task_files_after_landing_blocks_verification(self) -> None:
+        self.landed()
+        path = self.coordinator / TASK_FILE
+        path.write_text(path.read_text(encoding="utf-8").replace("  - app.py", "  - other.py"),
+                        encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        git(self.coordinator, "commit", "-q", "-m", "change task files")
+        self.assert_blocked("task artifact contract differs")
+
     def test_archived_member_task_is_proven_after_active_build_files_move(self) -> None:
         result = self.landed()
         archive = self.coordinator / ".project" / "archive" / "001-demo"

@@ -2215,6 +2215,9 @@ def _prove_member_task(
         _, allowed = _member_contract(
             coordinator, match["base"], task_file, member, current_text=recorded.stdout
         )
+        immutable = ("id", "title", "repo", "files", "deps", "wave")
+        if any(fields.get(key) != recorded_fields.get(key) for key in immutable):
+            raise IsolationError(f"task artifact contract differs from {match['base']}: {task_file}")
     except IsolationError as error:
         return {"verdict": "block", "reason": str(error)}
     landing = match["landing"]
