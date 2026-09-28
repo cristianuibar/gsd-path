@@ -730,12 +730,18 @@ def _member_hook_configs(coordinator: Path) -> Dict[str, str]:
     a member sidecar the Git top level and project dir name the member, not the
     coordinator, so the installed relative commands would miss the guard.
     """
-    command = f'{shlex.quote(sys.executable)} "{coordinator / ".gsd-path" / "guard_hook.py"}"'
+    guard = coordinator / ".gsd-path" / "guard_hook.py"
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(guard))}"
+    windows_interpreter = sys.executable.replace("'", "''")
+    windows_guard = str(guard).replace("'", "''")
+    command_windows = ("powershell.exe -NoProfile -NonInteractive -Command "
+                       f'"& \'{windows_interpreter}\' \'{windows_guard}\'"')
     formats = {
         ".claude/settings.json": {"hooks": {"PreToolUse": [
             {"matcher": ".*", "hooks": [{"type": "command", "command": command}]}]}},
         ".codex/hooks.json": {"hooks": {"PreToolUse": [
-            {"matcher": ".*", "hooks": [{"type": "command", "command": command}]}]}},
+            {"matcher": ".*", "hooks": [{"type": "command", "command": command,
+                                            "commandWindows": command_windows}]}]}},
         ".cursor/hooks.json": {"version": 1, "hooks": {"preToolUse": [
             {"command": command, "matcher": ".*", "failClosed": True}]}},
     }
@@ -753,7 +759,7 @@ def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path)
         # A member's own config (tracked or local) would run instead of the guard; never replace it.
         target = sidecar / relative
         if target.parent.is_symlink() or target.is_symlink() or (
-                target.exists() and target.read_text(encoding="utf-8") != content):
+                target.exists() and target.read_bytes() != content.encode("utf-8")):
             raise IsolationError(f"member sidecar already has its own {relative}; its host would run "
                                  "without the coordinator guard")
     exclude = common_git_dir(checkout) / "info" / "exclude"
@@ -767,6 +773,15 @@ def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path)
         target = sidecar / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         _common.atomic_write(target, content)
+
+
+def ensure_member_hooks(coordinator: Path, member: str, task_id: str) -> None:
+    checkout, project, _ = _member_context(coordinator, member)
+    sidecar = sidecar_root(checkout, "task", f"{project}-{validate_task_id(task_id)}")
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{task_id}"
+    if require_attached(sidecar) != branch:
+        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+    _write_member_hook_configs(coordinator, checkout, sidecar)
 
 
 def member_task_copy(sidecar: Path, task_file: str) -> Path:

@@ -765,6 +765,8 @@ class Round:
         if state.get("wave") != self.receipt["wave"]:
             raise DriverStop("task is outside the requested wave", task=state["task_id"],
                              wave=state.get("wave"), requested_wave=self.receipt["wave"])
+        if state.get("mode") == "member":
+            isolation.ensure_member_hooks(self.primary, str(state["member"]), str(state["task_id"]))
         fresh = spawn(self.root, state, self.options,
                       lambda fresh: brief_text(fresh, self.options.role_brief, self.options.task_template))
         self.receipt["dispatched"].append(self.summary(fresh))
