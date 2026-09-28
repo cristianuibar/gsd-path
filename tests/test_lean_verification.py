@@ -111,7 +111,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
                     before = ledger.read_bytes()
                     run = subprocess.run
                     def no_replay(command, *args, **kwargs):
-                        if command[:2] == ["bash", "-c"]:
+                        if len(command) == 3 and command[1] == "-c":  # bash_argv, any bash path
                             self.fail("project command replayed")
                         return run(command, *args, **kwargs)
                     with patch.object(subprocess, "run", side_effect=no_replay):

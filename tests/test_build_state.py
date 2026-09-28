@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import isolation
+from scripts import _common, isolation
+
+# Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
+BASH = _common.find_bash()
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -734,8 +737,8 @@ archive: null
         commit = self.commit_all("seed")
         passed = "test 'a b' = 'a b'"
         failed = "test 'a  b' = 'a b'"
-        self.assertEqual(subprocess.run(["bash", "-c", passed]).returncode, 0)
-        self.assertNotEqual(subprocess.run(["bash", "-c", failed]).returncode, 0)
+        self.assertEqual(subprocess.run([BASH, "-c", passed]).returncode, 0)
+        self.assertNotEqual(subprocess.run([BASH, "-c", failed]).returncode, 0)
         self.cli("verify-record", "--command", passed, "--commit", commit, "--result", "pass")
         _, result = self.cli("verify-lookup", "--command", failed, "--commit", commit)
         self.assertFalse(result["reuse"])

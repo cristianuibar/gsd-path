@@ -6,7 +6,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts import check_trust_evidence, pipeline_git
+from scripts import _common, check_trust_evidence, pipeline_git
+
+# Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
+BASH = _common.find_bash()
 from tests import test_archive_milestone
 
 
@@ -726,7 +729,7 @@ class TrustEvidenceTests(unittest.TestCase):
             if affected:
                 self.release_change("platforms/alpha/dispatch.md")
         result = subprocess.run(
-            ["bash", str(self.repo / "scripts/prepare_release_evidence.sh"),
+            [BASH, str(self.repo / "scripts/prepare_release_evidence.sh"),
              "--candidate", self.git("rev-parse", "HEAD").stdout.strip(),
              "--output-base", str(self.repo.parent / "prepared"), *(["--full"] if full else [])],
             cwd=self.repo, encoding="utf-8", errors="replace", capture_output=True,

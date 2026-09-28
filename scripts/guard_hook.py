@@ -718,7 +718,21 @@ def target_paths(path, working_directories, repo):
         if not base.is_absolute():
             base = repo / base
         candidate = base / candidate
-    return Path(os.path.abspath(candidate)), candidate.resolve(strict=False)
+    return Path(os.path.abspath(candidate)), resolve_lenient(candidate)
+
+
+def resolve_lenient(path):
+    """Path.resolve(strict=False) for paths Windows cannot name, such as rep*.
+
+    Python 3.9 raises OSError resolving them on Windows; later versions and
+    os.path.realpath return the unresolved remainder instead.
+    """
+    try:
+        return path.resolve(strict=False)
+    except OSError:
+        if os.name != "nt":
+            raise
+        return Path(os.path.realpath(path))
 
 
 @lru_cache(maxsize=None)

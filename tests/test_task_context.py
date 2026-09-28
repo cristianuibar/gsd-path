@@ -55,7 +55,7 @@ class TaskContextTests(unittest.TestCase):
             self.assertIn('2. Assigned command works.\n   Preserve multiline detail.', result.stdout)
             self.assertNotIn('1. Unrelated export works.', result.stdout)
             self.assertIn(hashlib.sha256(original.encode()).hexdigest(), result.stdout)
-            self.assertIn(str(intent), result.stdout)
+            self.assertIn(str(intent.resolve()), result.stdout)  # the CLI prints resolved paths
             self.assertIn('Mode: owned-criteria', result.stdout)
             self.assertEqual(intent.read_text(encoding="utf-8"), original)
 

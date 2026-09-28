@@ -14,7 +14,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from scripts import dispatch_driver, pipeline_state
+from scripts import _common, dispatch_driver, pipeline_state
+
+# Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
+BASH = _common.find_bash()
 from tests import test_handoffs
 from tests.test_pipeline_state import run_git
 
@@ -1438,10 +1441,10 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(command.splitlines(), ["set -e", *[line for source in ("T001", "T002") for line in
             ("(", dispatch_driver._common.task_verify_command(texts[source]), ")")]])
         # A source Verify ending in `exit 0` ends only its own subshell; the next one still runs.
-        probe = subprocess.run(["bash", "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
+        probe = subprocess.run([BASH, "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
         self.assertEqual(probe.returncode, 7)
         (root / "tests/test_app.py").write_bytes("raise SystemExit(7)\n".encode("utf-8"))
-        result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, encoding="utf-8", errors="replace")
+        result = subprocess.run([BASH, "-c", command], cwd=root, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 7, result)
         options.cycle = 2
         plan = (root / ".project/plan/PLAN.md").read_bytes()

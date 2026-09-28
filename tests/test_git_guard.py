@@ -1,5 +1,6 @@
-import re
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1033,7 +1034,9 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 cwd=empty,
                 capture_output=True,
                 encoding="utf-8", errors="replace",
+                # Windows Python cannot start without SYSTEMROOT.
                 env={"PATH": "/usr/bin:/bin", "HOME": empty,
+                     **({"SYSTEMROOT": os.environ["SYSTEMROOT"]} if os.name == "nt" else {}),
                      "GIT_CONFIG_GLOBAL": str(Path(empty) / "nogitconfig"),
                      "GIT_CONFIG_SYSTEM": str(Path(empty) / "nogitconfig")},
             )

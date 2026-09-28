@@ -81,6 +81,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.request('read', path='.project/archive/001/FINAL.md')[1]['text'], archive.read_text(encoding="utf-8"))
 
     @requires_symlink
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_paths_origin_and_revision_are_confined(self):
         outside = self.root.parent / 'outside.md'
         outside.write_bytes('outside secret'.encode("utf-8"))

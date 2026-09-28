@@ -122,7 +122,7 @@ class MemberBuildStartTests(unittest.TestCase):
         external_lock.write_bytes(original.encode("utf-8"))
         (self.coordinator / ".project" / "build").symlink_to(outside, target_is_directory=True)
 
-        with self.assertRaisesRegex(pipeline_state.PipelineStateError, r"\.project/build"):
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, r"\.project[/\]build"):
             self.start()
         self.assertEqual(self.phase(), "plan/done")
         self.assertIsNone(self.branch("web"))
@@ -143,7 +143,7 @@ class MemberBuildStartTests(unittest.TestCase):
         external_lock.write_bytes(original.encode("utf-8"))
         build_dir.symlink_to(outside, target_is_directory=True)
 
-        with self.assertRaisesRegex(members.MembersError, r"\.project/build"):
+        with self.assertRaisesRegex(members.MembersError, r"\.project[/\]build"):
             members.lock_build_members(self.coordinator)
         self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
         self.assertEqual(self.branch("web"), branch)

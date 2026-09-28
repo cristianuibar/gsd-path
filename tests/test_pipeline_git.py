@@ -105,6 +105,8 @@ class PipelineGitTests(unittest.TestCase):
     def test_initial_state_exception_rejects_other_dirt_and_invalid_state(self) -> None:
         for change in ("product", "extra", "ignored-extra", "staged", "invalid", "noninitial",
                        "symlink", "hardlink", "directory-link"):
+            if change == "extra" and os.name == "nt":
+                continue  # Windows file names cannot contain a newline.
             with self.subTest(change=change), tempfile.TemporaryDirectory() as tmp:
                 _, repo, base = make_remote_repo(tmp)
                 detect_project.initialize(repo, ROOT / "skills/gsd-path/templates/state.md")
