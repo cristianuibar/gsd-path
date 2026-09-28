@@ -18,6 +18,8 @@ class MemberIntegrationTests(unittest.TestCase):
 
     def setUp(self) -> None:
         member_verify.MemberProjectVerifyTests.setUp(self)
+        git(self.member, "config", "user.name", "t")
+        git(self.member, "config", "user.email", "t@t")
         # The member keeps its GitHub origin URL; Git rewrites it to a local bare remote.
         self.remote = self.root.parent / "web-remote.git"
         git(self.root.parent, "init", "-q", "--bare", str(self.remote))
