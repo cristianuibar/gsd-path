@@ -705,7 +705,9 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
         removed = run_git(checkout, "worktree", "remove", str(destination))
         if removed.returncode != 0:
             raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
-    run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
+    authorization = run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
+    if authorization.returncode != 0:
+        raise IsolationError((authorization.stderr or authorization.stdout).strip() or "git update-ref failed")
     if tip.returncode == 0:
         deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
         if deleted.returncode != 0:
@@ -765,7 +767,8 @@ def activate_member_task(
     copy = member_task_copy(sidecar, task_file)
     if copy.is_file() and copy.read_text(encoding="utf-8") != activated:
         current, _ = task_frontmatter(copy.read_text(encoding="utf-8"))
-        if not current or current.get("agent") != agent or current.get("member_base") != member_base:
+        if (not current or current.get("agent") != agent or current.get("base") != resolved_base
+                or current.get("member_base") != member_base):
             raise IsolationError(f"member task is already active with another agent or base: {copy}")
     elif not copy.is_file():
         copy.parent.mkdir(parents=True, exist_ok=True)
@@ -801,9 +804,18 @@ def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
     return text
 
 
-def _coordinator_clean_for_record(coordinator: Path) -> None:
-    staged = git_output(coordinator, "diff", "--cached", "--name-only").splitlines()
-    dirty = sorted((uncommitted_paths(coordinator) - BOOKKEEPING_PATHS) | set(staged))
+def _coordinator_clean_for_record(coordinator: Path, recovery: Optional[Dict[str, object]] = None) -> None:
+    staged = set(git_output(coordinator, "diff", "--cached", "--name-only").splitlines())
+    dirty = (uncommitted_paths(coordinator) - BOOKKEEPING_PATHS) | staged
+    if recovery is not None:
+        task_file = str(recovery["task_file"])
+        if task_file in dirty:
+            stamped = _landed_task_text(_member_copy_text(recovery, coordinator), str(recovery["base"]))
+            current, _ = _read_task_text(coordinator / task_file)
+            if (current == stamped and (task_file not in staged
+                                        or git_text(coordinator, "show", f":{task_file}") == stamped)):
+                dirty.remove(task_file)
+    dirty = sorted(dirty)
     if dirty:
         raise IsolationError("coordinator worktree is dirty: " + ", ".join(dirty))
 
@@ -987,8 +999,10 @@ def _existing_member_record(coordinator: Path, journal: Dict[str, object]) -> Op
     return None
 
 
-def _finish_member_landing(coordinator: Path, path: Path, journal: Dict[str, object]) -> Dict[str, object]:
-    _coordinator_clean_for_record(coordinator)
+def _finish_member_landing(
+    coordinator: Path, path: Path, journal: Dict[str, object], *, recovery: bool = False
+) -> Dict[str, object]:
+    _coordinator_clean_for_record(coordinator, journal if recovery else None)
     record = _write_member_record(coordinator, journal)
     path.unlink()
     return {"commit": record, "landing": journal["landing"], "member": journal["member"],
@@ -1094,7 +1108,7 @@ def recover_member_landing(coordinator: Path, task_id: str) -> Dict[str, object]
                 raise IsolationError(f"member landing proof failed: {error}")
             journal["landing"] = landing
             _record_member_journal(path, journal)
-        return _finish_member_landing(coordinator, path, journal)
+        return _finish_member_landing(coordinator, path, journal, recovery=True)
 
 
 def isolate_verify(primary: Path, base: str, name: str, historical_task: Optional[str] = None) -> Dict[str, object]:

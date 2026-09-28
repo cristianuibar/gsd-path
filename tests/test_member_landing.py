@@ -285,6 +285,43 @@ class MemberLandingTests(unittest.TestCase):
     def test_crash_before_the_record_writes_the_record_only(self) -> None:
         self.crash_then_recover("_write_member_record")
 
+    def test_crash_after_staging_the_record_recovers_once(self) -> None:
+        self.edit()
+        original = isolation.git_output
+
+        def crash_before_commit(repo, *arguments):
+            if repo == self.coordinator and arguments[0] == "commit":
+                raise RuntimeError("crash")
+            return original(repo, *arguments)
+
+        with mock.patch.object(isolation, "git_output", side_effect=crash_before_commit):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        self.assertEqual(git(self.coordinator, "diff", "--cached", "--name-only"), TASK_FILE)
+        result = isolation.recover_member_landing(self.coordinator, "T001")
+        self.assert_landed_once(result)
+        self.assertEqual(git(self.coordinator, "rev-list", "--count", f"{self.base}..HEAD"), "1")
+
+    def test_recovery_refuses_a_different_staged_task_file(self) -> None:
+        self.edit()
+        original = isolation.git_output
+
+        def crash_before_commit(repo, *arguments):
+            if repo == self.coordinator and arguments[0] == "commit":
+                raise RuntimeError("crash")
+            return original(repo, *arguments)
+
+        with mock.patch.object(isolation, "git_output", side_effect=crash_before_commit):
+            with self.assertRaisesRegex(RuntimeError, "crash"):
+                self.land()
+        task = self.coordinator / TASK_FILE
+        stamped = task.read_text(encoding="utf-8")
+        task.write_text(stamped + "- unrelated\n", encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        task.write_text(stamped, encoding="utf-8")
+        with self.assertRaisesRegex(isolation.IsolationError, "coordinator worktree is dirty"):
+            isolation.recover_member_landing(self.coordinator, "T001")
+
     def test_recovery_requires_the_coordinator_state_branch(self) -> None:
         self.edit()
         git(self.coordinator, "checkout", "-q", "-b", "gsd-path/M002")

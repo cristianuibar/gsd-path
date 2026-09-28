@@ -1,5 +1,7 @@
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import tests.test_member_landing as landing
 from scripts import isolation
@@ -33,6 +35,17 @@ class MemberActivationTests(unittest.TestCase):
         before = self.copy().read_bytes()
         isolation.activate_member_task(self.coordinator, "web", "T001", "coder", TASK_FILE, self.base)
         self.assertEqual(self.copy().read_bytes(), before)
+
+    def test_activation_rejects_a_copy_from_an_older_coordinator_base(self) -> None:
+        before = self.copy().read_bytes()
+        (self.coordinator / "other.txt").write_text("unrelated\n", encoding="utf-8")
+        git(self.coordinator, "add", "other.txt")
+        git(self.coordinator, "commit", "-q", "-m", "unrelated")
+        new_base = git(self.coordinator, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(isolation.IsolationError, "another agent or base"):
+            isolation.activate_member_task(self.coordinator, "web", "T001", "coder", TASK_FILE, new_base)
+        self.assertEqual(self.copy().read_bytes(), before)
+        self.assertEqual(git(self.member, "rev-parse", AUTH), self.member_base)
 
     def test_activation_requires_the_sidecar_at_its_member_base(self) -> None:
         self.copy().unlink()
@@ -97,6 +110,21 @@ class MemberActivationTests(unittest.TestCase):
         self.land()
         isolation.retire_member_task(self.coordinator, "web", "T001")
         self.assertEqual(git(self.member, "rev-parse", "--verify", "--quiet", AUTH, check=False), "")
+
+    def test_retire_reports_authorization_deletion_failure(self) -> None:
+        self.edit()
+        self.land()
+        original = isolation.run_git
+
+        def reject_authorization(repo, *arguments):
+            if arguments == ("update-ref", "-d", AUTH):
+                return subprocess.CompletedProcess(arguments, 1, "", "ref deletion failed")
+            return original(repo, *arguments)
+
+        with mock.patch.object(isolation, "run_git", side_effect=reject_authorization):
+            with self.assertRaisesRegex(isolation.IsolationError, "ref deletion failed"):
+                isolation.retire_member_task(self.coordinator, "web", "T001")
+        self.assertEqual(git(self.member, "rev-parse", AUTH), self.member_base)
 
 
 if __name__ == "__main__":
