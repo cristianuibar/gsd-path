@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scripts import lean_verification
+from scripts import isolation, lean_verification
 import tests.test_lean_verification as lean_tests
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +33,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.root = base / "acme"
         self.root.mkdir()
         self.fixture(self.root)
-        self.member = base / "web"
+        self.member = base / "frontend-checkout"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
         (self.member / "README.md").write_text("web\n", encoding="utf-8")
@@ -80,11 +80,81 @@ class MemberProjectVerifyTests(unittest.TestCase):
 
     def test_project_verify_sees_member_sidecars_beside_the_coordinator(self) -> None:
         self.use_member_verify_command()
+        self.assertNotEqual(self.member.name, "web")
         result = lean_verification.verify_project(self.root, self.head)
         self.assertTrue(result["passed"], result["execution"])
         self.assertEqual(result["execution"]["members"], {"web": self.member_tip})
         self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
         self.assertEqual(git(self.member, "branch", "--list", "gsd-path-verify/*"), "")
+
+    def test_existing_member_sidecar_survives_failed_setup(self) -> None:
+        sidecar = self.root.parent / "verify" / "coordinator"
+        created = isolation.isolate_member_verify(self.root, sidecar)
+        with self.assertRaisesRegex(isolation.IsolationError, "path already exists"):
+            isolation.isolate_member_verify(self.root, sidecar)
+        self.assertTrue(Path(created["web"]["worktree"]).is_dir())
+        self.assertEqual(git(self.member, "rev-parse", created["web"]["branch"]), self.member_tip)
+        isolation.retire_member_verify(created)
+
+    def test_unlocked_stale_marker_does_not_block_cleanup(self) -> None:
+        api = self.root.parent / "api-checkout"
+        api.mkdir()
+        git(api, "init", "-q", "-b", "main")
+        listed = self.root / ".project" / "MEMBERS.md"
+        listed.write_text(listed.read_text() + f"\n## api\nCheckout: {api}\nRemote: https://github.com/acme/api.git\nIntegration: default\n")
+        marker = api / ".git" / "gsd-path" / "member.json"
+        marker.parent.mkdir()
+        marker.write_text(json.dumps({"schema": "gsd-path/member/v1", "coordinator": str(self.root),
+                                      "project": "wrong", "name": "api"}))
+        self.use_member_verify_command()
+        result = lean_verification.verify_project(self.root, self.head)
+        self.assertTrue(result["passed"], result)
+
+    def test_member_cleanup_surfaces_git_failures(self) -> None:
+        for operation in ("remove", "delete"):
+            with self.subTest(operation=operation):
+                sidecar = self.root.parent / operation / "coordinator"
+                created = isolation.isolate_member_verify(self.root, sidecar)
+                original = isolation.run_git
+
+                def fail_selected(repo, *arguments):
+                    if ((operation == "remove" and arguments[:2] == ("worktree", "remove"))
+                            or (operation == "delete" and arguments[:2] == ("branch", "-D"))):
+                        return subprocess.CompletedProcess(arguments, 1, "", "cleanup failed")
+                    return original(repo, *arguments)
+
+                with mock.patch.object(isolation, "run_git", side_effect=fail_selected):
+                    with self.assertRaisesRegex(isolation.IsolationError, "cleanup failed"):
+                        isolation.retire_member_verify(created)
+                if operation == "remove":
+                    self.assertTrue(Path(created["web"]["worktree"]).exists())
+                    isolation.retire_member_verify(created)
+                else:
+                    self.assertEqual(git(self.member, "branch", "--list", created["web"]["branch"]),
+                                     created["web"]["branch"])
+                    git(self.member, "branch", "-D", created["web"]["branch"])
+
+    def test_member_verify_rejects_changed_sidecar_head(self) -> None:
+        self.use_member_verify_command()
+        plan = self.root / ".project" / "plan" / "PLAN.md"
+        plan.write_text(plan.read_text().replace(COMMAND, "git -C ../web reset --hard main"))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "verify changes member head")
+        head = git(self.root, "rev-parse", "HEAD")
+        gap = self.root / ".project/review/final-gap-1.md"
+        before = gap.read_bytes() if gap.exists() else None
+        with self.assertRaisesRegex(isolation.IsolationError, "HEAD changed"):
+            lean_verification.verify_project(self.root, head)
+        self.assertEqual(gap.read_bytes() if gap.exists() else None, before)
+
+    def test_prepare_final_does_not_accept_existing_member_review(self) -> None:
+        self.use_member_verify_command()
+        lean_verification.verify_project(self.root, self.head)
+        lean_tests.test_handoffs.HandoffValidationTests().write_final_review(self.root)
+        result = lean_verification.prepare_final(self.root, self.head)
+        self.assertEqual(result["status"], "complete")
+        self.assertFalse(result["final"]["reused"])
+        self.assertEqual(result["next"], "review-final")
 
     def test_stale_member_marker_leaves_no_verify_sidecar(self) -> None:
         self.use_member_verify_command()

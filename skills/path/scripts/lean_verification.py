@@ -226,21 +226,23 @@ def verify_project(repo, expected_head):
     sidecar = isolation.isolate_verify(repo, expected_head, "project-verify")
     worktree = Path(sidecar["worktree"])
     try:
-        heads = isolation.isolate_member_verify(repo, worktree) if members else None
+        sidecars = isolation.isolate_member_verify(repo, worktree) if members else None
     except BaseException:
         isolation.retire(repo, worktree, sidecar["branch"], force=False)
         raise
     try:
         completed = subprocess.run(["bash", "-c", command], cwd=worktree,
                                    text=True, capture_output=True)
+        if sidecars:
+            isolation.check_member_verify(sidecars)
     finally:
-        if members:
-            isolation.retire_member_verify(repo, worktree)
+        if sidecars:
+            isolation.retire_member_verify(sidecars)
     execution = {"exit_code": completed.returncode, "stdout": completed.stdout,
                  "stderr": completed.stderr, "worktree": str(worktree), "branch": sidecar["branch"]}
     passed = completed.returncode == 0
     if members:
-        execution["members"] = heads
+        execution["members"] = {name: record["tip"] for name, record in sidecars.items()}
     else:
         build_state.verify_record(str(repo), command, expected_head,
                                   "pass" if passed else "fail", execution=execution)
@@ -259,7 +261,7 @@ def prepare_final(repo, expected_head):
         return {"status": "blocked", "verification": verification,
                 "reason": "project Verify failed; use its recorded output"}
     final = reuse_final(repo, expected_head)
-    if not final["reused"] and (Path(repo) / ".project/review/FINAL.md").exists():
+    if not _locked_members(Path(repo)) and not final["reused"] and (Path(repo) / ".project/review/FINAL.md").exists():
         try:
             valid = contracts.validate_final(Path(repo))
             if valid["verdict"] == "pass":

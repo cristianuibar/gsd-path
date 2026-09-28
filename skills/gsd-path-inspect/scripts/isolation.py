@@ -1298,7 +1298,7 @@ def isolate_verify(primary: Path, base: str, name: str, historical_task: Optiona
     }
 
 
-def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, str]:
+def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, Dict[str, str]]:
     """Check out each locked member's bound tip beside the coordinator verify sidecar."""
     try:
         import members
@@ -1306,40 +1306,48 @@ def isolate_member_verify(coordinator: Path, sidecar: Path) -> Dict[str, str]:
         from scripts import members
     lock = coordinator / members.LOCK_PATH
     entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
-    heads: Dict[str, str] = {}
+    created: Dict[str, Dict[str, str]] = {}
     try:
         for item in entries:
             checkout, project, entry = _member_context(coordinator, item["name"])
             tip = git_output(checkout, "rev-parse", "--verify", f"refs/heads/{entry['branch']}^{{commit}}")
-            # The sibling folder name is what `../<member>` resolves to in project Verify.
-            create_named_worktree(checkout, f"{VERIFY_BRANCH_PREFIX}{project}-{entry['name']}",
-                                  sidecar.parent / checkout.name, tip, bound=entry["branch"])
-            heads[entry["name"]] = tip
+            branch = f"{VERIFY_BRANCH_PREFIX}{project}-{entry['name']}"
+            destination = sidecar.parent / entry["name"]
+            create_named_worktree(checkout, branch, destination, tip, bound=entry["branch"])
+            created[entry["name"]] = {"checkout": str(checkout), "worktree": str(destination),
+                                     "branch": branch, "tip": tip}
     except BaseException:
-        retire_member_verify(coordinator, sidecar)
+        retire_member_verify(created)
         raise
-    return heads
+    return created
 
 
-def retire_member_verify(coordinator: Path, sidecar: Path) -> None:
+def _member_verify_sidecar(record: Dict[str, str]) -> Tuple[Path, Path, str]:
+    checkout = Path(record["checkout"])
+    destination = Path(record["worktree"])
+    branch = record["branch"]
+    if (destination.is_symlink() or not destination.is_dir()
+            or _registered_worktrees(checkout).get(destination.resolve()) != f"refs/heads/{branch}"
+            or worktree_root(destination) != destination.resolve()
+            or common_git_dir(destination) != common_git_dir(checkout)
+            or require_attached(destination) != branch):
+        raise IsolationError(f"member Verify sidecar ownership changed: {destination}")
+    return checkout, destination, branch
+
+
+def retire_member_verify(created: Dict[str, Dict[str, str]]) -> None:
     """Remove the member siblings of a coordinator verify sidecar; they hold no output."""
-    try:
-        import members
-    except ImportError:  # pragma: no cover - package import used by tests
-        from scripts import members
-    lock = coordinator / members.LOCK_PATH
-    locked = {item["name"] for item in json.loads(lock.read_text(encoding="utf-8"))["members"]} if lock.is_file() else set()
-    for item in members.read_members(coordinator):
-        checkout = Path(item["checkout"]).resolve()
-        role = members.member_role(checkout)
-        if item["name"] not in locked or role is None:
-            continue
-        branch = f"{VERIFY_BRANCH_PREFIX}{role['project']}-{item['name']}"
-        destination = sidecar.parent / checkout.name
-        if destination.exists():
-            run_git(checkout, "worktree", "remove", "--force", str(destination))
-        run_git(checkout, "worktree", "prune")
-        run_git(checkout, "branch", "-D", branch)
+    for record in reversed(list(created.values())):
+        checkout, destination, branch = _member_verify_sidecar(record)
+        git_output(checkout, "worktree", "remove", "--force", str(destination))
+        git_output(checkout, "branch", "-D", branch)
+
+
+def check_member_verify(created: Dict[str, Dict[str, str]]) -> None:
+    for record in created.values():
+        _, destination, _ = _member_verify_sidecar(record)
+        if current_sha(destination) != record["tip"]:
+            raise IsolationError(f"member Verify sidecar HEAD changed: {destination}")
 
 
 def clean_verify(primary: Path, worktree: Path, base: str, branch: str) -> Dict[str, object]:
