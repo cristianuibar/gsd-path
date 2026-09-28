@@ -14,6 +14,7 @@ import contextlib
 import hashlib
 import io
 import json
+import shlex
 import os
 import re
 import stat
@@ -722,6 +723,71 @@ MEMBER_IMMUTABLE_FIELDS = ("id", "title", "repo", "files", "deps", "wave")
 MEMBER_ACTIVATION_FIELDS = {"status", "agent", "base", "member_base", "worktree", "task_branch"}
 
 
+def _member_hook_configs(coordinator: Path) -> Dict[str, str]:
+    """Host configs for a member sidecar that call the coordinator guard by absolute path.
+
+    Only hosts whose managed config is installed in the coordinator get one; inside
+    a member sidecar the Git top level and project dir name the member, not the
+    coordinator, so the installed relative commands would miss the guard.
+    """
+    guard = coordinator / ".gsd-path" / "guard_hook.py"
+    command = f"{shlex.quote(sys.executable)} {shlex.quote(str(guard))}"
+    windows_interpreter = sys.executable.replace("'", "''")
+    windows_guard = str(guard).replace("'", "''")
+    command_windows = ("powershell.exe -NoProfile -NonInteractive -Command "
+                       f'"& \'{windows_interpreter}\' \'{windows_guard}\'"')
+    formats = {
+        ".claude/settings.json": {"hooks": {"PreToolUse": [
+            {"matcher": ".*", "hooks": [{"type": "command", "command": command}]}]}},
+        ".codex/hooks.json": {"hooks": {"PreToolUse": [
+            {"matcher": ".*", "hooks": [{"type": "command", "command": command,
+                                            "commandWindows": command_windows}]}]}},
+        ".cursor/hooks.json": {"version": 1, "hooks": {"preToolUse": [
+            {"command": command, "matcher": ".*", "failClosed": True}]}},
+    }
+    configs = {}
+    for relative, content in formats.items():
+        installed = coordinator / relative
+        if installed.is_file() and not installed.is_symlink() and "guard_hook.py" in installed.read_text(encoding="utf-8"):
+            configs[relative] = json.dumps(content, indent=2) + "\n"
+    return configs
+
+
+def _check_member_hook_collisions(configs: Dict[str, str], sidecar: Path) -> None:
+    for relative, content in configs.items():
+        # A member's own config (tracked or local) would run instead of the guard; never replace it.
+        target = sidecar / relative
+        if target.parent.is_symlink() or target.is_symlink() or (
+                target.exists() and target.read_bytes() != content.encode("utf-8")):
+            raise IsolationError(f"member sidecar already has its own {relative}; its host would run "
+                                 "without the coordinator guard")
+
+
+def _write_member_hook_configs(coordinator: Path, checkout: Path, sidecar: Path) -> None:
+    configs = _member_hook_configs(coordinator)
+    _check_member_hook_collisions(configs, sidecar)
+    exclude = common_git_dir(checkout) / "info" / "exclude"
+    existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    missing = [f"/{relative}" for relative in configs if f"/{relative}" not in existing.splitlines()]
+    if missing:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        prefix = existing + ("" if not existing or existing.endswith("\n") else "\n")
+        _common.atomic_write(exclude, prefix + "\n".join(missing) + "\n")
+    for relative, content in configs.items():
+        target = sidecar / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _common.atomic_write(target, content)
+
+
+def ensure_member_hooks(coordinator: Path, member: str, task_id: str) -> None:
+    checkout, project, _ = _member_context(coordinator, member)
+    sidecar = sidecar_root(checkout, "task", f"{project}-{validate_task_id(task_id)}")
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{task_id}"
+    if require_attached(sidecar) != branch:
+        raise IsolationError(f"member task sidecar is not on its task branch: {sidecar}")
+    _write_member_hook_configs(coordinator, checkout, sidecar)
+
+
 def member_task_copy(sidecar: Path, task_file: str) -> Path:
     return sidecar / MEMBER_TASK_COPY_DIR / relative_posix(task_file)
 
@@ -779,6 +845,7 @@ def activate_member_task(
             or run_git(checkout, "merge-base", "--is-ancestor", member_base,
                        f"refs/heads/{entry['branch']}").returncode != 0:
         raise IsolationError("member task activation requires the sidecar at its member base")
+    _check_member_hook_collisions(_member_hook_configs(coordinator), sidecar)
     if uncommitted_paths(sidecar):
         raise IsolationError("member task activation requires a clean member sidecar")
     resolved_base = require_commit(coordinator, require_full_sha(base))
@@ -786,6 +853,7 @@ def activate_member_task(
     contract = git_text(coordinator, "show", f"{resolved_base}:{task_file}")
     activated = _activated_member_text(contract, task_id, agent, resolved_base, sidecar, branch, member_base)
     copy = _safe_member_task_copy(sidecar, task_file)
+    _write_member_hook_configs(coordinator, checkout, sidecar)
     exclude = common_git_dir(checkout) / "info" / "exclude"
     rule = f"/{MEMBER_TASK_COPY_DIR}/"
     existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
