@@ -6,6 +6,7 @@ Live execution is explicit. This module is not invoked by the ordinary suite.
 import argparse
 import datetime as dt
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -28,6 +29,11 @@ Record failures honestly. Per-task output tokens above 4000 are a warning, not a
 hard task limit. Keep the session output-token limit at 30000, as required by
 the owner. Do not invent additional time or retry limits.
 """
+
+
+def codex() -> str:
+    """The codex CLI path; Windows CreateProcess cannot find codex.cmd by bare name."""
+    return shutil.which("codex") or "codex"
 
 
 def command(arguments: list, cwd: Path) -> str:
@@ -108,14 +114,14 @@ def activity(arm: Path, category: str, arguments: list) -> int:
 
 def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None, prompt_file: Path = None) -> dict:
     settings = {"model": model, "reasoning": reasoning, "sandbox": sandbox,
-                "cli": command(["codex", "--version"], arm)}
+                "cli": command([codex(), "--version"], arm)}
     for existing in arm.parent.glob("*/settings.json"):
         if json.loads(existing.read_text(encoding="utf-8")) != settings:
             raise ValueError("comparison settings differ from an existing arm")
     write_json(arm / "settings.json", settings)
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
     run_dir.mkdir()
-    arguments = ["codex", "exec", "--sandbox", sandbox, "--add-dir", str(arm)]
+    arguments = [codex(), "exec", "--sandbox", sandbox, "--add-dir", str(arm)]
     if resume:
         arguments += ["resume", resume]
     arguments += ["--ignore-user-config", "--model", model, "-c", f'model_reasoning_effort="{reasoning}"', "--json"]
