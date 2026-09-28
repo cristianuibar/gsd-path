@@ -598,15 +598,23 @@ def isolate_task(
     }
 
 
-def _member_context(coordinator: Path, member: str) -> Tuple[Path, str, Dict[str, str]]:
+def _member_context(
+    coordinator: Path, member: str, lock_at: Optional[str] = None
+) -> Tuple[Path, str, Dict[str, str]]:
     """The checkout, coordinator project, and lock entry of a locked, verified member."""
     try:
         import members
     except ImportError:  # pragma: no cover - package import used by tests
         from scripts import members
     coordinator = require_directory(coordinator, "coordinator")
-    lock = coordinator / members.LOCK_PATH
-    entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    if lock_at is None:
+        lock = coordinator / members.LOCK_PATH
+        entries = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    else:
+        shown = run_git(coordinator, "show", f"{lock_at}:{members.LOCK_PATH}")
+        if shown.returncode != 0:
+            raise IsolationError(f"member lock is missing at {lock_at}: {members.LOCK_PATH}")
+        entries = json.loads(shown.stdout)["members"]
     entry = next((item for item in entries if item["name"] == member), None)
     if entry is None:
         raise IsolationError(f"member {member} is not locked for this build because no task named it at build start")
@@ -760,14 +768,19 @@ def _record_member_journal(path: Path, journal: Dict[str, object]) -> None:
     _common.atomic_write(path, json.dumps(journal, indent=2, sort_keys=True) + "\n")
 
 
-def _member_contract(coordinator: Path, base: str, task_file: str, member: str) -> tuple[str, Set[str]]:
+def _member_contract(
+    coordinator: Path, base: str, task_file: str, member: str,
+    current_text: Optional[str] = None,
+) -> tuple[str, Set[str]]:
     shown = run_git(coordinator, "show", f"{base}:{task_file}")
     if shown.returncode != 0:
         raise IsolationError(f"task contract is missing at {base}: {task_file}")
     fields, error = task_frontmatter(shown.stdout)
     if error or fields is None:
         raise IsolationError(error or f"unreadable task contract: {task_file}")
-    current, _ = _read_task_text(coordinator / task_file)
+    current = current_text
+    if current is None:
+        current, _ = _read_task_text(coordinator / task_file)
     current_fields, current_error = task_frontmatter(current)
     if current_error or current_fields is None:
         raise IsolationError(current_error or f"unreadable current task: {task_file}")
@@ -2170,6 +2183,8 @@ def _prove_member_task(
     history: Dict[str, list[tuple[str, str]]],
 ) -> Dict[str, object]:
     """A done member task: one coordinator record naming a proven member landing."""
+    if fields.get("status") != "done":
+        return {"verdict": "block", "reason": "member task must have status: done"}
     member = str(fields.get("repo"))
     records = []
     for sha, body in history.get(subject, []):
@@ -2185,8 +2200,21 @@ def _prove_member_task(
         if fields.get(field) != match[field]:
             return {"verdict": "block", "reason": f"task {field} does not match the coordinator record"}
     try:
-        checkout, _, entry = _member_context(coordinator, member)
-        _, allowed = _member_contract(coordinator, match["base"], task_file, member)
+        recorded = run_git(coordinator, "show", f"{record}:{task_file}")
+        if recorded.returncode != 0:
+            raise IsolationError(f"task is missing from coordinator record: {task_file}")
+        recorded_fields, error = task_frontmatter(recorded.stdout)
+        if error or recorded_fields is None:
+            raise IsolationError(error or f"unreadable recorded task: {task_file}")
+        if recorded_fields.get("status") != "done":
+            raise IsolationError("recorded task status is not done")
+        for field in ("base", "member_base"):
+            if recorded_fields.get(field) != match[field]:
+                raise IsolationError(f"recorded task {field} does not match the coordinator record")
+        checkout, _, entry = _member_context(coordinator, member, lock_at=record)
+        _, allowed = _member_contract(
+            coordinator, match["base"], task_file, member, current_text=recorded.stdout
+        )
     except IsolationError as error:
         return {"verdict": "block", "reason": str(error)}
     landing = match["landing"]

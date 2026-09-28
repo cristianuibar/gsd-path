@@ -14,10 +14,10 @@ class MemberLandingProofTests(unittest.TestCase):
     land = landing.MemberLandingTests.land
     edit = landing.MemberLandingTests.edit
 
-    def verify(self):
+    def verify(self, path=None):
         head = git(self.coordinator, "rev-parse", "HEAD")
         return isolation.verify_landed_task_files(
-            self.coordinator, [self.coordinator / TASK_FILE], ".project/tasks", head)
+            self.coordinator, [path or self.coordinator / TASK_FILE], ".project/tasks", head)
 
     def assert_blocked(self, reason: str) -> None:
         with self.assertRaisesRegex(isolation.IsolationError, reason):
@@ -34,6 +34,42 @@ class MemberLandingProofTests(unittest.TestCase):
         self.assertEqual(verdicts[0]["verdict"], "recovered")
         self.assertEqual(verdicts[0]["commit"], result["commit"])
         self.assertEqual(verdicts[0]["landing"], result["landing"])
+
+    def test_reopened_landed_member_task_blocks_recovery(self) -> None:
+        self.landed()
+        path = self.coordinator / TASK_FILE
+        path.write_text(path.read_text(encoding="utf-8").replace("status: done", "status: in-progress"),
+                        encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        git(self.coordinator, "commit", "-q", "-m", "reopen task")
+        report = isolation.recover(self.coordinator, self.coordinator / ".project" / "tasks")
+        self.assertEqual(report["tasks"][0]["verdict"], "block")
+
+    def test_archived_member_task_is_proven_after_active_build_files_move(self) -> None:
+        result = self.landed()
+        archive = self.coordinator / ".project" / "archive" / "001-demo"
+        archive.mkdir(parents=True)
+        (self.coordinator / ".project" / "tasks").rename(archive / "tasks")
+        (self.coordinator / ".project" / "build").rename(archive / "build")
+        git(self.coordinator, "add", "-A")
+        git(self.coordinator, "commit", "-q", "-m", "archive task and build")
+        verdict = self.verify(archive / "tasks" / Path(TASK_FILE).name)["tasks"][0]
+        self.assertEqual(verdict["verdict"], "recovered")
+        self.assertEqual(verdict["commit"], result["commit"])
+
+    def test_record_must_stamp_done_before_later_task_changes(self) -> None:
+        self.landed()
+        record_body = git(self.coordinator, "log", "-1", "--format=%b")
+        git(self.coordinator, "reset", "-q", "--soft", "HEAD^")
+        path = self.coordinator / TASK_FILE
+        done = path.read_text(encoding="utf-8")
+        path.write_text(done.replace("status: done", "status: in-progress"), encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        git(self.coordinator, "commit", "-q", "-m", "T001: Change app", "-m", record_body)
+        path.write_text(done, encoding="utf-8")
+        git(self.coordinator, "add", TASK_FILE)
+        git(self.coordinator, "commit", "-q", "-m", "finish task later")
+        self.assert_blocked("recorded task status")
 
     def test_done_member_task_without_a_record_is_not_landed(self) -> None:
         self.landed()
