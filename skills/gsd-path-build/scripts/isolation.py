@@ -1334,11 +1334,12 @@ def _member_verify_sidecar(record: Dict[str, str]) -> Tuple[Path, Path, str]:
     checkout = Path(record["checkout"])
     destination = Path(record["worktree"])
     branch = record["branch"]
+    registered = _registered_worktrees(checkout)
     if (destination.is_symlink() or not destination.is_dir()
-            or _registered_worktrees(checkout).get(destination.resolve()) != f"refs/heads/{branch}"
+            or destination.resolve() not in registered
+            or registered[destination.resolve()] not in (None, f"refs/heads/{branch}")
             or worktree_root(destination) != destination.resolve()
-            or common_git_dir(destination) != common_git_dir(checkout)
-            or require_attached(destination) != branch):
+            or common_git_dir(destination) != common_git_dir(checkout)):
         raise IsolationError(f"member Verify sidecar ownership changed: {destination}")
     return checkout, destination, branch
 
@@ -1354,6 +1355,8 @@ def retire_member_verify(created: Dict[str, Dict[str, str]]) -> None:
 def check_member_verify(created: Dict[str, Dict[str, str]]) -> None:
     for record in created.values():
         _, destination, _ = _member_verify_sidecar(record)
+        if require_attached(destination) != record["branch"]:
+            raise IsolationError(f"member Verify sidecar branch changed: {destination}")
         if current_sha(destination) != record["tip"]:
             raise IsolationError(f"member Verify sidecar HEAD changed: {destination}")
 

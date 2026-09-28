@@ -172,6 +172,41 @@ class MemberProjectVerifyTests(unittest.TestCase):
         retry = lean_verification.verify_project(self.root, head)
         self.assertTrue(retry["passed"], retry)
 
+    def test_detached_member_sidecar_is_retired_before_retry(self) -> None:
+        self.use_member_verify_command()
+        plan = self.root / ".project" / "plan" / "PLAN.md"
+        plan.write_text(plan.read_text().replace(COMMAND, "git -C ../web checkout --detach HEAD"))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "verify detaches member")
+        head = git(self.root, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(isolation.IsolationError, "HEAD is detached"):
+            lean_verification.verify_project(self.root, head)
+        self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(git(self.member, "branch", "--list", "gsd-path-verify/*"), "")
+        self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
+        plan.write_text(plan.read_text().replace("git -C ../web checkout --detach HEAD", COMMAND))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "restore verify command")
+        retry = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
+        self.assertTrue(retry["passed"], retry)
+
+    def test_failed_member_verify_keeps_exact_output_in_gap(self) -> None:
+        self.use_member_verify_command()
+        command = "printf 'out\\x60\\x60\\x60\\x60text\\n'; printf 'member failure \\x60\\x60\\x60 detail\\n' >&2; exit 7"
+        plan = self.root / ".project" / "plan" / "PLAN.md"
+        plan.write_text(plan.read_text().replace(COMMAND, command))
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "record failing member verify")
+        result = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["execution"]["stdout"], "out````text\n")
+        self.assertEqual(result["execution"]["stderr"], "member failure ``` detail\n")
+        gap = (self.root / ".project/review/final-gap-1.md").read_text()
+        self.assertIn("exact stdout and stderr are in the Output section", gap)
+        self.assertIn("### stdout\n\n`````\nout````text\n`````", gap)
+        self.assertIn("### stderr\n\n`````\nmember failure ``` detail\n`````", gap)
+        self.assertEqual([row for row in self.ledger_rows() if row["command"] == command], [])
+
     def test_prepare_final_does_not_accept_existing_member_review(self) -> None:
         self.use_member_verify_command()
         lean_verification.verify_project(self.root, self.head)

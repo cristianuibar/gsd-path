@@ -132,10 +132,28 @@ def reuse_final(repo, expected_head):
 def _gap_view(command, head, execution, waves):
     passed = execution["exit_code"] == 0
     members = execution.get("members")
+    output = ""
     if members:
-        observed = "exact stdout and stderr are in the verify result; member heads are not in the ledger key"
+        observed = "exact stdout and stderr are in the Output section; member heads are not in the ledger key"
         reference = "project Verify at " + head + " with members " + ", ".join(
             f"{name} {tip}" for name, tip in members.items())
+        stdout, stderr = execution["stdout"], execution["stderr"]
+        fence = "`" * max([3] + [len(run) + 1 for run in re.findall(r"`+", stdout + "\n" + stderr)])
+        stdout_end = "" if not stdout or stdout.endswith("\n") else "\n"
+        stderr_end = "" if not stderr or stderr.endswith("\n") else "\n"
+        output = f"""
+
+## Output
+
+### stdout
+
+{fence}
+{stdout}{stdout_end}{fence}
+
+### stderr
+
+{fence}
+{stderr}{stderr_end}{fence}"""
     else:
         observed = "exact stdout and stderr are in the command/commit ledger entry"
         reference = f".project/build/verify-ledger.jsonl — {head}, command above"
@@ -155,7 +173,7 @@ Waves checked: {', '.join(str(wave) for wave in waves)}
 ## Finding
 
 - **Found**: Project Verify {'passed' if passed else 'failed'} at the reviewed commit.
-- **Fix direction**: {'none' if passed else 'Resolve the recorded command failure before shipping.'}
+- **Fix direction**: {'none' if passed else 'Resolve the recorded command failure before shipping.'}{output}
 """
 
 
