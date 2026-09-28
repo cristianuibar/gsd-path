@@ -15,6 +15,9 @@ the default offline suite.
 | **git** | any recent | ubuntu-latest and windows-latest defaults | worktree/isolation tests need git 2.30+ |
 | **bash** (Windows only) | Git for Windows | windows-latest default | Verify commands run in Git for Windows' `bash.exe`, never the System32 WSL launcher (`GSD_PATH_BASH` overrides) |
 
+The `windows` CI job runs the same gate natively on `windows-latest` with
+Python 3.9 and 3.12, and blocks like the POSIX jobs.
+
 On Windows, fixture projects' Verify commands call `python3`, as POSIX projects
 do, so the test run needs a real `python3` on PATH. CI copies `python.exe` to
 `python3.exe`; locally, do the same in a directory ahead of the Microsoft Store
