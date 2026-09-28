@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
@@ -962,6 +963,31 @@ def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:
     return observed, owner_bytes
 
 
+# Access denied and sharing violation: on Windows a scanner or indexer that
+# briefly opens a freshly written file blocks moving it or its directory.
+_WINDOWS_BUSY_ERRORS = (5, 32)
+_MOVE_ATTEMPTS = 20
+
+
+def _move_retrying(move: Callable[[Path, Path], object], source: Path, destination: Path) -> None:
+    """Run ``move``, retried on Windows while another process briefly holds ``source``."""
+    if os.name != "nt":
+        move(source, destination)
+        return
+    for attempt in range(_MOVE_ATTEMPTS):
+        try:
+            move(source, destination)
+            return
+        except PermissionError as error:
+            # A directory moved onto an existing directory also reports access
+            # denied; that is not transient, so never retry it.
+            if (getattr(error, "winerror", None) not in _WINDOWS_BUSY_ERRORS
+                    or os.path.isdir(destination)
+                    or attempt == _MOVE_ATTEMPTS - 1):
+                raise
+            time.sleep(min(0.01 * 2 ** attempt, 0.25))
+
+
 def _recover_stale_install_lock(lock: Path, quarantine: Path) -> Optional[Path]:
     legacy_quarantine = lock.with_name(f"{lock.name}.stale")
     if not _lexists(lock):
@@ -1028,7 +1054,7 @@ def _create_install_lock(lock: Path) -> None:
             + "\n").encode("utf-8"),
         )
         quarantine = _recover_stale_install_lock(lock, recovery)
-        staging.rename(lock)
+        _move_retrying(Path.rename, staging, lock)
         published = True
         if quarantine is not None:
             shutil.rmtree(quarantine)
@@ -1103,7 +1129,7 @@ def _backup_existing(
         for entry, backup_name in existing:
             stored = transaction.backup / backup_name
             transaction.moved.append((entry, stored))
-            os.replace(entry, stored)
+            _move_retrying(os.replace, entry, stored)
 
 
 def _reserve_directory(path: Path) -> None:
@@ -1164,7 +1190,7 @@ def _rollback_target(transaction: TargetTransaction) -> None:
         _remove_path(destination)
     for original, stored in reversed(transaction.moved):
         if _lexists(stored):
-            os.replace(stored, original)
+            _move_retrying(os.replace, stored, original)
     if transaction.backup is not None:
         try:
             transaction.backup.rmdir()
