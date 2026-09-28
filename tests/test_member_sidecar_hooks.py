@@ -31,7 +31,7 @@ class MemberSidecarHookTests(unittest.TestCase):
         for relative, content in MANAGED.items():
             path = self.coordinator / relative
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(content), encoding="utf-8")
+            path.write_bytes(json.dumps(content).encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "install host guards")
         self.base = git(self.coordinator, "rev-parse", "HEAD")
@@ -61,7 +61,7 @@ class MemberSidecarHookTests(unittest.TestCase):
         isolation.retire_member_task(self.coordinator, "web", "T001")
         bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
         (bound / ".claude").mkdir()
-        (bound / ".claude" / "settings.json").write_text('{"team": true}', encoding="utf-8")
+        (bound / ".claude" / "settings.json").write_bytes('{"team": true}'.encode("utf-8"))
         git(bound, "add", "-A")
         git(bound, "commit", "-q", "--no-verify", "-m", "team settings")
         self.sidecar = Path(isolation.isolate_member_task(self.coordinator, "web", "T001")["worktree"])
@@ -74,10 +74,10 @@ class MemberSidecarHookTests(unittest.TestCase):
     def test_untracked_local_host_config_is_never_overwritten(self) -> None:
         local = self.sidecar / ".cursor" / "hooks.json"
         local.parent.mkdir()
-        local.write_text('{"mine": true}', encoding="utf-8")
+        local.write_bytes('{"mine": true}'.encode("utf-8"))
         exclude = Path(git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
         exclude.parent.mkdir(parents=True, exist_ok=True)
-        exclude.write_text("/.cursor/\n", encoding="utf-8")
+        exclude.write_bytes("/.cursor/\n".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, ".cursor/hooks.json"):
             self.activate()
         self.assertEqual(local.read_text(encoding="utf-8"), '{"mine": true}')
@@ -86,7 +86,7 @@ class MemberSidecarHookTests(unittest.TestCase):
     def test_plain_untracked_host_config_names_collision_before_cleanliness(self) -> None:
         local = self.sidecar / ".claude" / "settings.json"
         local.parent.mkdir()
-        local.write_text('{"mine": true}', encoding="utf-8")
+        local.write_bytes('{"mine": true}'.encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, ".claude/settings.json"):
             self.activate()
         self.assertEqual(local.read_text(encoding="utf-8"), '{"mine": true}')
@@ -116,7 +116,7 @@ class MemberSidecarHookTests(unittest.TestCase):
         with mock.patch.object(dispatch_driver, "spawn", side_effect=check_hook) as launch:
             round_.launch(state)
             self.assertEqual(launch.call_count, 1)
-            hook.write_text('{"mine": true}', encoding="utf-8")
+            hook.write_bytes('{"mine": true}'.encode("utf-8"))
             with self.assertRaisesRegex(isolation.IsolationError, ".claude/settings.json"):
                 round_.launch(state)
             self.assertEqual(launch.call_count, 1)
@@ -125,7 +125,7 @@ class MemberSidecarHookTests(unittest.TestCase):
         coordinator = self.root / "$HOME-coordinator"
         installed = coordinator / ".claude" / "settings.json"
         installed.parent.mkdir(parents=True)
-        installed.write_text(json.dumps(MANAGED[".claude/settings.json"]), encoding="utf-8")
+        installed.write_bytes(json.dumps(MANAGED[".claude/settings.json"]).encode("utf-8"))
         config = json.loads(isolation._member_hook_configs(coordinator)[".claude/settings.json"])
         command = config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
         self.assertEqual(shlex.split(command),
@@ -134,7 +134,7 @@ class MemberSidecarHookTests(unittest.TestCase):
     def test_codex_hook_has_absolute_windows_guard_command(self) -> None:
         installed = self.coordinator / ".codex" / "hooks.json"
         installed.parent.mkdir(parents=True)
-        installed.write_text('{"guard": "guard_hook.py"}', encoding="utf-8")
+        installed.write_bytes('{"guard": "guard_hook.py"}'.encode("utf-8"))
         self.activate()
         config = json.loads((self.sidecar / ".codex" / "hooks.json").read_text(encoding="utf-8"))
         command = config["hooks"]["PreToolUse"][0]["hooks"][0]
@@ -150,7 +150,7 @@ class MemberSidecarHookTests(unittest.TestCase):
         hook.write_bytes(b"\xff")
         exclude = Path(git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir")) / "info" / "exclude"
         exclude.parent.mkdir(parents=True, exist_ok=True)
-        exclude.write_text("/.cursor/\n", encoding="utf-8")
+        exclude.write_bytes("/.cursor/\n".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, ".cursor/hooks.json"):
             self.activate()
         self.assertEqual(hook.read_bytes(), b"\xff")

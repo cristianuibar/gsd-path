@@ -38,8 +38,7 @@ class MemberLandingProofTests(unittest.TestCase):
     def test_reopened_landed_member_task_blocks_recovery(self) -> None:
         self.landed()
         path = self.coordinator / TASK_FILE
-        path.write_text(path.read_text(encoding="utf-8").replace("status: done", "status: in-progress"),
-                        encoding="utf-8")
+        path.write_bytes(path.read_text(encoding="utf-8").replace("status: done", "status: in-progress").encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "reopen task")
         report = isolation.recover(self.coordinator, self.coordinator / ".project" / "tasks")
@@ -48,8 +47,7 @@ class MemberLandingProofTests(unittest.TestCase):
     def test_changed_task_files_after_landing_blocks_verification(self) -> None:
         self.landed()
         path = self.coordinator / TASK_FILE
-        path.write_text(path.read_text(encoding="utf-8").replace("  - app.py", "  - other.py"),
-                        encoding="utf-8")
+        path.write_bytes(path.read_text(encoding="utf-8").replace("  - app.py", "  - other.py").encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "change task files")
         self.assert_blocked("task artifact contract differs")
@@ -72,10 +70,10 @@ class MemberLandingProofTests(unittest.TestCase):
         git(self.coordinator, "reset", "-q", "--soft", "HEAD^")
         path = self.coordinator / TASK_FILE
         done = path.read_text(encoding="utf-8")
-        path.write_text(done.replace("status: done", "status: in-progress"), encoding="utf-8")
+        path.write_bytes(done.replace("status: done", "status: in-progress").encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "T001: Change app", "-m", record_body)
-        path.write_text(done, encoding="utf-8")
+        path.write_bytes(done.encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "finish task later")
         self.assert_blocked("recorded task status")
@@ -95,13 +93,12 @@ class MemberLandingProofTests(unittest.TestCase):
         self.landed()
         path = self.coordinator / TASK_FILE
         text = path.read_text(encoding="utf-8")
-        path.write_text(text.replace(f"member_base: {self.member_base}", "member_base: " + "0" * 40),
-                        encoding="utf-8")
+        path.write_bytes(text.replace(f"member_base: {self.member_base}", "member_base: " + "0" * 40).encode("utf-8"))
         self.assert_blocked("member_base")
 
     def test_member_landing_with_undeclared_paths_is_not_landed(self) -> None:
-        (self.bound / "app.py").write_text("v2\n", encoding="utf-8")
-        (self.bound / "extra.py").write_text("stray\n", encoding="utf-8")
+        (self.bound / "app.py").write_bytes("v2\n".encode("utf-8"))
+        (self.bound / "extra.py").write_bytes("stray\n".encode("utf-8"))
         git(self.bound, "add", "-A")
         body = isolation.member_commit_body(TASK_FILE, ["app.py", "extra.py"], self.member_base, self.base)
         git(self.bound, "commit", "-q", "--no-verify", "-m", "T001: Change app", "-m", body.strip())
@@ -110,7 +107,7 @@ class MemberLandingProofTests(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
         text = text.replace("status: pending", "status: done").replace(
             "base: null", f"base: {self.base}\nmember_base: {self.member_base}")
-        path.write_text(text, encoding="utf-8")
+        path.write_bytes(text.encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "T001: Change app", "-m",
             f"Task: {TASK_FILE}\nBase: {self.base}\nMember: web {forged} {self.member_base}")
@@ -121,10 +118,9 @@ class MemberLandingProofTests(unittest.TestCase):
         git(self.coordinator, "reset", "-q", "--soft", "HEAD^")
         path = self.coordinator / TASK_FILE
         text = path.read_text(encoding="utf-8")
-        path.write_text(text.replace(f"member_base: {self.member_base}", f"member_base: {member_base}"),
-                        encoding="utf-8")
+        path.write_bytes(text.replace(f"member_base: {self.member_base}", f"member_base: {member_base}").encode("utf-8"))
         if extra:
-            (self.coordinator / ".project" / "notes.md").write_text("x\n", encoding="utf-8")
+            (self.coordinator / ".project" / "notes.md").write_bytes("x\n".encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "T001: Change app", "-m",
             f"Task: {TASK_FILE}\nBase: {self.base}\nMember: web {landing_sha} {member_base}")
@@ -133,7 +129,7 @@ class MemberLandingProofTests(unittest.TestCase):
         self.landed()
         record = git(self.coordinator, "log", "-1", "--format=%b")
         path = self.coordinator / TASK_FILE
-        path.write_text(path.read_text(encoding="utf-8") + "- again\n", encoding="utf-8")
+        path.write_bytes((path.read_text(encoding="utf-8") + "- again\n").encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
         git(self.coordinator, "commit", "-q", "-m", "T001: Change app", "-m", record)
         self.assert_blocked("found 2")
@@ -146,7 +142,7 @@ class MemberLandingProofTests(unittest.TestCase):
     def test_landing_must_build_on_the_recorded_member_base(self) -> None:
         self.landed()
         git(self.member, "checkout", "-q", "-b", "elsewhere", "main")
-        (self.member / "side.py").write_text("x\n", encoding="utf-8")
+        (self.member / "side.py").write_bytes("x\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "--no-verify", "-m", "unrelated")
         unrelated = git(self.member, "rev-parse", "HEAD")
@@ -178,7 +174,7 @@ class MemberLandingProofTests(unittest.TestCase):
         self.assertFalse(verdict.get("landing_retry"))
 
     def advance_bound(self) -> None:
-        (self.bound / "other.py").write_text("earlier landing\n", encoding="utf-8")
+        (self.bound / "other.py").write_bytes("earlier landing\n".encode("utf-8"))
         git(self.bound, "add", "-A")
         git(self.bound, "commit", "-q", "--no-verify", "-m", "earlier landing")
 

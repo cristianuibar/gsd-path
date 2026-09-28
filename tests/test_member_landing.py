@@ -28,7 +28,7 @@ IDENTITY = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
 
 
 def git(repo: Path, *arguments: str, check: bool = True) -> str:
-    return subprocess.run(["git", *arguments], cwd=repo, text=True, capture_output=True,
+    return subprocess.run(["git", *arguments], cwd=repo, encoding="utf-8", errors="replace", capture_output=True,
                           check=check).stdout.strip()
 
 
@@ -43,14 +43,14 @@ class MemberLandingTests(unittest.TestCase):
         self.coordinator = self.root / "acme"
         (self.coordinator / ".project" / "tasks").mkdir(parents=True)
         git(self.root, "init", "-q", "-b", "gsd-path/M001", str(self.coordinator))
-        (self.coordinator / ".project" / "STATE.md").write_text(STATE, encoding="utf-8")
-        (self.coordinator / TASK_FILE).write_text(TASK, encoding="utf-8")
+        (self.coordinator / ".project" / "STATE.md").write_bytes(STATE.encode("utf-8"))
+        (self.coordinator / TASK_FILE).write_bytes(TASK.encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "plan")
         self.member = self.root / "web"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
-        (self.member / "app.py").write_text("v1\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes("v1\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
@@ -58,7 +58,7 @@ class MemberLandingTests(unittest.TestCase):
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                         "--name", "web", "--checkout", str(self.member)],
-                       text=True, capture_output=True, check=True)
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
         pipeline_state.transition_state(
             self.coordinator,
             {"phase": "plan", "status": "done", "branch": "gsd-path/M001", "archive": None},
@@ -80,19 +80,19 @@ class MemberLandingTests(unittest.TestCase):
                                      self.base, self.member_base)
 
     def edit(self, name: str = "app.py", text: str = "v2\n") -> None:
-        (self.sidecar / name).write_text(text, encoding="utf-8")
+        (self.sidecar / name).write_bytes(text.encode("utf-8"))
 
     def prepare_second_task(self) -> str:
         second_file = ".project/tasks/T002-add.md"
         second_task = TASK.replace("T001", "T002").replace("Change app", "Add config").replace(
             "app.py", "config.py")
-        (self.coordinator / second_file).write_text(second_task, encoding="utf-8")
+        (self.coordinator / second_file).write_bytes(second_task.encode("utf-8"))
         git(self.coordinator, "add", second_file)
         git(self.coordinator, "commit", "-q", "-m", "add second task")
         self.second_base = git(self.coordinator, "rev-parse", "HEAD")
         second = isolation.isolate_member_task(self.coordinator, "web", "T002")
         isolation.activate_member_task(self.coordinator, "web", "T002", "coder", second_file, self.second_base)
-        (Path(second["worktree"]) / "config.py").write_text("added\n", encoding="utf-8")
+        (Path(second["worktree"]) / "config.py").write_bytes("added\n".encode("utf-8"))
         return second_file
 
     def journal(self) -> Path:
@@ -135,7 +135,7 @@ class MemberLandingTests(unittest.TestCase):
         self.edit()
         copy = isolation.member_task_copy(self.sidecar, TASK_FILE)
         changed = copy.read_text(encoding="utf-8").replace("model: preferred\n", "model: other\n")
-        copy.write_text(changed + "- coder Log\n", encoding="utf-8")
+        copy.write_bytes((changed + "- coder Log\n").encode("utf-8"))
         contract = git(self.coordinator, "show", f"{self.base}:{TASK_FILE}") + "\n"
         with self.assertRaisesRegex(isolation.IsolationError, "changes contract fields"):
             isolation.member_log_delta(contract, changed)
@@ -223,7 +223,7 @@ class MemberLandingTests(unittest.TestCase):
         self.assertEqual(self.bound_tip(), self.member_base)
 
     def test_conflict_leaves_both_repos_unchanged(self) -> None:
-        (self.bound / "app.py").write_text("other\n", encoding="utf-8")
+        (self.bound / "app.py").write_bytes("other\n".encode("utf-8"))
         git(self.bound, "commit", "-q", "--no-verify", "-am", "other landing")
         moved = self.bound_tip()
         self.edit()
@@ -237,7 +237,7 @@ class MemberLandingTests(unittest.TestCase):
     def test_landing_refuses_while_a_journal_is_pending(self) -> None:
         self.edit()
         self.journal().parent.mkdir(parents=True, exist_ok=True)
-        self.journal().write_text("{}", encoding="utf-8")
+        self.journal().write_bytes("{}".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "recover_member_landing"):
             self.land()
 
@@ -328,9 +328,9 @@ class MemberLandingTests(unittest.TestCase):
                 self.land()
         task = self.coordinator / TASK_FILE
         stamped = task.read_text(encoding="utf-8")
-        task.write_text(stamped + "- unrelated\n", encoding="utf-8")
+        task.write_bytes((stamped + "- unrelated\n").encode("utf-8"))
         git(self.coordinator, "add", TASK_FILE)
-        task.write_text(stamped, encoding="utf-8")
+        task.write_bytes(stamped.encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "coordinator worktree is dirty"):
             isolation.recover_member_landing(self.coordinator, "T001")
 
@@ -371,7 +371,7 @@ class MemberLandingTests(unittest.TestCase):
         with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 self.land()
-        (self.bound / "other.py").write_text("other\n", encoding="utf-8")
+        (self.bound / "other.py").write_bytes("other\n".encode("utf-8"))
         git(self.bound, "add", "other.py")
         git(self.bound, "commit", "-q", "--no-verify", "-m", "other landing")
         moved = self.bound_tip()
@@ -384,16 +384,16 @@ class MemberLandingTests(unittest.TestCase):
     def test_landing_and_recovery_reject_changed_immutable_task_contract(self) -> None:
         self.edit()
         task = self.coordinator / TASK_FILE
-        task.write_text(TASK.replace("repo: web", "repo: sdk"), encoding="utf-8")
+        task.write_bytes(TASK.replace("repo: web", "repo: sdk").encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "contract differs"):
             self.land()
         self.assertEqual(self.bound_tip(), self.member_base)
-        task.write_text(TASK, encoding="utf-8")
+        task.write_bytes(TASK.encode("utf-8"))
         with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 self.land()
         landing = self.bound_tip()
-        task.write_text(TASK.replace("repo: web", "repo: sdk"), encoding="utf-8")
+        task.write_bytes(TASK.replace("repo: web", "repo: sdk").encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "contract differs"):
             isolation.recover_member_landing(self.coordinator, "T001")
         self.assertEqual(self.bound_tip(), landing)
@@ -406,7 +406,7 @@ class MemberLandingTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.land()
         state = self.coordinator / ".project" / "STATE.md"
-        state.write_text(STATE + "extra\n", encoding="utf-8")
+        state.write_bytes((STATE + "extra\n").encode("utf-8"))
         git(self.coordinator, "add", ".project/STATE.md")
         with self.assertRaisesRegex(isolation.IsolationError, "coordinator worktree is dirty"):
             isolation.recover_member_landing(self.coordinator, "T001")
@@ -418,7 +418,7 @@ class MemberLandingTests(unittest.TestCase):
         with mock.patch.object(isolation, "_pick_member_landing", side_effect=RuntimeError("crash")):
             with self.assertRaises(RuntimeError):
                 self.land()
-        (self.bound / "other.py").write_text("x\n", encoding="utf-8")
+        (self.bound / "other.py").write_bytes("x\n".encode("utf-8"))
         git(self.bound, "add", "-A")
         git(self.bound, "commit", "-q", "--no-verify", "-m", "someone else")
         with self.assertRaisesRegex(isolation.IsolationError, "moved"):
@@ -429,15 +429,15 @@ class MemberLandingTests(unittest.TestCase):
         self.assertEqual(isolation.recover_member_landing(self.coordinator, "T001")["state"], "none")
 
     def test_git_guard_refuses_direct_commits_on_the_member_bound_branch(self) -> None:
-        (self.bound / "app.py").write_text("direct\n", encoding="utf-8")
+        (self.bound / "app.py").write_bytes("direct\n".encode("utf-8"))
         git(self.bound, "add", "app.py")
         guarded = subprocess.run([sys.executable, str(GIT_GUARD), "pre-commit"], cwd=self.bound,
-                                 text=True, capture_output=True, check=False)
+                                 encoding="utf-8", errors="replace", capture_output=True, check=False)
         self.assertNotEqual(guarded.returncode, 0)
         self.assertIn("gsd-path/acme-M001", guarded.stderr)
         git(self.bound, "reset", "-q", "--hard")
         side = subprocess.run([sys.executable, str(GIT_GUARD), "pre-commit"], cwd=self.sidecar,
-                              text=True, capture_output=True, check=False)
+                              encoding="utf-8", errors="replace", capture_output=True, check=False)
         self.assertEqual(side.returncode, 0, side.stderr)
 
 

@@ -6,6 +6,7 @@ from unittest import mock
 
 import tests.test_member_landing as landing
 from scripts import isolation
+from tests._platform import requires_symlink
 
 TASK_FILE = landing.TASK_FILE
 git = landing.git
@@ -49,7 +50,7 @@ class MemberActivationTests(unittest.TestCase):
 
     def test_activation_rejects_a_copy_from_an_older_coordinator_base(self) -> None:
         before = self.copy().read_bytes()
-        (self.coordinator / "other.txt").write_text("unrelated\n", encoding="utf-8")
+        (self.coordinator / "other.txt").write_bytes("unrelated\n".encode("utf-8"))
         git(self.coordinator, "add", "other.txt")
         git(self.coordinator, "commit", "-q", "-m", "unrelated")
         new_base = git(self.coordinator, "rev-parse", "HEAD")
@@ -66,10 +67,11 @@ class MemberActivationTests(unittest.TestCase):
         with self.assertRaisesRegex(isolation.IsolationError, "member base"):
             isolation.activate_member_task(self.coordinator, "web", "T001", "coder", TASK_FILE, self.base)
 
+    @requires_symlink
     def test_activation_refuses_a_tracked_copy_root_symlink(self) -> None:
         outside = self.root / "outside"
         outside.mkdir()
-        (outside / "keep.txt").write_text("keep\n", encoding="utf-8")
+        (outside / "keep.txt").write_bytes("keep\n".encode("utf-8"))
         git(self.member, "update-ref", "-d", AUTH)
         copy_root = self.sidecar / ".gsd-path-coordinator"
         shutil.rmtree(copy_root)
@@ -97,7 +99,7 @@ class MemberActivationTests(unittest.TestCase):
     def test_coder_log_lands_in_the_coordinator_record(self) -> None:
         self.edit()
         path = self.copy()
-        path.write_text(path.read_text(encoding="utf-8") + "- coder: changed app\n", encoding="utf-8")
+        path.write_bytes((path.read_text(encoding="utf-8") + "- coder: changed app\n").encode("utf-8"))
         self.land()
         record = (self.coordinator / TASK_FILE).read_text(encoding="utf-8")
         self.assertIn("- coder: changed app\n", record)
@@ -108,10 +110,10 @@ class MemberActivationTests(unittest.TestCase):
         self.edit()
         path = self.copy()
         original = path.read_text(encoding="utf-8")
-        path.write_text(original.replace("  - app.py", "  - app.py\n  - extra.py"), encoding="utf-8")
+        path.write_bytes(original.replace("  - app.py", "  - app.py\n  - extra.py").encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "contract"):
             self.land()
-        path.write_text(original.replace("- created\n", "- rewritten\n"), encoding="utf-8")
+        path.write_bytes(original.replace("- created\n", "- rewritten\n").encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "append-only"):
             self.land()
         self.assertEqual(git(self.bound, "rev-parse", "HEAD"), self.member_base)
@@ -121,16 +123,17 @@ class MemberActivationTests(unittest.TestCase):
         original = self.copy().read_text(encoding="utf-8")
         for agent in ("null", ""):
             with self.subTest(agent=agent):
-                self.copy().write_text(original.replace("agent: coder\n", f"agent: {agent}\n"), encoding="utf-8")
+                self.copy().write_bytes(original.replace("agent: coder\n", f"agent: {agent}\n").encode("utf-8"))
                 with self.assertRaisesRegex(isolation.IsolationError, "assigned agent"):
                     self.land()
                 self.assertEqual(git(self.bound, "rev-parse", "HEAD"), self.member_base)
                 self.assertFalse(landing.MemberLandingTests.journal(self).exists())
 
+    @requires_symlink
     def test_landing_refuses_a_symlinked_copy_parent(self) -> None:
         outside = self.root / "outside"
         outside.mkdir()
-        (outside / "keep.txt").write_text("keep\n", encoding="utf-8")
+        (outside / "keep.txt").write_bytes("keep\n".encode("utf-8"))
         copy_root = self.sidecar / ".gsd-path-coordinator"
         shutil.rmtree(copy_root)
         copy_root.symlink_to(outside, target_is_directory=True)
@@ -143,7 +146,7 @@ class MemberActivationTests(unittest.TestCase):
 
     def test_unstaged_bookkeeping_may_stay_dirty_while_landing(self) -> None:
         ledger = self.coordinator / ".project" / "build" / "verify-ledger.jsonl"
-        ledger.write_text("{}\n", encoding="utf-8")
+        ledger.write_bytes("{}\n".encode("utf-8"))
         self.edit()
         self.land()
         self.assertEqual(git(self.coordinator, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"),
@@ -151,7 +154,7 @@ class MemberActivationTests(unittest.TestCase):
 
     def test_staged_bookkeeping_never_enters_the_record(self) -> None:
         ledger = self.coordinator / ".project" / "build" / "verify-ledger.jsonl"
-        ledger.write_text("{}\n", encoding="utf-8")
+        ledger.write_bytes("{}\n".encode("utf-8"))
         git(self.coordinator, "add", "-f", str(ledger))
         self.edit()
         with self.assertRaisesRegex(isolation.IsolationError, "verify-ledger"):

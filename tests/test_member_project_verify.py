@@ -17,7 +17,7 @@ COMMAND = "test -f ../web/lib.py && python3 -m unittest -q test_hello"
 
 def git(repo: Path, *arguments: str, check: bool = True) -> str:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments], cwd=repo,
-                          text=True, capture_output=True, check=check).stdout.strip()
+                          encoding="utf-8", errors="replace", capture_output=True, check=check).stdout.strip()
 
 
 class MemberProjectVerifyTests(unittest.TestCase):
@@ -36,7 +36,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.member = base / "frontend-checkout"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
-        (self.member / "README.md").write_text("web\n", encoding="utf-8")
+        (self.member / "README.md").write_bytes("web\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
@@ -44,22 +44,21 @@ class MemberProjectVerifyTests(unittest.TestCase):
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         state = self.root / ".project" / "STATE.md"
         shipping = state.read_text(encoding="utf-8")
-        state.write_text(shipping.replace("phase: ship", "phase: plan"), encoding="utf-8")
+        state.write_bytes(shipping.replace("phase: ship", "phase: plan").encode("utf-8"))
         joined = subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.root), "--name", "web",
-                                 "--checkout", str(self.member)], text=True, capture_output=True)
+                                 "--checkout", str(self.member)], encoding="utf-8", errors="replace", capture_output=True)
         self.assertEqual(joined.returncode, 0, joined.stderr)
-        state.write_text(shipping, encoding="utf-8")
+        state.write_bytes(shipping.encode("utf-8"))
         git(self.member, "checkout", "-q", "-b", "gsd-path/demo-M001")
-        (self.member / "lib.py").write_text("landed = True\n", encoding="utf-8")
+        (self.member / "lib.py").write_bytes("landed = True\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "member landing")
         self.member_tip = git(self.member, "rev-parse", "HEAD")
         git(self.member, "checkout", "-q", "main")
         lock = self.root / ".project" / "build" / "members.json"
         lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.write_text(json.dumps({"schema": "gsd-path/member-lock/v1", "members": [
-            {"name": "web", "branch": "gsd-path/demo-M001", "base": git(self.member, "rev-parse", "main")}]}),
-            encoding="utf-8")
+        lock.write_bytes(json.dumps({"schema": "gsd-path/member-lock/v1", "members": [
+            {"name": "web", "branch": "gsd-path/demo-M001", "base": git(self.member, "rev-parse", "main")}]}).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "member milestone")
         self.head = git(self.root, "rev-parse", "HEAD")
@@ -69,14 +68,14 @@ class MemberProjectVerifyTests(unittest.TestCase):
         text = plan.read_text(encoding="utf-8")
         start = text.index("Project verify:")
         end = text.index("\n", start)
-        plan.write_text(text[:start] + f"Project verify: {COMMAND}" + text[end:], encoding="utf-8")
+        plan.write_bytes((text[:start] + f"Project verify: {COMMAND}" + text[end:]).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "project verify uses the member")
         self.head = git(self.root, "rev-parse", "HEAD")
 
     def ledger_rows(self) -> list:
         ledger = self.root / ".project" / "build" / "verify-ledger.jsonl"
-        return [json.loads(line) for line in ledger.read_text().splitlines()] if ledger.exists() else []
+        return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()] if ledger.exists() else []
 
     def test_project_verify_sees_member_sidecars_beside_the_coordinator(self) -> None:
         self.use_member_verify_command()
@@ -98,15 +97,15 @@ class MemberProjectVerifyTests(unittest.TestCase):
 
     def test_member_named_project_verify_is_refused_before_sidecar_creation(self) -> None:
         listed = self.root / ".project" / "MEMBERS.md"
-        listed.write_text(listed.read_text().replace("## web\n", "## project-verify\n"))
+        listed.write_bytes(listed.read_text(encoding="utf-8").replace("## web\n", "## project-verify\n").encode("utf-8"))
         marker = Path(git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir")) / "gsd-path" / "member.json"
-        role = json.loads(marker.read_text())
+        role = json.loads(marker.read_text(encoding="utf-8"))
         role["name"] = "project-verify"
-        marker.write_text(json.dumps(role))
+        marker.write_bytes(json.dumps(role).encode("utf-8"))
         lock = self.root / ".project" / "build" / "members.json"
-        locked = json.loads(lock.read_text())
+        locked = json.loads(lock.read_text(encoding="utf-8"))
         locked["members"][0]["name"] = "project-verify"
-        lock.write_text(json.dumps(locked))
+        lock.write_bytes(json.dumps(locked).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "lock colliding member name")
         head = git(self.root, "rev-parse", "HEAD")
@@ -121,11 +120,11 @@ class MemberProjectVerifyTests(unittest.TestCase):
         api.mkdir()
         git(api, "init", "-q", "-b", "main")
         listed = self.root / ".project" / "MEMBERS.md"
-        listed.write_text(listed.read_text() + f"\n## api\nCheckout: {api}\nRemote: https://github.com/acme/api.git\nIntegration: default\n")
+        listed.write_bytes((listed.read_text(encoding="utf-8") + f"\n## api\nCheckout: {api}\nRemote: https://github.com/acme/api.git\nIntegration: default\n").encode("utf-8"))
         marker = api / ".git" / "gsd-path" / "member.json"
         marker.parent.mkdir()
-        marker.write_text(json.dumps({"schema": "gsd-path/member/v1", "coordinator": str(self.root),
-                                      "project": "wrong", "name": "api"}))
+        marker.write_bytes(json.dumps({"schema": "gsd-path/member/v1", "coordinator": str(self.root),
+                                      "project": "wrong", "name": "api"}).encode("utf-8"))
         self.use_member_verify_command()
         result = lean_verification.verify_project(self.root, self.head)
         self.assertTrue(result["passed"], result)
@@ -157,7 +156,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
     def test_member_verify_rejects_changed_sidecar_head(self) -> None:
         self.use_member_verify_command()
         plan = self.root / ".project" / "plan" / "PLAN.md"
-        plan.write_text(plan.read_text().replace(COMMAND, "git -C ../web reset --hard main"))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(COMMAND, "git -C ../web reset --hard main").encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "verify changes member head")
         head = git(self.root, "rev-parse", "HEAD")
@@ -175,7 +174,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
     def test_detached_member_sidecar_is_retired_before_retry(self) -> None:
         self.use_member_verify_command()
         plan = self.root / ".project" / "plan" / "PLAN.md"
-        plan.write_text(plan.read_text().replace(COMMAND, "git -C ../web checkout --detach HEAD"))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(COMMAND, "git -C ../web checkout --detach HEAD").encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "verify detaches member")
         head = git(self.root, "rev-parse", "HEAD")
@@ -184,7 +183,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
         self.assertEqual(git(self.member, "branch", "--list", "gsd-path-verify/*"), "")
         self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
-        plan.write_text(plan.read_text().replace("git -C ../web checkout --detach HEAD", COMMAND))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace("git -C ../web checkout --detach HEAD", COMMAND).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "restore verify command")
         retry = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
@@ -194,7 +193,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.use_member_verify_command()
         plan = self.root / ".project" / "plan" / "PLAN.md"
         command = "git -C ../web checkout gsd-path/demo-M001"
-        plan.write_text(plan.read_text().replace(COMMAND, command))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(COMMAND, command).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "verify switches member branch")
         head = git(self.root, "rev-parse", "HEAD")
@@ -204,7 +203,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.assertEqual(git(self.member, "worktree", "list", "--porcelain").count("worktree "), 1)
         self.assertEqual(git(self.member, "branch", "--list", "gsd-path-verify/*"), "")
         self.assertEqual(git(self.root, "worktree", "list", "--porcelain").count("worktree "), 1)
-        plan.write_text(plan.read_text().replace(command, COMMAND))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(command, COMMAND).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "restore verify command")
         retry = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
@@ -215,14 +214,14 @@ class MemberProjectVerifyTests(unittest.TestCase):
         self.use_member_verify_command()
         command = "printf 'out\\x60\\x60\\x60\\x60text\\n'; printf 'member failure \\x60\\x60\\x60 detail\\n' >&2; exit 7"
         plan = self.root / ".project" / "plan" / "PLAN.md"
-        plan.write_text(plan.read_text().replace(COMMAND, command))
+        plan.write_bytes(plan.read_text(encoding="utf-8").replace(COMMAND, command).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "record failing member verify")
         result = lean_verification.verify_project(self.root, git(self.root, "rev-parse", "HEAD"))
         self.assertFalse(result["passed"])
         self.assertEqual(result["execution"]["stdout"], "out````text\n")
         self.assertEqual(result["execution"]["stderr"], "member failure ``` detail\n")
-        gap = (self.root / ".project/review/final-gap-1.md").read_text()
+        gap = (self.root / ".project/review/final-gap-1.md").read_text(encoding="utf-8")
         self.assertIn("exact stdout and stderr are in the Output section", gap)
         self.assertIn("### stdout\n\n`````\nout````text\n`````", gap)
         self.assertIn("### stderr\n\n`````\nmember failure ``` detail\n`````", gap)
@@ -259,7 +258,7 @@ class MemberProjectVerifyTests(unittest.TestCase):
         text = wave.read_text(encoding="utf-8")
         start = text.index("Reviewed HEAD:")
         end = text.index("\n", start)
-        wave.write_text(text[:start] + f"Reviewed HEAD: {self.head}" + text[end:], encoding="utf-8")
+        wave.write_bytes((text[:start] + f"Reviewed HEAD: {self.head}" + text[end:]).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "review covers the member milestone")
         head = git(self.root, "rev-parse", "HEAD")
