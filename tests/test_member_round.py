@@ -39,6 +39,8 @@ class MemberRoundTests(unittest.TestCase):
         self.member = base / "web"
         shutil.copytree(self.root, self.member, ignore=shutil.ignore_patterns(".git", ".project", "fake_*.py"))
         git(self.member, "init", "-q", "-b", "main")
+        git(self.member, "config", "user.name", "Test")
+        git(self.member, "config", "user.email", "test@example.test")
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "--allow-empty", "-m", "member init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
