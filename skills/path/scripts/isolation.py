@@ -718,7 +718,7 @@ MEMBER_LANDING_DIR = ("gsd-path", "member-landings")
 # A running member task's live task file sits in its member sidecar, untracked
 # and excluded, so the coordinator stays clean while member work runs.
 MEMBER_TASK_COPY_DIR = ".gsd-path-coordinator"
-CONTRACT_FIELDS = ("id", "title", "repo", "files", "deps", "wave")
+MEMBER_IMMUTABLE_FIELDS = ("id", "title", "repo", "files", "deps", "wave")
 
 
 def member_task_copy(sidecar: Path, task_file: str) -> Path:
@@ -793,7 +793,7 @@ def _member_copy_text(journal: Dict[str, object], coordinator: Path) -> str:
     expected, _ = task_frontmatter(contract)
     if error or fields is None or expected is None:
         raise IsolationError(error or "unreadable member task copy")
-    if any(fields.get(key) != expected.get(key) for key in CONTRACT_FIELDS):
+    if any(fields.get(key) != expected.get(key) for key in MEMBER_IMMUTABLE_FIELDS):
         raise IsolationError("member task copy changes contract fields")
     if (fields.get("status"), fields.get("base"), fields.get("member_base")) != (
             "in-progress", journal["base"], journal["member_base"]):
@@ -890,8 +890,7 @@ def _member_contract(
     current_fields, current_error = task_frontmatter(current)
     if current_error or current_fields is None:
         raise IsolationError(current_error or f"unreadable current task: {task_file}")
-    immutable = ("id", "title", "repo", "files", "deps", "wave")
-    if any(current_fields.get(key) != fields.get(key) for key in immutable):
+    if any(current_fields.get(key) != fields.get(key) for key in MEMBER_IMMUTABLE_FIELDS):
         raise IsolationError(f"current task contract differs from {base}: {task_file}")
     if fields.get("repo") != member:
         raise IsolationError(f"{task_file} is not a task for member {member}")
@@ -2322,8 +2321,7 @@ def _prove_member_task(
         _, allowed = _member_contract(
             coordinator, match["base"], task_file, member, current_text=recorded.stdout
         )
-        immutable = ("id", "title", "repo", "files", "deps", "wave")
-        if any(fields.get(key) != recorded_fields.get(key) for key in immutable):
+        if any(fields.get(key) != recorded_fields.get(key) for key in MEMBER_IMMUTABLE_FIELDS):
             raise IsolationError(f"task artifact contract differs from {match['base']}: {task_file}")
     except IsolationError as error:
         return {"verdict": "block", "reason": str(error)}
