@@ -1,7 +1,8 @@
 # Gap Review — <N>: <risk identity>
 
 <!-- Written by one final gap reviewer. This file covers exactly one
-     cross-wave integration risk named in the review brief. -->
+     cross-wave integration risk named in the review brief. Repeat FINAL.md's
+     `Member reviewed HEAD: <member> <full SHA>` lines after Reviewed HEAD. -->
 
 Reviewed HEAD: <full SHA>
 Gap verdict: <pass | blocked>

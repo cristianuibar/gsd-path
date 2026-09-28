@@ -110,7 +110,7 @@ def reuse_final(repo, expected_head):
     """Materialize a final view only when the existing proof still covers it."""
     repo = Path(repo).resolve()
     try:
-        # ponytail: wave reviews name only the coordinator head; S4a2 adds member reviewed heads.
+        # Wave reviews name only the coordinator head, so a member milestone needs its own final review.
         if _locked_members(repo):
             raise contracts.HandoffError("member milestone needs a final review of the member heads")
         relative, text, criteria, reviewed = _reusable_wave(repo, expected_head)
@@ -155,11 +155,12 @@ def _gap_view(command, head, execution, waves):
 {fence}
 {stderr}{stderr_end}{fence}"""
     else:
+        members = {}
         observed = "exact stdout and stderr are in the command/commit ledger entry"
         reference = f".project/build/verify-ledger.jsonl — {head}, command above"
     return f"""# Gap Review — 1: project Verify
 
-Reviewed HEAD: {head}
+Reviewed HEAD: {head}{"".join(f"{chr(10)}Member reviewed HEAD: {name} {tip}" for name, tip in members.items())}
 Gap verdict: {'pass' if passed else 'blocked'}
 Risk: project Verify
 Waves checked: {', '.join(str(wave) for wave in waves)}
