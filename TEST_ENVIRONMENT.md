@@ -15,9 +15,6 @@ the default offline suite.
 | **git** | any recent | ubuntu-latest and windows-latest defaults | worktree/isolation tests need git 2.30+ |
 | **bash** (Windows only) | Git for Windows | windows-latest default | Verify commands run in Git for Windows' `bash.exe`, never the System32 WSL launcher (`GSD_PATH_BASH` overrides) |
 
-The `windows` CI job runs the same gate natively on `windows-latest`. It is
-non-blocking until native Windows support lands ([#189](https://github.com/open-gsd/gsd-path/issues/189)).
-
 Optional for extended tiers:
 
 | Tool | When |
