@@ -82,6 +82,8 @@ def _promotion_event(
         if isinstance(task_ids, list) and task_ids:
             return f"{prefix}; plan drift flagged tasks {', '.join(task_ids)}"
         return f"{prefix}; plan contract changed after approval"
+    if drift_class == "unverifiable" and drift.get("member_tasks"):
+        return f"{prefix}; plan drift unverifiable because member task drift is not checked yet"
     if drift_class == "unverifiable":
         return f"{prefix}; plan drift unverifiable because approval checkpoint is missing"
     return prefix

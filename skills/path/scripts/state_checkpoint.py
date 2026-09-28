@@ -1049,6 +1049,18 @@ def _classify_plan_drift(
         }
     approved = _approved_task_contracts(repo, checkpoint)
     current = _task_contracts_at(repo, revision)
+    # Member task paths live in member repos; this check sees only the coordinator.
+    if any(re.search(r"(?m)^repo:\s*\S", contract.text) for contract in approved.values()) or any(
+            re.search(r"(?m)^repo:\s*\S", text) for _, text in current.values()):
+        return {
+            "class": "unverifiable",
+            "checkpoint": checkpoint,
+            "task_ids": [],
+            "changed_paths": [],
+            "contract_paths": [],
+            "member_tasks": True,
+            "reason": "member task drift is not checked yet",
+        }
 
     contract_paths: set[str] = set()
     flagged_ids: set[str] = set()

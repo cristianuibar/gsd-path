@@ -74,6 +74,10 @@ class MemberRoundTests(unittest.TestCase):
         landed = {item["task"]: item for item in receipt["landed"]}
         self.assertEqual(set(landed), {"T001", "T002"})
         self.assertEqual(landed["T002"]["mode"], "member")
+        self.assertTrue(landed["T002"]["ledger"])
+        rows = [json.loads(line) for line in
+                (self.root / ".project" / "build" / "verify-ledger.jsonl").read_text().splitlines()]
+        self.assertIn(("web", landed["T002"]["landing"]), [(row.get("repo"), row["commit"]) for row in rows])
         bound = "gsd-path/demo-M001"
         self.assertEqual(git(self.member, "show", f"{bound}:tests/test_app.py"), "print('hello')")
         self.assertEqual(git(self.member, "log", "-1", "--format=%s", bound), "T002: Demo task T002")
@@ -269,6 +273,17 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(git(self.member, "rev-parse", f"{receipt['landed'][-1]['landing']}^"),
                          landed["landing"])
         self.assertNotEqual(waiting["member_base"], landed["landing"])
+
+    def test_second_member_landing_on_a_moved_tip_gets_no_ledger_row(self) -> None:
+        t001 = next((self.root / ".project" / "tasks").glob("T001-*.md"))
+        t001.write_text(t001.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
+                        encoding="utf-8")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "plan: T001 also changes the web member")
+        receipt = self.round()
+        self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:3000])
+        ledgers = sorted(item["ledger"] for item in receipt["landed"])
+        self.assertEqual(ledgers, [False, True])
 
     def test_member_tasks_stay_refused_without_the_gate(self) -> None:
         receipt = self.round(gate=False)

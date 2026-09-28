@@ -1993,6 +1993,7 @@ class PipelineStateTests(unittest.TestCase):
         next_status: str = "done",
         duplicate_approval: bool = False,
         pull_request: bool = False,
+        member_task: bool = False,
     ) -> tuple[Path, str]:
         repo = Path(tmp) / "repo"
         remote = Path(tmp) / "origin.git"
@@ -2099,6 +2100,11 @@ class PipelineStateTests(unittest.TestCase):
                 encoding="utf-8",
             )
         task_path = project / "next" / "tasks" / "T002-change-app.md"
+        if member_task:
+            task_path.write_text(
+                task_path.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
+                encoding="utf-8",
+            )
         if mutate_task:
             task_path.write_text(
                 task_path.read_text(encoding="utf-8").replace(
@@ -2394,6 +2400,16 @@ class PipelineStateTests(unittest.TestCase):
             state, text, _ = pipeline_state.load_state(repo)
             self.assertEqual((state.phase, state.status), ("plan", "active"))
             self.assertIn("plan drift flagged tasks T002", text)
+
+    def test_promote_next_reopens_a_lookahead_with_member_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, integrate = self._promotion_repo(tmp, drift=False, member_task=True)
+            result = state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
+            self.assertEqual(result["drift"]["class"], "unverifiable")
+            self.assertIn("member", result["drift"]["reason"])
+            state, text, _ = pipeline_state.load_state(repo)
+            self.assertEqual((state.phase, state.status), ("plan", "active"))
+            self.assertIn("member task drift is not checked yet", text)
 
     def test_promote_next_detects_deleted_declared_path_as_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
