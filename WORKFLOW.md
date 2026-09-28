@@ -421,8 +421,9 @@ criterion `met`, `not-met`, or `unverifiable` with checked evidence. Each gap
 reviewer records `pass` or `blocked` for its assigned end-to-end or cross-wave
 risk. List only genuine
 risks that could plausibly fail; never pad the list. The runtime
-runs PLAN.md's project Verify once, stores exact stdout/stderr in the existing
-command/commit ledger, and generates its gap view; other gap
+runs PLAN.md's project Verify and generates its gap view. Single-repo output
+lives in the command/commit ledger; for member milestone evidence and reruns,
+see [S4a1](docs/multi-repo-work.md#slices). Other gap
 reviewers do not re-run it. The orchestrator
 creates one disposable worktree at exact reviewed HEAD
 per reviewer; project commands never run in the primary worktree. Every final
