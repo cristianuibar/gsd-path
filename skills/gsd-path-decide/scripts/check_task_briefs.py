@@ -205,8 +205,16 @@ def _member_bases(root: Path):
                 if checkout is None:
                     cache[name] = None
                 else:
-                    members.require_origin_main(checkout)
-                    cache[name] = (checkout, _resolve_base(checkout, "refs/remotes/origin/main"))
+                    # During build a member task starts from its locked bound branch, which holds
+                    # earlier landings; before build it starts from origin/main.
+                    lock = root / members.LOCK_PATH
+                    locked = [entry for entry in (json.loads(lock.read_text(encoding="utf-8"))["members"]
+                                                  if lock.is_file() else []) if entry["name"] == name]
+                    if locked:
+                        cache[name] = (checkout, _resolve_base(checkout, f"refs/heads/{locked[0]['branch']}"))
+                    else:
+                        members.require_origin_main(checkout)
+                        cache[name] = (checkout, _resolve_base(checkout, "refs/remotes/origin/main"))
             except (members.MembersError, BriefError) as error:
                 raise BriefError(f"member {name} is unavailable: {error}") from error
         return cache[name]

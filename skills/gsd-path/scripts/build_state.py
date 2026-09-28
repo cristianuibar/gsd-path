@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 sys.dont_write_bytecode = True
@@ -51,6 +52,8 @@ else:
 
 
 DEFAULT_PROJECT_DIR = ".project"
+# Temporary: remove when S5 activates member execution (docs/multi-repo-work.md).
+MEMBER_EXECUTION_GATE = "GSD_PATH_MEMBER_EXECUTION"
 TASK_ID_RE = re.compile(r"^T\d{3}$")
 TASK_FILE_RE = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -87,6 +90,7 @@ class Task:
     task_branch: Optional[str]
     task_file: str
     verify_heavy: bool
+    repo: str = ""
 
 
 @dataclass(frozen=True)
@@ -214,8 +218,8 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
     text = _read_file(path, label)
     fields = _parse_frontmatter(text, label)
     task_id = _required_string(fields, "id", label)
-    if "repo" in fields:
-        # Fail safe until member landing exists: a member task's paths are not coordinator paths.
+    if "repo" in fields and os.environ.get(MEMBER_EXECUTION_GATE) != "1":
+        # Member execution stays off until S5 proves it end to end; tests opt in.
         raise BuildStateError(
             "member-task", f"{label} is a member task (repo: {fields['repo']}); member task execution is not enabled"
         )
@@ -244,6 +248,7 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
         task_branch=_nullable_string(fields, "task_branch", label),
         task_file=task_file or relative_path,
         verify_heavy=_verify_heavy(text, label),
+        repo=str(fields.get("repo") or ""),
     )
 
 
@@ -483,6 +488,8 @@ def _validate_ready_metadata(project: Project) -> None:
 
 
 def _overlap(left: Task, right: Task) -> List[str]:
+    if left.repo != right.repo:
+        return []
     return sorted(set(left.files) & set(right.files))
 
 
@@ -572,6 +579,7 @@ def ready(repo: str, project_dir: str = DEFAULT_PROJECT_DIR, *,
                 "files": list(task.files),
                 "task_file": task.task_file,
                 "verify_heavy": task.verify_heavy,
+                **({"repo": task.repo} if task.repo else {}),
             }
             for task in selectable
         ],

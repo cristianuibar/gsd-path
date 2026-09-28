@@ -2308,6 +2308,39 @@ MEMBER_RECORD_RE = re.compile(
 )
 
 
+def _recover_unfinished_member_task(coordinator: Path, task_id: str, member: str) -> Dict[str, object]:
+    """Unfinished member task: a pending journal retries landing; a retained sidecar resumes."""
+    if os.path.lexists(_member_journal_path(coordinator, task_id)):
+        return {"verdict": "resume", "landing_retry": True, "member": member, "worktree": None}
+    try:
+        checkout, project, _ = _member_context(coordinator, member)
+    except IsolationError as error:
+        return {"verdict": "block", "reason": str(error)}
+    branch = f"{TASK_BRANCH_PREFIX}{project}-{task_id}"
+    retained = run_git(checkout, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0
+    if retained:
+        return {"verdict": "resume", "member": member, "task_branch": None, "worktree": None,
+                "member_task_branch": branch}
+    return {"verdict": "none", "reason": "pending member task has no retained isolate"}
+
+
+def deactivate_member_task(coordinator: Path, member: str, task_id: str) -> None:
+    """Clear a member task's authorization so a failed attempt cannot land."""
+    checkout, project, _ = _member_context(coordinator, member)
+    deleted = run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
+    if deleted.returncode != 0:
+        raise IsolationError((deleted.stderr or deleted.stdout).strip() or "could not clear member task authorization")
+
+
+def member_log_delta(contract: str, copy: str) -> str:
+    """The Log a coder appended to a member task's live copy since its contract."""
+    base_body = _normalize_newlines(split_frontmatter(contract)[1])
+    body = _normalize_newlines(split_frontmatter(copy)[1])
+    if not body.startswith(base_body):
+        raise IsolationError("member task copy Log is not append-only")
+    return body[len(base_body):]
+
+
 def _prove_member_task(
     coordinator: Path, task_file: str, fields: Dict[str, object], subject: str,
     history: Dict[str, list[tuple[str, str]]],
@@ -2399,6 +2432,11 @@ def _recover_task(
         return result("block", reason=str(exc))
     if fields.get("repo"):
         # Only the landing record proves a member task; unfinished ones block until member dispatch (S3c3).
+        if status in ("pending", "in-progress"):
+            if any(MEMBER_RECORD_RE.fullmatch(body.strip()) and f"Task: {task_file}\n" in body
+                   for _, body in history.get(subject, [])):
+                return result("block", reason="member task has a landing record but is not done")
+            return result(**_recover_unfinished_member_task(primary, task_id, str(fields["repo"])))
         return result(**_prove_member_task(primary, task_file, fields, subject, history))
     task_branch = task_branch_name(task_id)
     branch_exists = task_branch in branches
