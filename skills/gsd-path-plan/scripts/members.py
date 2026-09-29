@@ -524,7 +524,11 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
         raise MembersError(f"invalid member name or GitHub repository: {name!r} {github!r}")
     if visibility not in VISIBILITIES:
         raise MembersError(f"visibility must be one of {', '.join(VISIBILITIES)}")
+    if checkout.is_symlink():
+        raise MembersError(f"member checkout path is a symlink: {checkout}")
     resolved = checkout.resolve()
+    if resolved == root or root in resolved.parents or resolved in root.parents:
+        raise MembersError(f"member checkout is nested with the coordinator: {resolved}")
     target = {"schema": MEMBER_CREATE_SCHEMA, "name": name, "github": github, "visibility": visibility,
               "checkout": str(resolved), "integration": integration}
     common = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
@@ -560,6 +564,8 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     if viewed.returncode != 0:
         if "Could not resolve to a Repository" not in f"{viewed.stdout}\n{viewed.stderr}":
             raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
+        if occupied:
+            raise MembersError(f"member checkout {resolved} is a clone of a missing repository: {github}")
         created = _gh("repo", "create", github, f"--{visibility}", "--add-readme")
         if created.returncode != 0:
             raise MembersError(f"could not create {github}: {(created.stderr or created.stdout).strip()}")

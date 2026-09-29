@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -151,6 +152,35 @@ class MemberCreateTests(unittest.TestCase):
                                        "--checkout", str(self.checkout), "--visibility", "private"])
         self.assertEqual(result, 1)
         self.assertIn("--visibility requires --create", stderr.getvalue())
+        self.assertFalse(self.journal().exists())
+
+    def test_symlinked_checkout_blocks_before_gh(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        target = self.base / "existing-clone"
+        git(self.base, "clone", "-q", URL, str(target))
+        self.checkout.symlink_to(target, target_is_directory=True)
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "symlink"):
+            self.create()
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.journal().exists())
+
+    def test_missing_remote_does_not_reuse_occupied_clone(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.base, "clone", "-q", URL, str(self.checkout))
+        shutil.rmtree(self.remote)
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "clone of a missing repository"):
+            self.create()
+        self.assertEqual([call[:2] for call in self.calls], [("repo", "view")])
+        self.assertFalse(self.remote.exists())
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+
+    def test_nested_checkout_blocks_before_gh(self) -> None:
+        self.checkout = self.coordinator / "web"
+        with self.assertRaisesRegex(members.MembersError, "nested with the coordinator"):
+            self.create()
+        self.assertEqual(self.calls, [])
         self.assertFalse(self.journal().exists())
 
 
