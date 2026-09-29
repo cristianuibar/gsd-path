@@ -181,8 +181,8 @@ daemon configuration.
 
 ![Project dashboard showing the history viewer link, milestone progress, expandable evidence, and usage with sample data](docs/images/dashboard-project.png)
 
-*Dashboard screenshots captured from the current source on September 19, 2026,
-using the repository's sample projects.*
+*Dashboard screenshots captured on September 19, 2026, using the repository's
+sample projects; the current project folder layout may differ.*
 
 Open **History & files** to browse project files and archived milestones,
 preview Markdown, or read a file at a selected Git commit. Relative document
@@ -209,8 +209,8 @@ menu-bar icon to open the dashboard directly.
 
 <img src="docs/images/macos-menu-bar.png" alt="OpenGSD Path native macOS panel with sample projects and its bottom toolbar" width="400">
 
-*Screenshots show the current UI with sample project data. The native panel is
-captured in its preview window.*
+*The native panel screenshot uses sample project data and was captured in its
+preview window; the current folder layout may differ.*
 
 ### Install the monitor
 

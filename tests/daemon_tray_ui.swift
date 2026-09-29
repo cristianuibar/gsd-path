@@ -40,24 +40,64 @@ struct TrayUITest {
         func require(_ condition: Bool, _ message: String) {
             if !condition { print("FAIL: \(message)"); exit(1) }
         }
+        let mainFolder = "\(NSHomeDirectory())/github/open-gsd/gsd-path/app"
+        let linkedCheckout = "\(NSHomeDirectory())/orca/workspaces/preview"
+        let identity = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project":"widget-counter","repository":"gsd-path","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","phase":"build","branch":"gsd-path/M001","tasks_done":1,"tasks_total":3,"current_wave":1,"phase_log":[{"phase":"build","date":"2026-09-16"}],"spend":{"milestones":{"M001":{"turns":523,"cost":62.13}}}}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [identity]))
+        vc.view.layoutSubtreeIfNeeded()
+        let identityRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(identityRow.detail.lineBreakMode == .byWordWrapping, "status values wrap between words")
+        require(identityRow.name.stringValue == "gsd-path", "repository name identifies a worktree project")
+        let identityLabels = descendants(identityRow).compactMap { $0 as? NSTextField }
+        require(identityRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "actual project and worktree folders are visible with home abbreviated")
+        require(!identityRow.location.isHidden, "actual project folder is always visible")
+        require(identityRow.toolTip?.contains("Project folder: \(mainFolder)\nWorktree: \(linkedCheckout)") == true, "full paths remain in tooltip")
+        for label in identityLabels {
+            require(label.lineBreakMode != .byTruncatingTail, "project data must not truncate")
+            require(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: label.frame.width, height: .greatestFiniteMagnitude)).height <= label.frame.height, "all lines fit in their label")
+        }
+        let nestedMain = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(mainFolder)","project_root":"\(mainFolder)","repository":"gsd-path","project":"widget-counter"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [nestedMain]))
+        let nestedMainRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(nestedMainRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app", "nested main project has no worktree label")
+        let detached = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(mainFolder)","worktree_root":"\(linkedCheckout)","repository":"gsd-path","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [detached]))
+        let detachedRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(detachedRow.location.stringValue == "Project folder: ~/github/open-gsd/gsd-path/app\nWorktree: ~/orca/workspaces/preview", "detached worktree shows folder instead of HEAD")
+        let bareBacked = try JSONDecoder().decode(ProjectStatus.self, from: Data("""
+        {"root":"\(linkedCheckout)/app","project_root":"\(linkedCheckout)/app","worktree_root":"\(linkedCheckout)","repository":"repository.git","project":"widget-counter","branch":"HEAD"}
+        """.utf8))
+        vc.show(status: StatusResponse(projects: [bareBacked]))
+        let bareRow = descendants(vc.view).compactMap { $0 as? ProjectRowView }.first!
+        require(bareRow.name.stringValue == "repository.git", "bare repository identity stays visible")
+        require(bareRow.location.stringValue == "Project folder: ~/orca/workspaces/preview/app\nWorktree: ~/orca/workspaces/preview", "bare-backed worktree shows tracked project and checkout folders")
+        require(bareRow.toolTip?.contains("Project folder: \(linkedCheckout)/app\nWorktree: \(linkedCheckout)") == true, "bare-backed full paths remain in tooltip")
+        vc.show(status: status)
         require(labels().contains("OpenGSD Path") && labels().contains("Connected"), "header with connection state")
         require(labels().contains("In progress") && labels().contains("Shipped"), "in progress and shipped captions")
         let rows = descendants(vc.view).compactMap { $0 as? ProjectRowView }
         // Board order: blocked first, then active by name, then shipped.
         require(rows.map(\.name.stringValue) == ["Atlas API", "Field Notes", "GSD Path", "Done Thing"], "row order")
         require(rows.map(\.detail.stringValue) == [
-            "M002 · Blocked · ship · no tasks yet",
-            "M001 · research · no tasks yet",
-            "M004 · build · wave 2 · 6 of 9 tasks · 2/3 criteria · since 2026-09-10 · $24.60 · 84 turns",
-            "M001 shipped 2026-09-01 · 4 tasks",
+            "M002 · Blocked · ship\nno tasks yet",
+            "M001 · research\nno tasks yet",
+            "M004 · build · wave 2\n6 of 9 tasks · 2/3 criteria · since 2026-09-10\n$24.60 · 84 turns",
+            "M001 shipped 2026-09-01\n4 tasks",
         ], "detail lines: milestone, phase, wave, tasks, criteria, since date, cost and turns; shipped date and tasks")
+        require(rows.map(\.location.stringValue) == ["Project folder: /sample/atlas'&tab=usage", "Project folder: /sample/notes", "Project folder: /sample/gsd", "Project folder: /sample/done"], "main checkouts show their actual folders")
         let meter: (ProjectRowView) -> String = { row in
             row.meter.segments.map { $0 == .done ? "d" : $0 == .now ? "n" : "-" }.joined()
         }
         require(rows.map(meter) == ["dddddddn", "ddn-----", "ddddddn-", "dddddddd"], "phase meters in canonical phase order")
-        require(rows[2].toolTip == "M003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
-        require(rows[0].toolTip == "M002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
-        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, In build, M004 · build") == true, "row accessibility label")
+        require(rows[2].toolTip == "Project folder: /sample/gsd\nM003 ✓  M004 ●  M005 ○\nNative tray and dashboard for the daemon.", "stack and goal tooltip")
+        require(rows[0].toolTip == "Project folder: /sample/atlas'&tab=usage\nM002 ■  next ○\nship blocked", "blocked stack, lookahead milestone and health reason")
+        require(rows[2].accessibilityLabel()?.hasPrefix("GSD Path, Project folder: /sample/gsd, In build, M004 · build") == true, "row accessibility label")
         rows[2].hovered = true
         var nativeSelection = false
         rows[2].effectiveAppearance.performAsCurrentDrawingAppearance {

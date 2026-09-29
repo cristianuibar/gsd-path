@@ -57,7 +57,7 @@ LAYOUT_CSS = r'''
 LAYOUT_JS = r'''
 function boardPage(projects) {
   const q=CState.q.trim().toLowerCase();
-  const shown=projects.filter(p=>(CState.filter==='all'||stateOf(p)===CState.filter)&&[p.project,p.root,p.milestone].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const shown=projects.filter(p=>(CState.filter==='all'||stateOf(p)===CState.filter)&&[p.repository,p.project,p.root,p.milestone].filter(Boolean).join(' ').toLowerCase().includes(q));
   const labels=[['all','All'],['active','In progress'],['blocked','Blocked'],['shipped','Shipped'],['unverified','Unverified']];
   const filters=labels.map(([key,label])=>`<button data-filter="${key}" aria-pressed="${CState.filter===key}">${label}<span>${key==='all'?projects.length:projects.filter(p=>stateOf(p)===key).length}</span></button>`).join('');
   const empty=ONLINE===null?'Loading projects…':!ONLINE&&!projects.length?'Cannot load projects. Check the daemon connection.':!projects.length?'No projects yet. Add a watched folder to get started.':'No projects match this filter.';
@@ -66,7 +66,7 @@ function boardPage(projects) {
 }
 function milestoneBoard(projects) {
   const stop=(m,kind)=>`<div class="timeline-stop ${kind}"><span class="mono dim">${esc(m.number||'')}</span><strong>${esc(m.slug||'Untitled milestone')}</strong>${m.goal?`<p>${esc(m.goal)}</p>`:''}<p>${esc([m.phase,m.status].filter(Boolean).join(' · '))}</p></div>`;
-  return `<div class="milestone-timeline"><div class="timeline-head"><span>Project</span><span>Shipped</span><span>Current / latest</span><span>Planned</span></div>${projects.map(p=>{const {before,cur,after}=milestoneStack(p);return `<div class="timeline-row"><div><button class="pname" data-root="${esc(p.root)}">${esc(p.project||p.root)} ›</button><div class="status-line state ${stateOf(p)}">${esc(stateLabel(p))}</div></div><div>${before.length?before.map(m=>stop(m,'past')).join(''):'<p class="note">No earlier milestone recorded.</p>'}</div><div>${stop({...cur,phase:p.phase,status:stateLabel(p)},'current')}</div><div>${after.length?after.map(m=>stop(m,'future')).join(''):'<p class="note">No later milestone recorded.</p>'}</div></div>`}).join('')}</div>`;
+  return `<div class="milestone-timeline"><div class="timeline-head"><span>Project</span><span>Shipped</span><span>Current / latest</span><span>Planned</span></div>${projects.map(p=>{const {before,cur,after}=milestoneStack(p);return `<div class="timeline-row"><div><button class="pname" data-root="${esc(p.root)}">${esc(p.repository||p.project||p.root)} ›</button><div class="status-line state ${stateOf(p)}">${esc(stateLabel(p))}</div></div><div>${before.length?before.map(m=>stop(m,'past')).join(''):'<p class="note">No earlier milestone recorded.</p>'}</div><div>${stop({...cur,phase:p.phase,status:stateLabel(p)},'current')}</div><div>${after.length?after.map(m=>stop(m,'future')).join(''):'<p class="note">No later milestone recorded.</p>'}</div></div>`}).join('')}</div>`;
 }
 function settingsFrame(title,body,config=false) {
   const nav=[['config','Path settings'],['folders','Watched folders'],['plugin','Plugin']].map(([view,label])=>`<button data-nav="${view}" aria-current="${CState.view===view?'page':'false'}">${label}</button>`).join('');

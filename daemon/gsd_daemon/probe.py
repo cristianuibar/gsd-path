@@ -769,6 +769,7 @@ def probe_project(root: Union[str, Path], enrich: bool = True) -> ProjectStatus:
 
     status = ProjectStatus(
         root=root,
+        **gitinfo.project_identity(root),
         project=state.get("project"),
         milestone=state.get("milestone"),
         phase=state.get("phase"),

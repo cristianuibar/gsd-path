@@ -135,7 +135,7 @@ DASHBOARD_PAGE = r"""<!doctype html>
   .prow { cursor: pointer; }
   .prow:hover td { background: var(--hover); }
   .pname { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; font-weight: 600; cursor: pointer; }
-  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: min(48vw, 640px); overflow: hidden; text-overflow: ellipsis; }
+  .ppath { font: 11px var(--mono); color: var(--faint); padding-left: 14px; max-width: min(48vw, 640px); white-space: normal; overflow-wrap: anywhere; }
   .msl { max-width: min(32vw, 420px); overflow: hidden; text-overflow: ellipsis; }
   .msl .mono { color: var(--dim); margin-right: 4px; }
   .route { display: inline-flex; gap: 3px; vertical-align: middle; }
@@ -318,7 +318,7 @@ async function saveConfig(key, reset=false) {
 function pathConfigPage() {
   const data = CFG.data, disabled = CFG.busy || data?.locked;
   const options = (values, current) => values.map(([value, label]) => `<option value="${esc(value)}" ${value === current ? 'selected' : ''}>${esc(label)}</option>`).join('');
-  const scope = `<label>Settings for<select data-config-scope ${CFG.busy ? 'disabled' : ''}>${options([['','User defaults'], ...(DATA.projects || []).map(p => [p.root, p.project || p.root])], CFG.root)}</select></label>`;
+  const scope = `<label>Settings for<select data-config-scope ${CFG.busy ? 'disabled' : ''}>${options([['','User defaults'], ...(DATA.projects || []).map(p => [p.root, p.repository || p.project || p.root])], CFG.root)}</select></label>`;
   const feedback = `<p role="${CFG.error ? 'alert' : 'status'}">${esc(CFG.error || CFG.message || (CFG.busy ? 'Saving…' : ''))}</p>`;
   if (!data) return scope + feedback + (CFG.error ? '' : '<p class="dim">Loading settings…</p>');
   const setting = (key, label, choices, note) => {
@@ -595,9 +595,10 @@ function phaseMeter(p) {
 }
 function boardRow(p) {
   const st=stateOf(p), {cur}=milestoneStack(p), sp=p.spend||{};
-  const tail=String(p.root||'').split('/').slice(-2).join('/');
+  const folder=p.project_root||p.root;
+  const location=`Project folder: ${folder}${p.worktree_root?' · Worktree: '+p.worktree_root:''}`;
   const reasons=(p.attention||[]).map(a=>a.label).filter(Boolean).join(' · ');
-  return `<tr class="prow ${st}" data-root="${esc(p.root)}"><td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.project||p.root)}</span></button><div class="ppath">${esc(tail)}</div></td>
+  return `<tr class="prow ${st}" data-root="${esc(p.root)}"><td><button class="pname" data-root="${esc(p.root)}" aria-label="Open ${esc(p.repository||p.project||p.root)}"><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span><span>${esc(p.repository||p.project||p.root)}</span></button><div class="ppath">${esc(location)}</div></td>
     <td><div class="milestone-name"><span class="mono dim">${esc(cur.number)}</span> ${esc(cur.slug)}</div><div class="milestone-phase">${phaseMeter(p)}<span class="phlabel">${esc(p.phase||'No phase recorded')}</span></div></td>
     <td><span class="state ${st}">${esc(stateLabel(p))}</span>${reasons?`<p class="health-note">${esc(reasons)}</p>`:''}<div class="ago">${ago(p.last_activity_iso)}</div></td><td class="n">${p.tasks_total?`${p.tasks_done||0}/${p.tasks_total}`:DASH}</td><td class="n">${sp.turns&&sp.cost!=null?money(sp.cost):DASH}<div class="ago">${sp.turns?int(sp.turns)+' turns':'No matched sessions'}</div></td></tr>`;
 }
@@ -728,7 +729,7 @@ function projectPage(p) {
                  ...(p.integration ? [["Integration", p.integration]] : []),
                  ["Updated", ago(p.last_activity_iso)], ["Cost", sp && sp.turns ? money(sp.cost) : "—"], ["Turns", sp && sp.turns ? int(sp.turns) : "—"]];
   return `<article class="project" data-root="${esc(p.root)}">
-    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.project || p.root)}</h1><span class="mono">${esc(p.root)}</span></div>
+    <div class="project-tools">${sourceLink('.project/STATE.md','History & files')}</div><div class="phead"><h1><span class="dot ${healthDot(p)}" title="health ${esc(healthReason(p))}"></span> ${esc(p.repository || p.project || p.root)}</h1><span class="mono">Project folder: ${esc(p.project_root||p.root)}</span>${p.worktree_root?`<span class="mono">Worktree: ${esc(p.worktree_root)}</span>`:''}</div>
     <dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
     ${p.handoff ? `<p class="runtime-handoff">${esc(p.handoff.outcome)} — ${esc(p.handoff.next)}</p>` : ""}
     ${p.vision ? `<p class="vision">${esc(p.vision)}</p>` : ""}
@@ -819,7 +820,7 @@ function render() {
   const focusIndex = [...stage.querySelectorAll('button, summary, select, input, [tabindex]')].indexOf(document.activeElement);
   const caret = document.activeElement && document.activeElement.matches("[data-search], [data-file-search]") ? document.activeElement.selectionStart : null;
   const projects = (DATA.projects || []).slice().sort((a, b) =>
-    STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || String(a.project || a.root).localeCompare(String(b.project || b.root)));
+    STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || String(a.repository || a.project || a.root).localeCompare(String(b.repository || b.project || b.root)));
   const shipped = projects.filter(p => stateOf(p) === "shipped").length;
   const connection = ONLINE === null ? "Connecting…" : ONLINE ? (DATA.generated_at ? "Updated " + esc(shortT(DATA.generated_at)) : "Connected") : "Offline · showing last update";
   const settings = `<details class="settings-menu"><summary aria-label="Settings" title="Settings">${ICON.settings}</summary><nav aria-label="Settings"><button class="btn" data-nav="config">Path settings</button><button class="btn" data-nav="plugin">Plugin</button><button class="btn" data-nav="folders">Watched folders</button><div class="appearance" role="group" aria-label="Appearance">Appearance<div class="segc">${THEMES.map(t => `<button data-theme-choice="${t}" aria-pressed="${THEME === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div></div></nav></details>`;
@@ -827,7 +828,7 @@ function render() {
   const current = ["project","files"].includes(CState.view) ? projects.find(p => p.root === CState.root) : null;
   let header, body;
   if (current) {
-    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.root)}"${q.root === current.root ? " selected" : ""}>${esc(q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
+    header = `<header class="topbar"><button class="back" data-nav="board" aria-label="Back to projects">‹ Projects</button><select class="switcher" data-switch aria-label="Project">${projects.map(q => `<option value="${esc(q.root)}"${q.root === current.root ? " selected" : ""}>${esc(q.repository || q.project || q.root)}</option>`).join("")}</select><span class="spacer"></span>${status}${settings}</header>`;
     body = `<main class="page">${CState.view==='files'?filesPage(current):projectPage(current)+projectRecords(current)}</main>`;
   } else {
     header = `<header class="topbar"><button class="brand" data-nav="board" aria-label="OpenGSD Path projects">${ICON.mark}OpenGSD Path</button><nav class="topnav" aria-label="Main"><button data-nav="board" aria-current="${CState.view==='board'?'page':'false'}">Projects</button><button data-nav="config" aria-current="${['config','folders','plugin'].includes(CState.view)?'page':'false'}">Settings</button></nav><span class="spacer"></span>${status}${settings}</header>`;
