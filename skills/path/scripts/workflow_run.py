@@ -12,9 +12,10 @@ import tempfile
 from pathlib import Path
 
 try:
-    from scripts import _common
+    from scripts import _common, isolation
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
+    import isolation
 
 
 class StepFailed(RuntimeError):
@@ -28,6 +29,16 @@ def _table_rows(body):
 
 INSPECTION_SPECS = (("inspect_codebase", "codebase-mapper", "codebase", "evidence-codebase.md"),
                     ("inspect_docs", "docs-auditor", "docs-audit", "DOCS-AUDIT.md"))
+
+
+def _task_member(repo: Path, project_dir: str, task_id: str):
+    """The `repo:` member a task names, or None for a coordinator task."""
+    for path in sorted((repo / project_dir / "tasks").glob(f"{task_id}-*.md")):
+        fields, error = isolation.task_frontmatter(path.read_text(encoding="utf-8"))
+        if error:
+            raise StepFailed(error)
+        return fields.get("repo")
+    return None
 
 
 def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str = None,
@@ -190,6 +201,10 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             step("check_task_briefs.py", "--repo", str(repo), "--base", head,
                  "--tasks-dir", f"{project_dir}/tasks")
             step("check_handoffs.py", "plan", *common)
+        elif action == "prepare-task" and _task_member(repo, project_dir, task_id):
+            # A member task works in a sidecar of its member; its Verify runs there at finish.
+            step("isolation.py", "isolate-member-task", "--repo", str(repo),
+                 "--member", _task_member(repo, project_dir, task_id), "--task-id", task_id)
         elif action == "prepare-task":
             task = step("isolation.py", "isolate-task", "--repo", str(repo),
                         "--base", expected_head, "--task-id", task_id,

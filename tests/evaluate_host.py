@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Drive a host with a headless command through the quick scenario for release evidence.
+"""Drive a host through the quick release scenario or a two-repo milestone.
 
-    python3 -B tests/evaluate_host.py prepare --host claude --directory /abs/new --candidate .
+    python3 -B tests/evaluate_host.py prepare --host claude --directory /abs/new --candidate . [--scenario multi-repo]
     python3 -B tests/evaluate_host.py run --host claude --directory /abs/new [--resume ID --prompt-file F]
     python3 -B tests/evaluate_host.py child --host claude --directory /abs/new --child-id build_T001
 
@@ -10,8 +10,8 @@ in tests/hosts/<host>.py SPEC and its docstrings.
 
 Live execution is explicit and opt-in; tests/test_host_*.py never invokes a host.
 The evaluator answers owner gates with follow-up prompts via --prompt-file. Nothing here grades
-the run or assembles the complete release receipt: the evaluator supplies guard
-evidence and the archive JSON files requested by RELEASE_ADDENDUM.
+the run or assembles the complete release receipt. Only the quick scenario
+includes RELEASE_ADDENDUM and its guard and archive evidence requests.
 """
 
 import argparse
@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tests.dogfood import FIXTURE_SCRIPT  # noqa: E402
-from tests.evaluate_features import SCENARIOS  # noqa: E402
+from tests.evaluate_features import ALL_SCENARIOS as SCENARIOS  # noqa: E402
 from tests.hosts import load  # noqa: E402
 
 RELEASE_ADDENDUM = """
@@ -52,7 +52,23 @@ def sh(args, cwd):
     return subprocess.run(args, cwd=cwd, check=True, capture_output=True, encoding="utf-8", errors="replace").stdout.strip()
 
 
-def prepare(host, directory, candidate):
+def member_fixture(arm):
+    """A member repo `web` holding the counter, with a GitHub origin that Git rewrites to a local bare remote."""
+    member, remote = arm / "web", arm / "web-origin.git"
+    member.mkdir(parents=True)
+    g = lambda *a: sh(["git", *a], member)
+    g("init", "-q", "-b", "main"); g("config", "user.name", "Feature Evaluation"); g("config", "user.email", "evaluation@example.invalid")
+    (member / "README.md").write_bytes("# web\n".encode("utf-8")); (member / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
+    g("add", "."); g("commit", "-qm", "fixture: member product")
+    sh(["git", "clone", "--quiet", "--bare", str(member), str(remote)], arm)
+    g("remote", "add", "origin", "https://github.com/acme/web.git")
+    # Members need a GitHub origin; this local rewrite keeps every member push on disk.
+    g("config", f"url.{remote.as_posix()}.insteadOf", "https://github.com/acme/web.git")
+    g("fetch", "-q", "origin"); g("remote", "set-head", "origin", "--auto")
+    return member
+
+
+def prepare(host, directory, candidate, scenario="quick"):
     spec = load(host)
     directory, candidate = Path(directory).resolve(), Path(candidate).resolve()
     if directory.exists():
@@ -63,11 +79,14 @@ def prepare(host, directory, candidate):
     directory.mkdir(parents=True)
     plugin = directory / "plugin"
     sh(["git", "clone", "--quiet", "--no-hardlinks", str(candidate), str(plugin)], directory)
-    spec_ = SCENARIOS["quick"]
-    arm = directory / "quick"; repo = arm / "repo"; repo.mkdir(parents=True)
+    spec_ = SCENARIOS[scenario]
+    arm = directory / scenario; repo = arm / "repo"; repo.mkdir(parents=True)
+    member = member_fixture(arm) if spec_["fixture"] == "counter-member" else None
     g = lambda *a: sh(["git", *a], repo)
     g("init", "-q", "-b", "main"); g("config", "user.name", "Feature Evaluation"); g("config", "user.email", "evaluation@example.invalid")
-    (repo / "README.md").write_bytes("# Feature evaluation fixture\n".encode("utf-8")); (repo / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
+    (repo / "README.md").write_bytes("# Feature evaluation fixture\n".encode("utf-8"))
+    if member is None:
+        (repo / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
     g("add", "."); g("commit", "-qm", "fixture: initial product")
     remote = arm / "origin.git"; sh(["git", "clone", "--quiet", "--bare", str(repo), str(remote)], arm); g("remote", "add", "origin", str(remote))
     install_cmd = ["node", str(plugin / "scripts/install.mjs"), spec.install_flag, "--local", "--project", str(repo), "--hooks", "--no-color"]
@@ -86,7 +105,7 @@ Stop at reviewable owner gates. Remote actions are limited to the existing local
 origin; any GitHub action needs separate explicit owner approval of its target.
 Do not read evaluator tests or other scenario workspaces.
 
-{spec_['request']}
+{spec_['request'].format(member=member, plugin=plugin, repo=repo)}
 
 Scenario steps:
 """ + "\n".join(f"{i}. {s}" for i, s in enumerate(spec_["steps"], 1)) + f"""
@@ -95,17 +114,18 @@ At each named checkpoint, stop and identify the canonical artifacts for capture.
 Use python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} --category
 <implementation|verification|review> -- <command> for measured shell work. That
 wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
-""" + RELEASE_ADDENDUM
+""" + (RELEASE_ADDENDUM if scenario == "quick" else "")
     (arm / "prompt.txt").write_bytes(prompt.encode("utf-8"))
     (directory / "manifest.json").write_bytes((json.dumps({"schema": "gsd-path/feature-evaluation/v1", "candidate": revision,
                                                         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-                                                        "scenarios": ["quick"], "host": host}, indent=2) + "\n").encode("utf-8"))
+                                                        "scenarios": [scenario], "host": host}, indent=2) + "\n").encode("utf-8"))
     return {"host": host, "candidate": revision, "repo": str(repo), "verified_live": spec.verified_live}
 
 
 def run(host, directory, resume=None, prompt_file=None):
     spec = load(host)
-    arm = Path(directory).resolve() / "quick"
+    manifest = json.loads((Path(directory).resolve() / "manifest.json").read_text(encoding="utf-8"))
+    arm = Path(directory).resolve() / manifest["scenarios"][0]
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")); run_dir.mkdir()
     prompt_path = run_dir / "prompt.txt"  # lives in the run dir: a host whose CLI writes files targets prompt_path.parent
     prompt_path.write_bytes(Path(prompt_file or arm / "prompt.txt").read_text(encoding="utf-8").encode("utf-8"))
@@ -132,11 +152,13 @@ def main(argv=None):
     sub = p.add_subparsers(dest="action", required=True)
     for name in ("prepare", "run", "child"):
         s = sub.add_parser(name); s.add_argument("--host", required=True); s.add_argument("--directory", required=True)
-        if name == "prepare": s.add_argument("--candidate", default=str(ROOT))
+        if name == "prepare":
+            s.add_argument("--candidate", default=str(ROOT))
+            s.add_argument("--scenario", default="quick", choices=("quick", "multi-repo"))
         if name == "run": s.add_argument("--resume"); s.add_argument("--prompt-file")
         if name == "child": s.add_argument("--child-id", required=True)
     a = p.parse_args(argv)
-    if a.action == "prepare": out = prepare(a.host, a.directory, a.candidate)
+    if a.action == "prepare": out = prepare(a.host, a.directory, a.candidate, a.scenario)
     elif a.action == "run": out = run(a.host, a.directory, a.resume, a.prompt_file)
     else: out = load(a.host).bind_child(Path(a.directory).resolve(), a.child_id)
     print(json.dumps(out, indent=2)); return 0

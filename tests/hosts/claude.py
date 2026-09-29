@@ -44,7 +44,7 @@ def bind_child(run_root, child_id):
     non-error tool_result for the same tool_use id.
     """
     attempts = {}
-    for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
+    for events in sorted(Path(run_root).glob("*/run-*/events.jsonl")):
         for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])

@@ -35,6 +35,7 @@ DOCS.md (here)     four journeys in one place
 | **Upgrading** — new gsd-path version | [UPDATE.md](UPDATE.md) |
 | **Team** — pin skills in repo | `--local` install; see [Installing](#installing) |
 | **Shipping broke** — archive commit blocked | [HOOKS.md](HOOKS.md) (expected with hooks) |
+| **Several repos** — one milestone changes them all | [Multi-repo milestones](README.md#multi-repo-milestones) |
 
 ---
 

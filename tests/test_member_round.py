@@ -53,12 +53,8 @@ class MemberRoundTests(unittest.TestCase):
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "plan: T002 changes the web member")
 
-    def round(self, gate: bool = True) -> dict:
+    def round(self) -> dict:
         env = dict(os.environ, FAKE_MODE="ready", GSD_PATH_WORKTREE_ROOT=str(self.workspace))
-        if gate:
-            env["GSD_PATH_MEMBER_EXECUTION"] = "1"
-        else:
-            env.pop("GSD_PATH_MEMBER_EXECUTION", None)
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "round", "--wave", "1", "--child-command",
              f"{sys.executable} {self.root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
@@ -102,8 +98,7 @@ class MemberRoundTests(unittest.TestCase):
                          git(self.member, "rev-parse", "main"))
 
     def round_with_mode(self, mode: str) -> dict:
-        env = dict(os.environ, FAKE_MODE=mode, GSD_PATH_WORKTREE_ROOT=str(self.workspace),
-                   GSD_PATH_MEMBER_EXECUTION="1")
+        env = dict(os.environ, FAKE_MODE=mode, GSD_PATH_WORKTREE_ROOT=str(self.workspace))
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "round", "--wave", "1", "--child-command",
              f"{sys.executable} {self.root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
@@ -281,13 +276,6 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "done", json.dumps(receipt, indent=1)[:3000])
         ledgers = sorted(item["ledger"] for item in receipt["landed"])
         self.assertEqual(ledgers, [False, True])
-
-    def test_member_tasks_stay_refused_without_the_gate(self) -> None:
-        receipt = self.round(gate=False)
-        self.assertNotEqual(receipt["status"], "done")
-        self.assertIn("member task execution is not enabled", json.dumps(receipt))
-        self.assertEqual(git(self.member, "rev-parse", "--verify", "--quiet", "gsd-path-task/demo-T002",
-                             check=False), "")
 
 
 if __name__ == "__main__":

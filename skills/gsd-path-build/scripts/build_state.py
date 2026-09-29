@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 sys.dont_write_bytecode = True
@@ -52,8 +51,6 @@ else:
 
 
 DEFAULT_PROJECT_DIR = ".project"
-# Temporary: remove when S5 activates member execution (docs/multi-repo-work.md).
-MEMBER_EXECUTION_GATE = "GSD_PATH_MEMBER_EXECUTION"
 TASK_ID_RE = re.compile(r"^T\d{3}$")
 TASK_FILE_RE = re.compile(r"^(?P<id>T\d{3})-[a-z0-9][a-z0-9-]*\.md$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -218,11 +215,6 @@ def _parse_task(path: Path, relative_path: str, task_file: Optional[str] = None)
     text = _read_file(path, label)
     fields = _parse_frontmatter(text, label)
     task_id = _required_string(fields, "id", label)
-    if "repo" in fields and os.environ.get(MEMBER_EXECUTION_GATE) != "1":
-        # Member execution stays off until S5 proves it end to end; tests opt in.
-        raise BuildStateError(
-            "member-task", f"{label} is a member task (repo: {fields['repo']}); member task execution is not enabled"
-        )
     title = _required_string(fields, "title", label)
     wave_text = _required_string(fields, "wave", label)
     try:

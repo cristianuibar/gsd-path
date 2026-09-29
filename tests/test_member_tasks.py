@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 import tempfile
@@ -167,9 +166,7 @@ class MemberTaskBriefTests(unittest.TestCase):
 
 class MemberTaskReadyTests(unittest.TestCase):
     def test_same_path_in_different_repos_is_ready_together(self) -> None:
-        from unittest import mock
-        with tempfile.TemporaryDirectory() as temporary, \
-                mock.patch.dict(os.environ, {build_state.MEMBER_EXECUTION_GATE: "1"}):
+        with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
             run_git(repo, "init", "-q")
             run_git(repo, "config", "user.email", "t@t")
@@ -214,29 +211,6 @@ class MemberTaskGraphTests(unittest.TestCase):
         )
         self.assertEqual(supplied["T002"], set())
         self.assertEqual(supplied["T003"], {"shared.py"})
-
-
-class MemberTaskBuildTests(unittest.TestCase):
-    def test_build_refuses_member_tasks_without_the_member_execution_gate(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            repo = Path(temporary)
-            run_git(repo, "init", "-q")
-            run_git(repo, "config", "user.email", "t@t")
-            run_git(repo, "config", "user.name", "t")
-            run_git(repo, "switch", "-q", "-c", BRANCH)
-            (repo / ".project" / "plan").mkdir(parents=True)
-            (repo / ".project" / "tasks").mkdir()
-            (repo / ".project" / "STATE.md").write_bytes(
-                STATE.format(phase="build", branch=BRANCH).encode("utf-8"))
-            (repo / ".project" / "plan" / "PLAN.md").write_bytes(
-                plan_text(((("T001", "Member", (), ("app.py",)),),)).encode("utf-8"))
-            text = task_text("T001", "Member", 1, (), ("app.py",))
-            (repo / ".project" / "tasks" / "T001-task.md").write_bytes(
-                text.replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
-            run_git(repo, "add", "-A")
-            run_git(repo, "commit", "-q", "-m", "plan")
-            with self.assertRaisesRegex(build_state.BuildStateError, "member task"):
-                build_state.ready(str(repo))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ worktree: null      # orchestrator-owned: isolated task worktree while active
 task_branch: null   # orchestrator-owned: gsd-path-task/<id> while parallel; null when serial
 # Optional explicit dispatch overrides: model: <advertised slug|inherit>
 # effort: <advertised effort|inherit>
+# repo: <member>    # multi-repo only: the MEMBERS.md member this task changes; omit for the coordinator
 files:              # every file this task may touch — dispatch checks overlap
   - <path>
 ---

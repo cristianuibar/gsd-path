@@ -18,7 +18,8 @@ sys.path.insert(0, str(ROOT))
 from tests import evaluate_codex, widget_acceptance
 from tests.dogfood import FIXTURE_SCRIPT
 
-SCENARIOS = json.loads((Path(__file__).with_name('feature_scenarios.json')).read_text(encoding="utf-8"))
+ALL_SCENARIOS = json.loads((Path(__file__).with_name('feature_scenarios.json')).read_text(encoding="utf-8"))
+SCENARIOS = {name: spec for name, spec in ALL_SCENARIOS.items() if spec['fixture'] != 'counter-member'}
 GROUPS = {
     'install': ['test_install', 'test_sync_skill_resources'],
     'inspect': ['test_detect_project', 'test_check_docs_audit'],

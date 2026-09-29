@@ -193,12 +193,14 @@ dispatch contract and perform steps 1–5 by hand.
    the base. Then isolate each ready task with
    `python3 <absolute workflow_run.py> prepare-task --repo <absolute primary>
    --expected-head <recorded base> --task-id <id> --round-size <N>` where N is the
-   number of tasks in this dispatch round. Serial (`N=1`) returns the primary
-   worktree and `task_branch: null` — the coder works on the bound branch.
+   number of tasks in this dispatch round. For a coordinator task, serial
+   (`N=1`) returns the primary worktree and `task_branch: null` — the coder
+   works on the bound branch.
    The runner also creates a named verification sidecar at this clean base
    before dispatch. Retain both helper results in the dispatch evidence.
-   Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
-   worktree at that base; never a detached HEAD. Record dispatch through
+   For a coordinator task, parallel (`N>=2`) creates a named
+   `gsd-path-task/<id>` branch and linked worktree at that base; never a
+   detached HEAD. Record dispatch through
    `python3 <absolute isolation.py> activate-task --repo <returned worktree>
    --base <recorded base> --task-id <id> --agent build_<id> --task-file
    <exact selected task-file path> [--task-branch <returned task_branch>]`.
@@ -210,14 +212,26 @@ dispatch contract and perform steps 1–5 by hand.
    round. Do not append a dispatch Log entry: the isolated task later appends
    at that location, and two parallel appends make the cherry-pick ambiguous. Reuse a retained worktree only when
    its recorded base, branch, and task agree exactly.
+   A member task (`repo: <member>`) returns `mode: member` from
+   `prepare-task`: a member sidecar at the member bound tip, with no
+   coordinator verify sidecar. Record its dispatch with `python3 <absolute
+   isolation.py> activate-member-task --repo <absolute primary> --member
+   <member> --task-id <id> --agent build_<id> --task-file <exact task-file
+   path> --base <recorded base>`. It writes the live task copy (returned as
+   `copy`) inside the member sidecar; the coordinator task file stays
+   unchanged. Brief the coder with the member sidecar root and that live copy
+   as its task file, plus the coordinator's INTENT.md. Step 5's `finish` lands
+   it in the member and records it in the coordinator.
 
 4. **Dispatch the round.** Following the local runtime dispatch contract,
    spawn one implementation-capable child per task with deterministic logical
    task name `build_<task_id>`.
    Its brief contains the absolute isolated-worktree root, coder role, task
-   file, task template, and the absolute INTENT.md path in that worktree.
+   file, task template, and the absolute INTENT.md path in the coordinator for
+   member tasks or in that worktree for coordinator tasks.
    Generate the coder's intent view with `python3 <absolute task_context.py>
-   --repo <absolute isolated-worktree> --task <absolute task file>` and include
+   --repo <absolute coordinator root for member tasks, otherwise isolated-worktree>
+   --task <absolute live task copy for member tasks, otherwise isolated task file>` and include
    its output in the brief. The helper preserves all global rules and falls
    back to full intent when projection is ambiguous. Never summarize it by hand.
    Add no hidden implementation context; repair a
@@ -236,10 +250,15 @@ dispatch contract and perform steps 1–5 by hand.
    completion when it lands — never wait for slower in-flight tasks first;
    when several results wait, land them in task-id order.
 
-   - For `ready`, compare the complete worktree diff to `base`. Permit only
-     declared `files` plus append-only Log changes in that task file. Include
-     additions, deletions, renames, and binary changes; an unexpected path
-     blocks before any product commit.
+   - For a `ready` coordinator task, compare the complete worktree diff to
+     `base`. Permit only declared `files` plus append-only Log changes in that
+     task file. Include additions, deletions, renames, and binary changes; an
+     unexpected path blocks before any product commit.
+   - For a `ready` member task, compare the complete member sidecar diff to the
+     returned `member_base`. Permit only declared `files`, including additions,
+     deletions, renames, and binary changes. Separately check the returned live
+     task `copy` against the coordinator task contract for an append-only Log.
+     An unexpected path or Log change blocks before any product commit.
    - For a returned `ready` coder, run `python3 <absolute dispatch_driver.py>
      finish --repo <absolute primary> --task-id <id>`. This action works with
      native child tools; no child command is needed. It reproduces serial work

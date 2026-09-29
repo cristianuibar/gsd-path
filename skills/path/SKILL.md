@@ -204,6 +204,34 @@ The current value resets from the project default at the next milestone.
 Both settings lock when build starts. A lookahead STATE inherits the active
 project's `integration_default` and uses it for `integration`.
 
+## Member repositories
+
+A coordinator project can change other repositories (members) in the same
+milestone; `.project/MEMBERS.md` lists them. Change members only at a
+milestone boundary, never during build or ship. Resolve the bundled
+`scripts/members.py` to an absolute path and use it; never edit MEMBERS.md
+or a member marker by hand.
+
+- To add an existing repository, it needs a GitHub.com `origin` whose default
+  is `main`, a clean worktree, and no active milestone of its own. Ask for the
+  member name, checkout path, and integration (`direct`, `pull-request`, or
+  `default`, which follows the milestone's choice), then run
+  `python3 <members.py> add --repo <absolute-root> --name <name> --checkout <path> --integration <mode>`.
+- To create a new member repository, present the exact `owner/name`,
+  visibility, and checkout path as the **Review** surface and get approval
+  first, as for a new GitHub repository. Then run the same command with
+  `--create <owner/name> --visibility <visibility>`. It journals the approved
+  target before creating anything; rerun the identical command to resume.
+- After adding a member, tell the user to install its guard hooks:
+  `npx @opengsd/gsd-path@latest --member-of <absolute-root> --project <member checkout>`.
+- `python3 <members.py> validate --repo <absolute-root>` checks every member;
+  `repair` rewrites stale markers; `detect --checkout <path>` reports whether a
+  repository is a member and of which coordinator.
+
+Build locks the members that tasks name and works in Path-owned member
+branches `gsd-path/<project>-M00N`. Ship runs `close-members` after preflight
+to merge each member in lock order, then ships the coordinator.
+
 ## Transaction recovery first
 
 For a helper failure, use the diagnostic in the sibling bundle:

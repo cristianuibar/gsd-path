@@ -4351,6 +4351,23 @@ def parser() -> argparse.ArgumentParser:
     activate_task_parser.add_argument("--task-file", required=True)
     activate_task_parser.add_argument("--task-branch")
 
+    isolate_member_parser = subparsers.add_parser(
+        "isolate-member-task", help="create a member task sidecar at the member bound tip"
+    )
+    isolate_member_parser.add_argument("--repo", type=Path, required=True, help="coordinator root")
+    isolate_member_parser.add_argument("--member", required=True)
+    isolate_member_parser.add_argument("--task-id", required=True)
+
+    activate_member_parser = subparsers.add_parser(
+        "activate-member-task", help="record one member task dispatch in its sidecar"
+    )
+    activate_member_parser.add_argument("--repo", type=Path, required=True, help="coordinator root")
+    activate_member_parser.add_argument("--member", required=True)
+    activate_member_parser.add_argument("--task-id", required=True)
+    activate_member_parser.add_argument("--agent", required=True)
+    activate_member_parser.add_argument("--task-file", required=True)
+    activate_member_parser.add_argument("--base", required=True)
+
     deactivate_task_parser = subparsers.add_parser(
         "deactivate-task", help="revoke one helper-owned task dispatch"
     )
@@ -4451,6 +4468,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 arguments.task_file,
                 arguments.task_branch,
             )
+        elif arguments.command == "isolate-member-task":
+            result = isolate_member_task(arguments.repo, arguments.member, arguments.task_id)
+        elif arguments.command == "activate-member-task":
+            result = activate_member_task(arguments.repo, arguments.member, arguments.task_id,
+                                          arguments.agent, arguments.task_file, arguments.base)
         elif arguments.command == "deactivate-task":
             result = deactivate_task(
                 arguments.repo,
