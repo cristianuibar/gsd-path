@@ -701,8 +701,44 @@ def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[st
     }
 
 
-def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
-    """Remove an unused member task sidecar; landed work needs the landing proof."""
+def _rejected_member_attempt_error(
+    coordinator: Path, member: str, task_id: str, task_file: Optional[str], sidecar: Path
+) -> Optional[str]:
+    """A forced retire discards a rejected attempt only after the parent kept its evidence."""
+    if not task_file:
+        return "forced member task retirement requires --task-file"
+    task_file = relative_posix(task_file)
+    shown = run_git(coordinator, "show", f"HEAD:{task_file}")
+    fields, error = task_frontmatter(shown.stdout) if shown.returncode == 0 else (None, "task file is not committed")
+    if error or fields is None:
+        return error or "unreadable task file"
+    if str(fields.get("id")) != task_id or fields.get("repo") != member:
+        return f"{task_file} does not own member task {task_id} in {member}"
+    # A member task never leaves pending in the coordinator until its landing record.
+    if fields.get("status") != "pending":
+        return "forced member task retirement requires the coordinator task at pending"
+    if os.path.lexists(_member_journal_path(coordinator, task_id)):
+        return "member task has a landing journal; recover it instead"
+    if sidecar.is_dir():
+        copy = _safe_member_task_copy(sidecar, task_file)
+        if copy.is_file():
+            text = copy.read_text(encoding="utf-8")
+            base = str((task_frontmatter(text)[0] or {}).get("base", ""))
+            contract = git_text(coordinator, "show", f"{require_full_sha(base)}:{task_file}")
+            delta = member_log_delta(contract, text).strip()
+            if delta and delta not in _normalize_newlines(shown.stdout):
+                return ("copy the rejected attempt's Log delta into the coordinator task file "
+                        "and checkpoint it before forced retirement")
+    return None
+
+
+def retire_member_task(
+    coordinator: Path, member: str, task_id: str, force: bool = False, task_file: Optional[str] = None
+) -> None:
+    """Remove an unused member task sidecar; landed work needs the landing proof.
+
+    `force` discards a rejected (dirty) attempt so a retry starts from a fresh sidecar.
+    """
     checkout, project, entry = _member_context(coordinator, member)
     name = f"{project}-{validate_task_id(task_id)}"
     ref = f"refs/heads/{TASK_BRANCH_PREFIX}{name}"
@@ -713,11 +749,15 @@ def retire_member_task(coordinator: Path, member: str, task_id: str) -> None:
             not line.startswith("- ") for line in cherry.stdout.splitlines())):
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
+    if force:
+        rejected = _rejected_member_attempt_error(coordinator, member, task_id, task_file, destination)
+        if rejected:
+            raise IsolationError(rejected)
     registered = _registered_worktrees(checkout)
     if destination.resolve() in registered:
         if registered[destination.resolve()] != ref:
             raise IsolationError(f"member task sidecar is on another branch: {destination}")
-        removed = run_git(checkout, "worktree", "remove", str(destination))
+        removed = run_git(checkout, "worktree", "remove", *(("--force",) if force else ()), str(destination))
         if removed.returncode != 0:
             raise IsolationError((removed.stderr or removed.stdout).strip() or "git worktree remove failed")
     authorization = run_git(checkout, "update-ref", "-d", member_task_authorization_ref(project, task_id))
@@ -4368,6 +4408,16 @@ def parser() -> argparse.ArgumentParser:
     activate_member_parser.add_argument("--task-file", required=True)
     activate_member_parser.add_argument("--base", required=True)
 
+    retire_member_parser = subparsers.add_parser(
+        "retire-member-task", help="remove a member task sidecar and branch before a retry"
+    )
+    retire_member_parser.add_argument("--repo", type=Path, required=True, help="coordinator root")
+    retire_member_parser.add_argument("--member", required=True)
+    retire_member_parser.add_argument("--task-id", required=True)
+    retire_member_parser.add_argument("--force", action="store_true",
+                                      help="discard a rejected attempt whose Log the coordinator task holds")
+    retire_member_parser.add_argument("--task-file")
+
     deactivate_task_parser = subparsers.add_parser(
         "deactivate-task", help="revoke one helper-owned task dispatch"
     )
@@ -4473,6 +4523,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         elif arguments.command == "activate-member-task":
             result = activate_member_task(arguments.repo, arguments.member, arguments.task_id,
                                           arguments.agent, arguments.task_file, arguments.base)
+        elif arguments.command == "retire-member-task":
+            retire_member_task(arguments.repo, arguments.member, arguments.task_id,
+                               arguments.force, arguments.task_file)
+            result = {"member": arguments.member, "retired": True, "task_id": arguments.task_id}
         elif arguments.command == "deactivate-task":
             result = deactivate_task(
                 arguments.repo,

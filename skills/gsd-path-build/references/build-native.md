@@ -174,7 +174,14 @@ dispatch contract and perform steps 1–5 by hand.
    then create the retry. If retirement was interrupted after removing the
    worktree, rerun the same command; the recorded failed or blocked task and
    its exact base prove the remaining branch before deletion. Create the retry
-   from the new clean primary HEAD. After
+   from the new clean primary HEAD. A member task (`repo: <member>`) stays
+   `pending` in the coordinator; its rejected attempt lives in the member
+   sidecar. Copy the live copy's Log delta into the coordinator task file,
+   checkpoint it, then retire the sidecar with `python3 <absolute isolation.py>
+   retire-member-task --repo <absolute primary> --member <member> --task-id
+   <id> --task-file <task path> --force`. It refuses until the committed task
+   file holds that delta, and a rerun finishes an interrupted retirement. The
+   next `prepare-task` creates the retry sidecar at the member bound tip. After
    resolving a recoverable `build/blocked` condition, use
    `pipeline_state.py transition` with the blocked state and bound branch as
    expected fields to set `build/active` and log the resolution. Checkpoint it
@@ -298,6 +305,7 @@ dispatch contract and perform steps 1–5 by hand.
      task to `blocked` or `failed`, revoke a parallel isolate's active dispatch
      with `python3 <absolute isolation.py> deactivate-task
      --repo <isolated worktree> --task-id <id> --task-branch <task_branch>`.
+     A member task keeps `pending` instead; follow the member retry in step 2.
      Then update and checkpoint the bookkeeping and apply the recovery
      rule. Preserve the isolated worktree unless and until the explicit clean
      retry-retirement procedure in step 2 owns and removes it.
