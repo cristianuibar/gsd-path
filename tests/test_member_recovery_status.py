@@ -65,6 +65,12 @@ class MemberRecoveryStatusTests(unittest.TestCase):
         self.close("integrated")
         self.assertEqual(pipeline_state.status_state(self.root)["members"][0]["close"], "integrated")
 
+    def test_lookahead_status_omits_active_build_members(self) -> None:
+        self.lock()
+        handoffs.HandoffValidationTests().write_state(self.root, "inspect", "active", ".project/next")
+        self.assertIn("members", pipeline_state.status_state(self.root))
+        self.assertNotIn("members", pipeline_state.status_state(self.root, ".project/next"))
+
     def test_diagnose_names_a_pending_member_close_and_its_retry(self) -> None:
         self.lock()
         self.close("pending")

@@ -701,7 +701,7 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "collect_artifact": None,
     }
     completion = _completion_status(resolved, state, project_dir)
-    member_rows = _member_status(resolved, state) if has_git else None
+    member_rows = _member_status(resolved, state) if has_git and project_dir == ".project" else None
     result = {
         "schema": STATUS_SCHEMA,
         "advance": False,
