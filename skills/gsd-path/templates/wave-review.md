@@ -11,7 +11,9 @@
 Reviewed HEAD: <full review commit SHA>
 Review scope: final
      In each surface SC block also include Surface, Check, and Observed fields
-     using the final-review format. Record the actual walkthrough evidence once. -->
+     using the final-review format. Surface holds exactly the surface name from
+     PLAN.md's Surface contract; put walkthrough detail in Check and Observed.
+     Record the actual walkthrough evidence once. -->
 
 Wave verdict: <pass | blocked — blocked if any task fails>
 Cycle: <C>

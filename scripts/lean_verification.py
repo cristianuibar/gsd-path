@@ -71,7 +71,25 @@ def _reusable_wave(repo, expected_head):
     return relative, text, criteria, reviewed
 
 
-def _final_view(relative, text, criteria, reviewed, head):
+def _surface_name(value, expected):
+    """The surface a wave review's Surface field names, without the reviewer's detail.
+
+    Reviewers write the PLAN surface name and often a note after it
+    ("count.py CLI — entry `python count.py`, run from the root"). Keep exactly
+    the expected name when the field starts with it and the detail is set off by
+    a comma, dash, colon, semicolon, or parenthesis; otherwise keep the text before
+    the first comma, which FINAL.md validation then compares with the plan.
+    """
+    named = " ".join(contracts._unquoted(value).split())
+    if expected:
+        name = " ".join(expected.split())
+        rest = named[len(name):] if named.casefold().startswith(name.casefold()) else None
+        if rest is not None and (not rest or re.match(r"\s*[,;:(]|\s+[—–-]\s", rest)):
+            return expected
+    return named.partition(",")[0]
+
+
+def _final_view(relative, text, criteria, reviewed, head, surfaces=None):
     coverage = contracts._section(text, "Intent coverage")
     headings = list(re.finditer(r"(?m)^### (SC[1-9]\d*) — (.+): pass\s*$", coverage))
     blocks = {}
@@ -96,7 +114,8 @@ def _final_view(relative, text, criteria, reviewed, head):
                   f"- **Reference**: {relative} — {criterion}",
                   "- **Finding**: none", "- **Fix direction**: none"]
         if "Surface" in fields:
-            lines.append(f"- **Surface**: {contracts._unquoted(fields['Surface']).partition(',')[0]}")
+            expected = (surfaces or {}).get(criterion)
+            lines.append(f"- **Surface**: {_surface_name(fields['Surface'], expected)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -114,7 +133,8 @@ def reuse_final(repo, expected_head):
         if _locked_members(repo):
             raise contracts.HandoffError("member milestone needs a final review of the member heads")
         relative, text, criteria, reviewed = _reusable_wave(repo, expected_head)
-        final = _final_view(relative, text, criteria, reviewed, expected_head)
+        final = _final_view(relative, text, criteria, reviewed, expected_head,
+                            contracts.criterion_surfaces(repo))
         contracts.validate_final(repo, final_text=final)
         destination = repo / ".project/review/FINAL.md"
         if destination.is_symlink():
