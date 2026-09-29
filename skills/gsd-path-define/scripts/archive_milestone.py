@@ -2166,6 +2166,12 @@ def parser() -> argparse.ArgumentParser:
     )
     refresh_parser.add_argument("--repo", required=True, type=Path)
 
+    close_members_parser = subparsers.add_parser(
+        "close-members",
+        help="after preflight, integrate each locked member in lock order before the ship commit",
+    )
+    close_members_parser.add_argument("--repo", required=True, type=Path)
+
     integrate_parser = subparsers.add_parser(
         "integrate",
         help="resume and publish the shipped milestone integration",
@@ -2186,7 +2192,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.command in {"validate-integrated", "refresh-origin", "integrate"}:
+        if arguments.command in {"validate-integrated", "refresh-origin", "integrate", "close-members"}:
             if __package__:
                 from . import integration
             else:
@@ -2203,6 +2209,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = integration.validate_integrated(arguments.repo, arguments.slug)
         elif arguments.command == "refresh-origin":
             result = integration.refresh_origin(arguments.repo)
+        elif arguments.command == "close-members":
+            result = integration.close_members(arguments.repo)
         elif arguments.command == "integrate":
             result = integration.integrate(arguments.repo, arguments.slug)
         else:
