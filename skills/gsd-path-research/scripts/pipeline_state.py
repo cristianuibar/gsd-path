@@ -422,14 +422,17 @@ def undo_transaction(repo: Path) -> Optional[dict[str, object]]:
         "archive_fingerprint",
         "discussion",
     }
+    if value.get("kind") == "member-task":
+        # A member landing undo also names the member reset it performs first.
+        expected |= {"member", "landing", "member_parent"}
     if set(value) != expected or value.get("schema") != UNDO_TRANSACTION_SCHEMA:
         raise PipelineStateError("undo transaction has invalid fields")
     if value.get("repo") != str(resolved):
         raise PipelineStateError("undo transaction belongs to another worktree")
     kind = value.get("kind")
-    if kind not in {"checkpoint", "uncommitted-archive"}:
+    if kind not in {"checkpoint", "uncommitted-archive", "member-task"}:
         raise PipelineStateError("undo transaction has invalid kind")
-    for field in ("expected_head", "parent"):
+    for field in ("expected_head", "parent") + (("landing", "member_parent") if kind == "member-task" else ()):
         field_value = value.get(field)
         if not isinstance(field_value, str) or not re.fullmatch(
             r"[0-9a-f]{40,64}", field_value
@@ -445,10 +448,12 @@ def undo_transaction(repo: Path) -> Optional[dict[str, object]]:
         raise PipelineStateError("undo transaction has invalid worktree fingerprint")
     archive = value.get("archive")
     archive_fingerprint = value.get("archive_fingerprint")
-    if kind == "checkpoint" and (
+    if kind in {"checkpoint", "member-task"} and (
         archive is not None or archive_fingerprint is not None
     ):
-        raise PipelineStateError("checkpoint undo transaction cannot name an archive")
+        raise PipelineStateError(f"{kind} undo transaction cannot name an archive")
+    if kind == "member-task" and not isinstance(value.get("member"), str):
+        raise PipelineStateError("member-task undo transaction has invalid member")
     if kind == "uncommitted-archive" and (
         not isinstance(archive, str) or ARCHIVE_RE.fullmatch(archive) is None
     ):
