@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
@@ -200,12 +201,13 @@ class ParseStateTests(unittest.TestCase):
                 raise PermissionError(13, "Access is denied")
             return real(path, *args, **kwargs)
 
-        with mock.patch.object(probe.os, "name", "nt"), \
+        # Replace only probe's os: patching os.name itself breaks pathlib on POSIX.
+        with mock.patch.object(probe, "os", SimpleNamespace(name="nt")), \
                 mock.patch.object(probe.time, "sleep"), \
                 mock.patch.object(Path, "read_text", read_text):
             self.assertTrue(probe.is_project_root(self.root))
         self.assertEqual(len(attempts), 3)
-        with mock.patch.object(probe.os, "name", "posix"), \
+        with mock.patch.object(probe, "os", SimpleNamespace(name="posix")), \
                 mock.patch.object(Path, "read_text", side_effect=PermissionError(13, "denied")):
             self.assertEqual(probe.parse_state_file(state), {})
 
