@@ -95,7 +95,9 @@ class ServeTests(unittest.TestCase):
         cls.history = Path(cls.tmp.name) / "history.jsonl"
         cls.history.write_bytes(
             (json.dumps({"type": "phase-changed", "root": str(parent / "demo"),
-                        "detail": "plan -> build", "at": "2026-09-11T10:00:00+00:00"}) + "\n").encode("utf-8"),
+                        "detail": "plan -> build", "at": "2026-09-11T10:00:00+00:00"}) + "\n" +
+             json.dumps({"type": "phase-changed", "root": str(parent / "other"),
+                         "detail": "build -> ship", "at": "2026-09-11T10:01:00+00:00"}) + "\n").encode("utf-8"),
         )
         cls._env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(cls.history)})
         cls._env.start()
@@ -156,7 +158,9 @@ class ServeTests(unittest.TestCase):
         status, content_type, body = self.get("/activity")
         self.assertEqual(status, 200)
         payload = json.loads(body)
-        events = [event for event in payload["events"] if event.get("type") == "phase-changed"]
+        events = [event for event in payload["events"]
+                  if event.get("type") == "phase-changed"
+                  and event.get("root") == str(Path(self.tmp.name) / "work" / "demo")]
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["detail"], "plan -> build")
 
@@ -227,10 +231,17 @@ class ServeHistoryTests(unittest.TestCase):
         self.assertTrue(watcher.projects)
         state = project / ".project" / "STATE.md"
         # Replace atomically: a poll must never see a half-written STATE.md.
-        staged = state.with_name("STATE.md.tmp")
+        staged = Path(tmp.name) / "STATE.md.tmp"
         staged.write_bytes(state.read_text(encoding="utf-8").replace("phase: build", "phase: ship").encode("utf-8"))
         os.utime(staged, (time.time() + 5, time.time() + 5))
-        os.replace(staged, state)
+        while True:
+            try:
+                os.replace(staged, state)
+                break
+            except PermissionError:
+                if time.time() >= deadline:
+                    raise
+                time.sleep(0.05)
         while "phase-changed" not in (history.read_text(encoding="utf-8") if history.exists() else "") and time.time() < deadline:
             time.sleep(0.05)
         # Other test classes leave poll threads running that share the patched history path.
