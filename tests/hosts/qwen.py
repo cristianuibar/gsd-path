@@ -40,7 +40,7 @@ def command(prompt_path, resume=None):
     args = ["qwen", "--yolo", "--output-format", "stream-json"]
     if resume:
         args += ["--resume", resume]
-    return args + ["-p", Path(prompt_path).read_text()]
+    return args + ["-p", Path(prompt_path).read_text(encoding="utf-8")]
 
 
 def _events(lines):
@@ -89,7 +89,7 @@ def bind_child(run_root, child_id):
     list_results = []
     pending_lists = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):

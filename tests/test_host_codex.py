@@ -33,14 +33,14 @@ class CodexBindChildTests(unittest.TestCase):
         self.root = Path(temporary.name)
         events = self.root / "quick" / "run-1" / "events.jsonl"
         events.parent.mkdir(parents=True)
-        events.write_text(json.dumps({"raw": json.dumps({"type": "thread.started", "thread_id": "thread"})}))
+        events.write_bytes(json.dumps({"raw": json.dumps({"type": "thread.started", "thread_id": "thread"})}).encode("utf-8"))
         self.transcript = self.root / "rollout-thread.jsonl"
         patcher = mock.patch.object(codex, "SESSION_ROOTS", (self.root,))
         patcher.start()
         self.addCleanup(patcher.stop)
 
     def bind(self, records):
-        self.transcript.write_text("".join(json.dumps({"payload": p}) + "\n" for p in records))
+        self.transcript.write_bytes("".join(json.dumps({"payload": p}) + "\n" for p in records).encode("utf-8"))
         return codex.bind_child(self.root, "build_T001")
 
     def test_arguments_allow_json_whitespace(self):

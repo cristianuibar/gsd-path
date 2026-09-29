@@ -46,12 +46,12 @@ class AntigravityHostTests(unittest.TestCase):
     def record(self, events, run="run-1"):
         path = self.run_root / "quick" / run / "events.jsonl"
         path.parent.mkdir(parents=True)
-        path.write_text("".join(json.dumps({"elapsed_seconds": 0.0, "raw": json.dumps(ev)}) + "\n" for ev in events))
+        path.write_bytes("".join(json.dumps({"elapsed_seconds": 0.0, "raw": json.dumps(ev)}) + "\n" for ev in events).encode("utf-8"))
 
     def transcript(self, last_status="DONE"):
         path = self.run_root / "child-transcript.jsonl"
-        path.write_text(json.dumps({"step_index": 0, "type": "USER_INPUT", "status": "DONE", "content": "brief"}) + "\n"
-                        + json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "status": last_status, "content": "done"}) + "\n")
+        path.write_bytes((json.dumps({"step_index": 0, "type": "USER_INPUT", "status": "DONE", "content": "brief"}) + "\n"
+                        + json.dumps({"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "status": last_status, "content": "done"}) + "\n").encode("utf-8"))
         return f"file://{path}"
 
     def test_spec_matches_manifest_facts(self):
@@ -64,7 +64,7 @@ class AntigravityHostTests(unittest.TestCase):
 
     def test_command_places_prompt_in_argv_and_resumes_by_conversation(self):
         prompt = self.run_root / "prompt.txt"
-        prompt.write_text("/gsd-path\n\nrun quick")
+        prompt.write_bytes("/gsd-path\n\nrun quick".encode("utf-8"))
         args = antigravity.command(prompt)
         self.assertEqual(args[:3], ["agy", "-p", "/gsd-path\n\nrun quick"])
         self.assertIn("stream-json", args)

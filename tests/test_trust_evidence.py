@@ -30,7 +30,7 @@ class TrustEvidenceTests(unittest.TestCase):
         }
         self.child_apis = {"alpha": "alpha.spawn", "beta": "beta.spawn"}
         (self.repo / "scripts").mkdir()
-        (self.repo / "scripts" / "skill-resources.json").write_text(
+        (self.repo / "scripts" / "skill-resources.json").write_bytes(
             json.dumps(
                 {
                     "hosts": {
@@ -46,11 +46,10 @@ class TrustEvidenceTests(unittest.TestCase):
                         },
                     }
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
-        (self.repo / "package.json").write_text(
-            json.dumps({"version": "1.2.3"}), encoding="utf-8"
+        (self.repo / "package.json").write_bytes(
+            json.dumps({"version": "1.2.3"}).encode("utf-8")
         )
         self.git("init", "-q", "-b", "main")
         self.git("config", "user.email", "trust@example.invalid")
@@ -123,12 +122,11 @@ class TrustEvidenceTests(unittest.TestCase):
             )
             for review_name in ("FINAL.md", "final-gap-1.md"):
                 review = repository / ".project" / "review" / review_name
-                review.write_text(
+                review.write_bytes(
                     review.read_text(encoding="utf-8").replace(
                         f"Reviewed HEAD: {reviewed_head}",
                         f"Reviewed HEAD: {landing_commit}",
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
             reviewed_head = landing_commit
         pre_integration_defaults = {fixture_hosts[0]: pre_integration_default}
@@ -171,8 +169,8 @@ class TrustEvidenceTests(unittest.TestCase):
             run_manifest = f"{archive}/trust-run-manifest{suffix}.json"
             artifact_paths_by_host[evidence_host] = artifact_paths
             run_manifests[evidence_host] = run_manifest
-            (repository / artifact_paths["guards"]).write_text(
-                json.dumps(
+            (repository / artifact_paths["guards"]).write_bytes(
+                (json.dumps(
                     {
                         "schema": check_trust_evidence.GUARD_EVIDENCE_SCHEMA,
                         "host": evidence_host,
@@ -186,8 +184,7 @@ class TrustEvidenceTests(unittest.TestCase):
                         "git_hooks": "pass",
                     }
                 )
-                + "\n",
-                encoding="utf-8",
+                + "\n").encode("utf-8"),
             )
             manifest = {
                 "schema": check_trust_evidence.RUN_MANIFEST_SCHEMA,
@@ -211,8 +208,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 "artifacts": artifact_paths,
             }
             manifest.update(self.fixture_manifest_overrides.get(evidence_host, {}))
-            (repository / run_manifest).write_text(
-                json.dumps(manifest) + "\n", encoding="utf-8"
+            (repository / run_manifest).write_bytes(
+                (json.dumps(manifest) + "\n").encode("utf-8")
             )
         task_branch = task_branches[host]
         task_worktree = task_worktrees[host]
@@ -224,15 +221,14 @@ class TrustEvidenceTests(unittest.TestCase):
         builder.mark_shipped(repository)
         if host in self.blocked_final_hosts:
             final = repository / artifact_paths["final_review"]
-            final.write_text(
+            final.write_bytes(
                 final.read_text(encoding="utf-8").replace(
                     "Overall verdict: pass", "Overall verdict: blocked"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
         if host in self.fixture_states:
-            (repository / artifact_paths["state"]).write_text(
-                self.fixture_states[host], encoding="utf-8"
+            (repository / artifact_paths["state"]).write_bytes(
+                self.fixture_states[host].encode("utf-8")
             )
         omitted = self.omit_fixture_artifact.get(host)
         if omitted:
@@ -523,7 +519,7 @@ class TrustEvidenceTests(unittest.TestCase):
             / f"{host}.md"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("\n".join(lines), encoding="utf-8")
+        path.write_bytes("\n".join(lines).encode("utf-8"))
         if details and write_artifacts:
             for step in check_trust_evidence.ARTIFACT_STEPS.values():
                 artifact_step = "install" if shared_artifact else step
@@ -531,9 +527,8 @@ class TrustEvidenceTests(unittest.TestCase):
                 artifact.parent.mkdir(parents=True, exist_ok=True)
                 if artifact.exists():
                     continue
-                artifact.write_text(
-                    json.dumps(self.step_evidence(host, step)) + "\n",
-                    encoding="utf-8",
+                artifact.write_bytes(
+                    (json.dumps(self.step_evidence(host, step)) + "\n").encode("utf-8"),
                 )
 
     def commit_receipts(self):
@@ -543,7 +538,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def release_change(self, path, content="changed\n"):
         target = self.repo / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        target.write_bytes(content.encode("utf-8"))
         self.commit_receipts()
         self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
 
@@ -612,7 +607,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.assertIn("child_spawn", result["reasons"]["alpha"])
         current = self.repo / "docs/trust-validation/evidence/releases/1.2.4/beta.md"
         current.parent.mkdir()
-        current.write_text("failed current attempt\n")
+        current.write_bytes("failed current attempt\n".encode("utf-8"))
         self.commit_receipts()
         result = check_trust_evidence.validate_repository(self.repo, plan=True)
         self.assertEqual(["alpha", "beta"], result["required_runs"])
@@ -627,8 +622,8 @@ class TrustEvidenceTests(unittest.TestCase):
         self.assertEqual(["alpha", "beta"], result["required_runs"])
 
     def scope(self):
-        version = json.loads((self.repo / "package.json").read_text())["version"]
-        hosts = list(json.loads((self.repo / "scripts/skill-resources.json").read_text())["hosts"])
+        version = json.loads((self.repo / "package.json").read_text(encoding="utf-8"))["version"]
+        hosts = list(json.loads((self.repo / "scripts/skill-resources.json").read_text(encoding="utf-8"))["hosts"])
         return check_trust_evidence.release_scope(self.repo, version, hosts)
 
     def test_release_scope_skips_live_runs_for_non_host_changes(self):
@@ -666,7 +661,7 @@ class TrustEvidenceTests(unittest.TestCase):
 
     def add_api_hosts(self):
         path = self.repo / "scripts/skill-resources.json"
-        manifest = json.loads(path.read_text())
+        manifest = json.loads(path.read_text(encoding="utf-8"))
         for host in ("qwen", "kiro", "zed"):
             manifest["hosts"][host] = {
                 "local_root": f".{host}/skills", "guard_tier": "git-only",
@@ -682,7 +677,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.commit_receipts()
         result = check_trust_evidence.validate_repository(self.repo)
         self.assertEqual(["alpha", "beta"], result["hosts"])
-        manifest = json.loads((self.repo / "scripts/skill-resources.json").read_text())
+        manifest = json.loads((self.repo / "scripts/skill-resources.json").read_text(encoding="utf-8"))
         self.assertTrue({"qwen", "kiro", "zed"}.issubset(manifest["hosts"]))
 
     def test_excluded_host_changes_do_not_select_other_hosts(self):
@@ -710,16 +705,16 @@ class TrustEvidenceTests(unittest.TestCase):
 
     def prepare_release(self, affected=False, full=False, unchanged=False):
         self.add_api_hosts()
-        manifest = (self.repo / "scripts/skill-resources.json").read_text()
+        manifest = (self.repo / "scripts/skill-resources.json").read_text(encoding="utf-8")
         source = Path(__file__).resolve().parents[1]
         shutil.copytree(source / "scripts", self.repo / "scripts", dirs_exist_ok=True)
-        (self.repo / "scripts/skill-resources.json").write_text(manifest)
+        (self.repo / "scripts/skill-resources.json").write_bytes(manifest.encode("utf-8"))
         (self.repo / "tests").mkdir()
         # Preparation is the external boundary; never install or invoke paid hosts.
-        (self.repo / "tests/evaluate_host.py").write_text(
+        (self.repo / "tests/evaluate_host.py").write_bytes(
             "import sys\nfrom pathlib import Path\n"
             "with Path('prepared-hosts.txt').open('a') as out:\n"
-            "    out.write(sys.argv[sys.argv.index('--host') + 1] + '\\n')\n"
+            "    out.write(sys.argv[sys.argv.index('--host') + 1] + '\\n')\n".encode("utf-8")
         )
         self.git("add", "-A")
         self.git("commit", "-qm", "prepare fixture")
@@ -742,7 +737,7 @@ class TrustEvidenceTests(unittest.TestCase):
             self.assertIn("no new runs needed", result.stdout)
         else:
             self.assertEqual(["alpha"] if affected and not full else ["alpha", "beta"],
-                             (self.repo / "prepared-hosts.txt").read_text().splitlines())
+                             (self.repo / "prepared-hosts.txt").read_text(encoding="utf-8").splitlines())
 
     def test_release_scope_lockfile_exempts_only_package_version(self):
         lock = {"version": "1.2.2", "packages": {"": {"version": "1.2.2"},
@@ -856,7 +851,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "child_id": evidence["child_id"],
             "status": "completed",
         }
-        child_spawn.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        child_spawn.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -878,7 +873,7 @@ class TrustEvidenceTests(unittest.TestCase):
             "child_id": "simulated-child",
             "status": "completed",
         }
-        child_spawn.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        child_spawn.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -893,7 +888,7 @@ class TrustEvidenceTests(unittest.TestCase):
         landing = self.artifact("alpha", "task-landing")
         evidence = json.loads(landing.read_text(encoding="utf-8"))
         evidence["landing_commit"] = self.fixtures["alpha"]["ship"]
-        landing.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        landing.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -926,7 +921,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def test_rejects_empty_evidence_artifact(self):
         self.receipt("alpha")
         self.receipt("beta")
-        self.artifact("alpha", "install").write_text("", encoding="utf-8")
+        self.artifact("alpha", "install").write_bytes("".encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -938,7 +933,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
-        (self.repo / "untracked.txt").write_text("not tested\n", encoding="utf-8")
+        (self.repo / "untracked.txt").write_bytes("not tested\n".encode("utf-8"))
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
             check_trust_evidence.validate_repository(self.repo)
@@ -966,7 +961,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def test_rejects_unstructured_step_evidence(self):
         self.receipt("alpha")
         self.receipt("beta")
-        self.artifact("alpha", "install").write_text("{}\n", encoding="utf-8")
+        self.artifact("alpha", "install").write_bytes("{}\n".encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "schema"):
@@ -976,8 +971,8 @@ class TrustEvidenceTests(unittest.TestCase):
         self.receipt("alpha")
         self.receipt("beta")
         for step in check_trust_evidence.ARTIFACT_STEPS.values():
-            self.artifact("alpha", step).write_text(
-                json.dumps(
+            self.artifact("alpha", step).write_bytes(
+                (json.dumps(
                     {
                         "schema": check_trust_evidence.STEP_SCHEMA,
                         "host": "alpha",
@@ -987,8 +982,7 @@ class TrustEvidenceTests(unittest.TestCase):
                         "output": "x",
                     }
                 )
-                + "\n",
-                encoding="utf-8",
+                + "\n").encode("utf-8"),
             )
         self.commit_receipts()
 
@@ -1003,13 +997,13 @@ class TrustEvidenceTests(unittest.TestCase):
         integration = self.artifact("alpha", "integration")
         evidence = json.loads(integration.read_text(encoding="utf-8"))
         evidence["integration_commit"] = self.fixtures["alpha"]["landing"]
-        integration.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        integration.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         worktrees = self.artifact("alpha", "worktrees")
         evidence = json.loads(worktrees.read_text(encoding="utf-8"))
         evidence["output"] = evidence["output"].replace(
             self.fixtures["alpha"]["integration"], self.fixtures["alpha"]["landing"]
         )
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -1071,7 +1065,7 @@ class TrustEvidenceTests(unittest.TestCase):
         router = self.artifact("alpha", "router")
         evidence = json.loads(router.read_text(encoding="utf-8"))
         evidence["run_id"] = "another-run"
-        router.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        router.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "one run_id"):
@@ -1105,7 +1099,7 @@ class TrustEvidenceTests(unittest.TestCase):
         worktrees = self.artifact("alpha", "worktrees")
         evidence = json.loads(worktrees.read_text(encoding="utf-8"))
         evidence["output"] = "still registered"
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -1124,7 +1118,7 @@ class TrustEvidenceTests(unittest.TestCase):
             f"HEAD {fixture['landing']}\n"
             f"branch refs/heads/{fixture['task_branch']}\n"
         )
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -1143,7 +1137,7 @@ class TrustEvidenceTests(unittest.TestCase):
             f"HEAD {fixture['integration']}\n"
             "branch refs/heads/gsd-path-integrate/M001\n"
         )
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -1160,7 +1154,7 @@ class TrustEvidenceTests(unittest.TestCase):
         evidence["output"] = evidence["output"].replace(
             "branch refs/heads/gsd-path/M001", "bare"
         )
-        worktrees.write_text(json.dumps(evidence) + "\n", encoding="utf-8")
+        worktrees.write_bytes((json.dumps(evidence) + "\n").encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(
@@ -1188,8 +1182,8 @@ class TrustEvidenceTests(unittest.TestCase):
             check_trust_evidence.validate_repository(self.repo)
 
     def test_rejects_ignored_untracked_evidence(self):
-        (self.repo / ".gitignore").write_text(
-            "docs/trust-validation/evidence/\n", encoding="utf-8"
+        (self.repo / ".gitignore").write_bytes(
+            "docs/trust-validation/evidence/\n".encode("utf-8")
         )
         self.git("add", ".gitignore")
         self.git("commit", "-qm", "ignore evidence")
@@ -1204,7 +1198,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
-        (self.repo / "candidate.txt").write_text("new candidate\n", encoding="utf-8")
+        (self.repo / "candidate.txt").write_bytes("new candidate\n".encode("utf-8"))
         self.git("add", "candidate.txt")
         self.git("commit", "-qm", "new candidate")
         self.candidate = self.git("rev-parse", "HEAD").stdout.strip()
@@ -1221,7 +1215,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
-        (self.repo / "package.json").write_text('{"version": "9.9.9"}\n', encoding="utf-8")
+        (self.repo / "package.json").write_bytes('{"version": "9.9.9"}\n'.encode("utf-8"))
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
             check_trust_evidence.validate_repository(self.repo)
@@ -1230,7 +1224,7 @@ class TrustEvidenceTests(unittest.TestCase):
         self.receipt("alpha")
         self.receipt("beta")
         self.commit_receipts()
-        (self.repo / "staged.txt").write_text("not tested\n", encoding="utf-8")
+        (self.repo / "staged.txt").write_bytes("not tested\n".encode("utf-8"))
         self.git("add", "staged.txt")
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "clean worktree"):
@@ -1239,7 +1233,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def test_rejects_non_evidence_changes_after_candidate(self):
         self.receipt("alpha")
         self.receipt("beta")
-        (self.repo / "product.py").write_text("changed\n", encoding="utf-8")
+        (self.repo / "product.py").write_bytes("changed\n".encode("utf-8"))
         self.commit_receipts()
 
         with self.assertRaisesRegex(check_trust_evidence.EvidenceError, "non-evidence"):
@@ -1253,7 +1247,7 @@ class TrustEvidenceTests(unittest.TestCase):
                      "docs/trust-validation/TRUST-VALIDATION-SPEC.md"):
             path = self.repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("changed evaluation policy\n", encoding="utf-8")
+            path.write_bytes("changed evaluation policy\n".encode("utf-8"))
         self.commit_receipts()
         self.assertEqual(["alpha", "beta"], check_trust_evidence.validate_repository(self.repo)["hosts"])
 

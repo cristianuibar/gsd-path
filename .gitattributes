@@ -1,0 +1,8 @@
+# Check out LF everywhere, including Windows with core.autocrlf=true: the
+# scripts compare, hash, and parse these files byte for byte, and git hooks
+# with CRLF fail under sh.
+* text=auto eol=lf
+
+*.bundle binary
+*.icns binary
+*.png binary

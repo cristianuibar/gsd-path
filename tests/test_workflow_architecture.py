@@ -46,7 +46,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
 
     def test_every_state_bundle_routes_pending_reslice_journal(self):
         root = Path(__file__).resolve().parents[1]
-        manifest = json.loads((root / "scripts/skill-resources.json").read_text())
+        manifest = json.loads((root / "scripts/skill-resources.json").read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as packaged:
             package = Path(packaged)
             for source, target in manifest["script_targets"]:
@@ -81,12 +81,12 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
         run_git(repo, "config", "user.email", "test@example.com")
         project = repo / ".project"
         project.mkdir()
-        (project / "STATE.md").write_text(state_text(
-            phase=phase, status="active", milestone=milestone, branch="gsd-path/M002"))
+        (project / "STATE.md").write_bytes(state_text(
+            phase=phase, status="active", milestone=milestone, branch="gsd-path/M002").encode("utf-8"))
         roadmap = roadmap_text().replace("Status: pending", "Status: active")
         if phase == "roadmap":
             roadmap = roadmap_text().replace("Status: shipped", "Status: abandoned").replace("Depends on: [M001]", "Depends on: []")
-        (project / "ROADMAP.md").write_text(roadmap)
+        (project / "ROADMAP.md").write_bytes(roadmap.encode("utf-8"))
         run_git(repo, "add", ".project")
         run_git(repo, "commit", "-m", "fixture")
         return repo, run_git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -95,7 +95,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
         with tempfile.TemporaryDirectory() as tmp:
             repo, head = self.repo(tmp)
             path = repo / ".project/STATE.md"
-            path.write_text(path.read_text().replace("status: active", "status: done"))
+            path.write_bytes(path.read_text(encoding="utf-8").replace("status: active", "status: done").encode("utf-8"))
             before = path.read_bytes()
             payload = json.loads(subprocess.run([sys.executable, "-B", str(Path(pipeline_state.__file__)),
                 "status", "--repo", str(repo)], check=True, capture_output=True, text=True).stdout)
@@ -112,7 +112,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
         with tempfile.TemporaryDirectory() as tmp:
             repo, _ = self.repo(tmp, "ship")
             path = repo / ".project/STATE.md"
-            path.write_text(path.read_text().replace("status: active", "status: blocked"))
+            path.write_bytes(path.read_text(encoding="utf-8").replace("status: active", "status: blocked").encode("utf-8"))
             payload = pipeline_state.status_state(repo)
             handoff = payload.get("handoff", {})
             expected = "block: " + payload["route"]["reason"]
@@ -149,7 +149,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
                 self.assertEqual(result["state"]["status"], "active")
                 self.assertEqual(result["state"]["milestone"], "second")
                 self.assertFalse(baseline.exists())
-                self.assertIn("Status: active", (repo / ".project/ROADMAP.md").read_text())
+                self.assertIn("Status: active", (repo / ".project/ROADMAP.md").read_text(encoding="utf-8"))
                 self.assertEqual(run_git(repo, "rev-list", "--count", head + "..HEAD").stdout.strip(), "1")
                 self.assertEqual(run_git(repo, "status", "--porcelain").stdout, "")
 
@@ -158,15 +158,15 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
             with self.subTest(point=point), tempfile.TemporaryDirectory() as tmp:
                 repo, head = self.repo(tmp)
                 baseline = repo / ".project/ROADMAP.before-reslice.md"
-                content = (repo / ".project/ROADMAP.md").read_text()
-                baseline.write_text(content)
+                content = (repo / ".project/ROADMAP.md").read_text(encoding="utf-8")
+                baseline.write_bytes(content.encode("utf-8"))
                 error = pipeline_state.IsolationError if point == "isolation_checkpoint" else pipeline_state.PipelineStateError
                 with mock.patch.object(state_checkpoint, point, side_effect=error("interrupted")):
                     with self.assertRaisesRegex(pipeline_state.PipelineStateError, "interrupted"):
                         self.approve(repo, head)
                 self.assertEqual(pipeline_state.route_state(repo)["route"]["action"], "resume-checkpoint")
                 if point == "isolation_checkpoint":
-                    self.assertEqual(baseline.read_text(), content)
+                    self.assertEqual(baseline.read_text(encoding="utf-8"), content)
                 result = state_checkpoint.resume_checkpoint(repo)
                 self.assertEqual(result["state"]["phase"], "inspect")
                 self.assertFalse(baseline.exists())
@@ -178,7 +178,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
             roadmap = repo / ".project/ROADMAP.md"
             baseline = repo / ".project/ROADMAP.before-reslice.md"
             baseline.write_bytes(roadmap.read_bytes())
-            roadmap.write_text(roadmap.read_text().replace("Goal: second", "Goal: different"))
+            roadmap.write_bytes(roadmap.read_text(encoding="utf-8").replace("Goal: second", "Goal: different").encode("utf-8"))
             with self.assertRaisesRegex(pipeline_state.PipelineStateError, "active.*changed"):
                 self.approve(repo, head)
             self.assertTrue(baseline.exists())
@@ -188,12 +188,12 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
         with tempfile.TemporaryDirectory() as tmp:
             repo, head = self.repo(tmp, "roadmap", "null")
             project = repo / ".project"
-            (project / "REPOSITORY.md").write_text("Kind: new-github\n")
+            (project / "REPOSITORY.md").write_bytes("Kind: new-github\n".encode("utf-8"))
             baseline = project / "ROADMAP.before-reslice.md"
             baseline.write_bytes((project / "ROADMAP.md").read_bytes())
             result = state_checkpoint.defer_approval(repo, "roadmap-reslice", selected_milestone="second")
             self.assertTrue(result["deferred"])
             self.assertFalse(baseline.exists())
-            self.assertIn("Status: active", (project / "ROADMAP.md").read_text())
+            self.assertIn("Status: active", (project / "ROADMAP.md").read_text(encoding="utf-8"))
             self.assertEqual(result["state"]["phase"], "inspect")
             self.assertEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), head)

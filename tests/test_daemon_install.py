@@ -71,7 +71,7 @@ def make_installer(tmp, platform="darwin", runner=None, dry_run=False, **kwargs)
 def make_repo(tmp):
     repo = Path(tmp) / "repo"
     (repo / "daemon").mkdir(parents=True)
-    (repo / "daemon" / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    (repo / "daemon" / "pyproject.toml").write_bytes("[project]\nname = 'x'\n".encode("utf-8"))
     return repo
 
 
@@ -292,7 +292,7 @@ class WindowsInstallTests(unittest.TestCase):
             self.assertEqual(installer.uninstall(), 0)
             shortcut = installer.shortcut_path
             shortcut.parent.mkdir(parents=True, exist_ok=True)
-            shortcut.write_text("lnk", encoding="utf-8")
+            shortcut.write_bytes("lnk".encode("utf-8"))
             self.assertEqual(installer.uninstall(), 0)
             self.assertFalse(shortcut.exists())
 

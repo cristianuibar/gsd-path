@@ -34,9 +34,8 @@ def commit_all(repo: Path, message: str) -> str:
 
 def write_state(repo: Path, project: str, phase: str, status: str, archive: str = "null") -> None:
     (repo / ".project").mkdir(exist_ok=True)
-    (repo / ".project" / "STATE.md").write_text(
-        STATE.format(project=project, phase=phase, status=status, archive=archive),
-        encoding="utf-8",
+    (repo / ".project" / "STATE.md").write_bytes(
+        STATE.format(project=project, phase=phase, status=status, archive=archive).encode("utf-8"),
     )
 
 
@@ -52,7 +51,7 @@ class MemberGuardTests(unittest.TestCase):
         self.member = root / "web"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
-        (self.member / "app.py").write_text("print('v1')\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes("print('v1')\n".encode("utf-8"))
         # The member's own Path history: shipped, but its tag was never fetched,
         # so a single-repo guard treats that milestone as unverified.
         write_state(self.member, "web", "shipped", "done", ".project/archive/001-demo")
@@ -79,10 +78,10 @@ class MemberGuardTests(unittest.TestCase):
         )
 
     def stage_product_commit(self):
-        (self.member / "app.py").write_text("print('v2')\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes("print('v2')\n".encode("utf-8"))
         git(self.member, "add", "app.py")
         message = self.member / ".git" / "TEST_MSG"
-        message.write_text("feat: member change\n", encoding="utf-8")
+        message.write_bytes("feat: member change\n".encode("utf-8"))
         return self.guard("pre-commit"), self.guard("commit-msg", str(message))
 
     def push(self, *lines: str):
@@ -91,7 +90,7 @@ class MemberGuardTests(unittest.TestCase):
 
     def member_commit(self, branch: str) -> str:
         git(self.member, "checkout", "-q", "-b", branch)
-        (self.member / "app.py").write_text(f"print('{branch}')\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes(f"print('{branch}')\n".encode("utf-8"))
         sha = commit_all(self.member, f"work on {branch}")
         git(self.member, "checkout", "-q", "main")
         return sha

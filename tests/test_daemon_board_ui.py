@@ -125,22 +125,22 @@ class BoardUITests(unittest.TestCase):
             project = root / "project's & folder"
             runtime = project / ".gsd-path/runtime"
             runtime.mkdir(parents=True)
-            (runtime / "pipeline_state.py").write_text("# gsd-path project runtime\n")
+            (runtime / "pipeline_state.py").write_bytes("# gsd-path project runtime\n".encode("utf-8"))
             release = threading.Event()
             self.addCleanup(release.set)
             outcome = [False]
             def runner(argv, cwd=None):
                 release.wait()
                 if outcome[0]:
-                    (runtime / "VERSION").write_text("1.1.0\n")
+                    (runtime / "VERSION").write_bytes("1.1.0\n".encode("utf-8"))
                     return 0, "runtime refreshed", ""
                 return 2, "some hosts installed", "host install failed"
             manager = PluginManager(home=root / "daemon", user_home=root / "home",
                                     runner=runner, git_runner=lambda *a, **kw: (0, "", ""), environ={})
             (manager.src_dir / ".git").mkdir(parents=True)
             (manager.src_dir / "scripts").mkdir()
-            manager.install_py.write_text("# test installer boundary\n")
-            (manager.src_dir / "package.json").write_text('{"version":"1.1.0"}')
+            manager.install_py.write_bytes("# test installer boundary\n".encode("utf-8"))
+            (manager.src_dir / "package.json").write_bytes('{"version":"1.1.0"}'.encode("utf-8"))
             manager._write_cache("1.1.0")
             watcher = Mock(config=Config(parents=[], session_dirs=[]),
                            projects={str(project): ProjectStatus(root=str(project), project="Demo")})
@@ -230,11 +230,11 @@ class BoardUITests(unittest.TestCase):
         plugin.detect_global.return_value = {}
         plugin.detect_project.return_value = {}
         history = Path(tempfile.mkdtemp()) / "history.jsonl"
-        history.write_text("\n".join(json.dumps(e) for e in [
+        history.write_bytes(("\n".join(json.dumps(e) for e in [
             {"type": "phase-changed", "root": "/sample/gsd", "detail": "plan -> build", "at": "2026-09-10T09:12:00+00:00"},
             {"type": "tasks-changed", "root": "/sample/gsd", "detail": "6/9 done (was 5/9)", "at": "2026-09-12T14:30:00+00:00"},
             {"type": "phase-changed", "root": "/sample/notes", "detail": "define -> research", "at": "2026-09-12T14:31:00+00:00"},
-        ]) + "\n", encoding="utf-8")
+        ]) + "\n").encode("utf-8"))
         env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(history)})
         env.start()
         self.addCleanup(env.stop)

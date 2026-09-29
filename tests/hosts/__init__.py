@@ -58,4 +58,4 @@ def load(host: str) -> HostSpec:
 
 def known_hosts() -> List[str]:
     import json
-    return list(json.loads(MANIFEST.read_text())["hosts"])
+    return list(json.loads(MANIFEST.read_text(encoding="utf-8"))["hosts"])

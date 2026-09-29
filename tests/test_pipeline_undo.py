@@ -75,10 +75,9 @@ def task_text() -> str:
 def write_plan_tasks(repo: Path) -> None:
     tasks = repo / '.project/tasks'
     tasks.mkdir()
-    (tasks / 'T001-change-app.md').write_text(TASK_TEMPLATE.format(
+    (tasks / 'T001-change-app.md').write_bytes(TASK_TEMPLATE.format(
         task_id='T001', files_block='  - app.py', context='Create the demo app.',
-        approach='Implement the demo behavior.', contract='- None', verify='python3 app.py'),
-        encoding='utf-8')
+        approach='Implement the demo behavior.', contract='- None', verify='python3 app.py').encode("utf-8"))
 
 
 def discussion_text(follow_up: str = "required") -> tuple[str, str]:
@@ -112,13 +111,13 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
@@ -145,17 +144,17 @@ class PipelineUndoTests(unittest.TestCase):
             discussion = project / "discuss"
             discussion.mkdir(parents=True)
             for name, content in archive_milestone.EMPTY_DISCUSSION_FILES.items():
-                (discussion / name).write_text(content, encoding="utf-8")
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+                (discussion / name).write_bytes(content.encode("utf-8"))
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             dialogue, answers = discussion_text("none")
-            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
-            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
+            (discussion / "DIALOGUE.md").write_bytes(dialogue.encode("utf-8"))
+            (discussion / "ANSWERS.md").write_bytes(answers.encode("utf-8"))
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", parent)
@@ -174,13 +173,13 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(root)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             expected_head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
@@ -204,13 +203,13 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(root)
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", parent)
@@ -238,13 +237,13 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(state_text(), encoding="utf-8")
+            (project / "STATE.md").write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", parent)
@@ -274,13 +273,13 @@ class PipelineUndoTests(unittest.TestCase):
             project = repo / ".project"
             project.mkdir()
             state = project / "STATE.md"
-            state.write_text(state_text(), encoding="utf-8")
+            state.write_bytes(state_text().encode("utf-8"))
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: approval base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             (project / "plan").mkdir()
-            (project / "plan" / "PLAN.md").write_text(
-                PLAN_WAVE.format(title="first"), encoding="utf-8"
+            (project / "plan" / "PLAN.md").write_bytes(
+                PLAN_WAVE.format(title="first").encode("utf-8")
             )
             write_plan_tasks(repo)
             state_checkpoint.checkpoint_approval(repo, "plan", parent)
@@ -292,9 +291,8 @@ class PipelineUndoTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
                     pipeline_undo.apply_undo(repo, "checkpoint", approved)
-            state.write_text(
-                state.read_text(encoding="utf-8") + "user edit\n",
-                encoding="utf-8",
+            state.write_bytes(
+                (state.read_text(encoding="utf-8") + "user edit\n").encode("utf-8"),
             )
 
             previewed = pipeline_undo.preview(repo)
@@ -312,25 +310,23 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8"),
             )
-            (repo / "app.py").write_text("base = True\n", encoding="utf-8")
+            (repo / "app.py").write_bytes("base = True\n".encode("utf-8"))
             task = project / "tasks" / "T001.md"
             task.parent.mkdir()
-            task.write_text(task_text(), encoding="utf-8")
+            task.write_bytes(task_text().encode("utf-8"))
             run_git(repo, "add", ".")
             run_git(repo, "commit", "-m", "fixture: build base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
-            (repo / "app.py").write_text("base = False\n", encoding="utf-8")
-            task.write_text(
+            (repo / "app.py").write_bytes("base = False\n".encode("utf-8"))
+            task.write_bytes(
                 task_text()
                 .replace("status: pending", "status: in-progress")
                 .replace("agent: null", "agent: coder")
                 .replace("base: null", f"base: {parent}")
-                .replace("worktree: null", f"worktree: {repo}"),
-                encoding="utf-8",
+                .replace("worktree: null", f"worktree: {repo}").encode("utf-8"),
             )
             head = isolation.land(
                 repo,
@@ -353,13 +349,13 @@ class PipelineUndoTests(unittest.TestCase):
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"), encoding="utf-8"
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: build base")
             parent = run_git(repo, "rev-parse", "HEAD").stdout.strip()
-            (repo / "app.py").write_text("spoofed\n", encoding="utf-8")
+            (repo / "app.py").write_bytes("spoofed\n".encode("utf-8"))
             run_git(repo, "add", "app.py")
             run_git(
                 repo,
@@ -380,21 +376,19 @@ class PipelineUndoTests(unittest.TestCase):
             project = repo / ".project"
             intent = project / "intent"
             intent.mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8"),
             )
-            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            (intent / "INTENT.md").write_bytes("# Intent — first\n".encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
             archive = ".project/archive/001-first"
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     phase="ship",
                     status="active",
                     archive=f"{archive}/",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             archived_intent = repo / archive / "intent"
             archived_intent.mkdir(parents=True)
@@ -418,10 +412,10 @@ class PipelineUndoTests(unittest.TestCase):
             discussion.mkdir(parents=True)
             dialogue = archive_milestone.EMPTY_DISCUSSION_FILES["DIALOGUE.md"]
             answers = archive_milestone.EMPTY_DISCUSSION_FILES["ANSWERS.md"]
-            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
-            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"), encoding="utf-8"
+            (discussion / "DIALOGUE.md").write_bytes(dialogue.encode("utf-8"))
+            (discussion / "ANSWERS.md").write_bytes(answers.encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
@@ -431,11 +425,10 @@ class PipelineUndoTests(unittest.TestCase):
             discussion.replace(archived)
             discussion.mkdir()
             dialogue, answers = discussion_text()
-            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
-            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            (discussion / "DIALOGUE.md").write_bytes(dialogue.encode("utf-8"))
+            (discussion / "ANSWERS.md").write_bytes(answers.encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
             head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
@@ -453,13 +446,11 @@ class PipelineUndoTests(unittest.TestCase):
             project = repo / ".project"
             intent = project / "intent"
             intent.mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8"),
             )
-            (intent / "INTENT.md").write_text(
-                "# Intent — first\n\n## Success criteria\n\n1. demo works\n",
-                encoding="utf-8",
+            (intent / "INTENT.md").write_bytes(
+                "# Intent — first\n\n## Success criteria\n\n1. demo works\n".encode("utf-8"),
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
@@ -471,7 +462,7 @@ class PipelineUndoTests(unittest.TestCase):
             intent.replace(archived_intent)
             review = archive_root / "review"
             review.mkdir()
-            (review / "FINAL.md").write_text(
+            (review / "FINAL.md").write_bytes(
                 f"""# Final Review — first
 
 Reviewed HEAD: {head}
@@ -487,10 +478,9 @@ Overall verdict: pass
 - **Reference**: tests
 - **Finding**: none
 - **Fix direction**: none
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
-            (review / "final-gap-1.md").write_text(
+            (review / "final-gap-1.md").write_bytes(
                 f"""# Gap Review — 1: project Verify command
 
 Reviewed HEAD: {head}
@@ -508,12 +498,10 @@ Waves checked: 1
 
 - **Found**: The project Verify command passed at the reviewed HEAD.
 - **Fix direction**: none
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
 
             previewed = pipeline_undo.preview(repo)
@@ -530,12 +518,11 @@ Waves checked: 1
             intent = project / "intent"
             intent.mkdir(parents=True)
             notes = project / "notes.md"
-            notes.write_text("original\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"),
-                encoding="utf-8",
+            notes.write_bytes("original\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8"),
             )
-            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            (intent / "INTENT.md").write_bytes("# Intent — first\n".encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
             archive = ".project/archive/001-first"
@@ -543,14 +530,13 @@ Waves checked: 1
             archived_intent.mkdir(parents=True)
             (intent / "INTENT.md").replace(archived_intent / "INTENT.md")
             intent.rmdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
-            notes.write_text("user edit\n", encoding="utf-8")
+            notes.write_bytes("user edit\n".encode("utf-8"))
             unexpected = project / "plan" / "unexpected.md"
             unexpected.parent.mkdir()
-            unexpected.write_text("user edit\n", encoding="utf-8")
+            unexpected.write_bytes("user edit\n".encode("utf-8"))
 
             previewed = pipeline_undo.preview(repo)
 
@@ -565,10 +551,10 @@ Waves checked: 1
             project = repo / ".project"
             intent = project / "intent"
             intent.mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"), encoding="utf-8"
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8")
             )
-            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            (intent / "INTENT.md").write_bytes("# Intent — first\n".encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
             archive = ".project/archive/001-first"
@@ -577,10 +563,9 @@ Waves checked: 1
             (intent / "INTENT.md").replace(archived_intent / "INTENT.md")
             intent.rmdir()
             personal = repo / archive / "personal.md"
-            personal.write_text("keep\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            personal.write_bytes("keep\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
 
             previewed = pipeline_undo.preview(repo)
@@ -595,10 +580,10 @@ Waves checked: 1
             project = repo / ".project"
             intent = project / "intent"
             intent.mkdir(parents=True)
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"), encoding="utf-8"
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8")
             )
-            (intent / "INTENT.md").write_text("# Intent — first\n", encoding="utf-8")
+            (intent / "INTENT.md").write_bytes("# Intent — first\n".encode("utf-8"))
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
             archive = ".project/archive/001-first"
@@ -606,9 +591,8 @@ Waves checked: 1
             archived_intent.mkdir(parents=True)
             (intent / "INTENT.md").replace(archived_intent / "INTENT.md")
             intent.rmdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
             head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
             with mock.patch.object(
@@ -619,7 +603,7 @@ Waves checked: 1
                 with self.assertRaisesRegex(pipeline_undo.UndoError, "interrupted"):
                     pipeline_undo.apply_undo(repo, "uncommitted-archive", head)
             personal = repo / archive / "personal.md"
-            personal.write_text("keep\n", encoding="utf-8")
+            personal.write_bytes("keep\n".encode("utf-8"))
 
             previewed = pipeline_undo.preview(repo)
 
@@ -638,9 +622,9 @@ Waves checked: 1
             discussion = project / "discuss"
             discussion.mkdir(parents=True)
             for name, content in archive_milestone.EMPTY_DISCUSSION_FILES.items():
-                (discussion / name).write_text(content, encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active"), encoding="utf-8"
+                (discussion / name).write_bytes(content.encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: ship active")
@@ -650,11 +634,10 @@ Waves checked: 1
             discussion.replace(archived)
             discussion.mkdir()
             dialogue, answers = discussion_text()
-            (discussion / "DIALOGUE.md").write_text(dialogue, encoding="utf-8")
-            (discussion / "ANSWERS.md").write_text(answers, encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="ship", status="active", archive=f"{archive}/"),
-                encoding="utf-8",
+            (discussion / "DIALOGUE.md").write_bytes(dialogue.encode("utf-8"))
+            (discussion / "ANSWERS.md").write_bytes(answers.encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="ship", status="active", archive=f"{archive}/").encode("utf-8"),
             )
             head = run_git(repo, "rev-parse", "HEAD").stdout.strip()
 
@@ -693,18 +676,17 @@ Waves checked: 1
             project = repo / ".project"
             project.mkdir()
             archive = ".project/archive/001-first"
-            (project / "STATE.md").write_text(
+            (project / "STATE.md").write_bytes(
                 state_text(
                     phase="build",
                     status="active",
                     archive=f"{archive}/",
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: abandon recovery")
             (repo / archive).mkdir(parents=True)
-            (repo / archive / "partial.md").write_text("keep\n", encoding="utf-8")
+            (repo / archive / "partial.md").write_bytes("keep\n".encode("utf-8"))
 
             previewed = pipeline_undo.preview(repo)
 
@@ -716,17 +698,15 @@ Waves checked: 1
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: build")
             next_state = project / "next"
             next_state.mkdir()
-            (next_state / "STATE.md").write_text(
-                state_text(phase="inspect", status="active", branch="null"),
-                encoding="utf-8",
+            (next_state / "STATE.md").write_bytes(
+                state_text(phase="inspect", status="active", branch="null").encode("utf-8"),
             )
 
             previewed = pipeline_undo.preview(repo)
@@ -742,9 +722,9 @@ Waves checked: 1
             project = repo / ".project"
             intent = project / "intent"
             intent.mkdir(parents=True)
-            (intent / "INTENT.md").write_text("keep\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"), encoding="utf-8"
+            (intent / "INTENT.md").write_bytes("keep\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project")
             run_git(repo, "commit", "-m", "fixture: build")
@@ -764,9 +744,9 @@ Waves checked: 1
             next_dir = project / "next"
             next_dir.mkdir(parents=True)
             notes = next_dir / "notes.md"
-            notes.write_text("keep\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"), encoding="utf-8"
+            notes.write_bytes("keep\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8")
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: build")
@@ -784,16 +764,14 @@ Waves checked: 1
             next_dir = project / "next"
             plan = next_dir / "plan"
             plan.mkdir(parents=True)
-            (next_dir / "STATE.md").write_text(
-                state_text(phase="plan", status="active", branch="null"),
-                encoding="utf-8",
+            (next_dir / "STATE.md").write_bytes(
+                state_text(phase="plan", status="active", branch="null").encode("utf-8"),
             )
-            (plan / "PLAN.md").write_text("# Plan — next\n", encoding="utf-8")
+            (plan / "PLAN.md").write_bytes("# Plan — next\n".encode("utf-8"))
             personal = plan / "personal.md"
-            personal.write_text("keep\n", encoding="utf-8")
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"),
-                encoding="utf-8",
+            personal.write_bytes("keep\n".encode("utf-8"))
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: build")
@@ -809,9 +787,8 @@ Waves checked: 1
             repo = init_repo(Path(tmp))
             project = repo / ".project"
             project.mkdir()
-            (project / "STATE.md").write_text(
-                state_text(phase="build", status="active"),
-                encoding="utf-8",
+            (project / "STATE.md").write_bytes(
+                state_text(phase="build", status="active").encode("utf-8"),
             )
             run_git(repo, "add", ".project/STATE.md")
             run_git(repo, "commit", "-m", "fixture: build")

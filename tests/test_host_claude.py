@@ -38,7 +38,7 @@ class ClaudeBindChildTests(unittest.TestCase):
     def bind(self, events):
         path = self.root / "quick" / "run-1" / "events.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("".join(json.dumps({"raw": json.dumps(event)}) + "\n" for event in events))
+        path.write_bytes("".join(json.dumps({"raw": json.dumps(event)}) + "\n" for event in events).encode("utf-8"))
         return claude.bind_child(self.root, "build_T001")
 
     def test_foreground_result_with_launched_prose_binds(self):

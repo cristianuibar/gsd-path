@@ -120,14 +120,14 @@ class WorkflowProjectionTests(unittest.TestCase):
             run_git(repo, 'init', '-b', 'gsd-path/M001')
             project = repo / '.project'
             project.mkdir()
-            (project / 'STATE.md').write_text(state_text(phase='build', status='active'))
+            (project / 'STATE.md').write_bytes(state_text(phase='build', status='active').encode("utf-8"))
             self.runtime(repo)
             result = probe.probe_project(repo)
             self.assertEqual(result.to_dict().get('workflow', {}).get('label'), 'In build')
             self.assertEqual(ProjectStatus.from_dict(result.to_dict()).to_dict()['workflow'], result.workflow)
             # Invalid owned state still leaves parsed facts visible, explicitly unverified.
-            (project / 'STATE.md').write_text(state_text(phase='build', status='active').replace(
-                'pipeline: gsd-path/v2', 'pipeline: other/v1'))
+            (project / 'STATE.md').write_bytes(state_text(phase='build', status='active').replace(
+                'pipeline: gsd-path/v2', 'pipeline: other/v1').encode("utf-8"))
             result = probe.probe_project(repo)
             self.assertEqual(result.phase, 'build')
             self.assertEqual(result.to_dict()['workflow']['label'], 'Unverified')
@@ -138,8 +138,8 @@ class WorkflowProjectionTests(unittest.TestCase):
             repo = Path(tmp)
             project = repo / '.project'
             project.mkdir()
-            (project / 'STATE.md').write_text(state_text(phase='ship', status='active',
-                archive='.project/archive/001-first'))
+            (project / 'STATE.md').write_bytes(state_text(phase='ship', status='active',
+                archive='.project/archive/001-first').encode("utf-8"))
             status = probe.probe_project(repo)
             self.assertEqual(status.to_dict().get('workflow', {}).get('label'), 'Unverified')
             self.assertEqual(status.phase, 'ship')

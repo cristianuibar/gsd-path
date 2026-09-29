@@ -56,7 +56,7 @@ class CoreMigrationTests(unittest.TestCase):
         for name, content in self.source.items():
             self.assertEqual((output / "core" / name).read_bytes(), content)
             self.assertEqual((self.planning / name).read_bytes(), content)
-        manifest = json.loads((output / "manifest.json").read_text())
+        manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["status"], "prepared")
         self.assertFalse(manifest["hooks_verified"])
         self.assertFalse((self.repo / ".project").exists())
@@ -120,11 +120,11 @@ class CoreMigrationTests(unittest.TestCase):
         prepared = self.run_command("prepare", "--output", str(output))
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
         manifest_path = output / "manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["files"] = [
             entry for entry in manifest["files"] if not entry["path"].startswith("phases/")
         ]
-        manifest_path.write_text(json.dumps(manifest))
+        manifest_path.write_bytes(json.dumps(manifest).encode("utf-8"))
         phases = output / "core/phases"
         mode = phases.stat().st_mode
         phases.chmod(0)
@@ -147,7 +147,7 @@ class CoreMigrationTests(unittest.TestCase):
             ]}]},
             "statusLine": {"type": "command", "command": "node /tools/gsd-statusline.js"},
         })
-        settings.write_text(content)
+        settings.write_bytes(content.encode("utf-8"))
         output = self.root / "bundle"
         result = self.run_command("prepare", "--output", str(output), "--hook-settings", str(settings))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -158,8 +158,8 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertEqual([item["command"] for item in review[0]["commands"]], [
             "node /tools/gsd-read-guard.js", "company-guard", "node /tools/gsd-statusline.js",
         ])
-        self.assertEqual(settings.read_text(), content)
-        self.assertEqual(json.loads((output / "manifest.json").read_text())["hook_review"], review)
+        self.assertEqual(settings.read_text(encoding="utf-8"), content)
+        self.assertEqual(json.loads((output / "manifest.json").read_text(encoding="utf-8"))["hook_review"], review)
         self.assertFalse(json.loads(result.stdout)["hooks_verified"])
 
         for index, item in enumerate(review[0]["commands"]):
@@ -172,7 +172,7 @@ class CoreMigrationTests(unittest.TestCase):
                 ], capture_output=True, text=True)
                 self.assertEqual(planned.returncode, 0, planned.stderr)
                 self.assertEqual(json.loads(planned.stdout)["status"], "planned")
-                change = json.loads(receipt.read_text())
+                change = json.loads(receipt.read_text(encoding="utf-8"))
                 self.assertEqual(change["original_command"], item["command"])
                 self.assertEqual(base64.b64decode(change["before"]), content.encode())
                 expected = json.loads(content)
@@ -182,14 +182,14 @@ class CoreMigrationTests(unittest.TestCase):
                 selected[item["location"][-1]] = change["replacement_command"]
                 self.assertNotEqual(change["replacement_command"], item["command"])
                 self.assertEqual(json.loads(base64.b64decode(change["after"])), expected)
-                self.assertEqual(settings.read_text(), content)
+                self.assertEqual(settings.read_text(encoding="utf-8"), content)
 
     def test_hook_inventory_rejects_invalid_settings_before_preparing(self):
         settings = self.root / "settings.json"
         for index, content in enumerate(("not json", "[]", '{"hooks": []}')):
             with self.subTest(content=content):
                 output = self.root / f"bundle-{index}"
-                settings.write_text(content)
+                settings.write_bytes(content.encode("utf-8"))
                 result = self.run_command("prepare", "--output", str(output), "--hook-settings", str(settings))
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(output.exists())
@@ -209,13 +209,13 @@ class CoreMigrationTests(unittest.TestCase):
         self.assertEqual(json.loads(verified.stdout)["status"], "verified-bundle")
         self.assertFalse(json.loads(verified.stdout)["hooks_verified"])
         target = output / "core/phases/02/PLAN.md"
-        target.write_text("Lost unfinished work")
+        target.write_bytes("Lost unfinished work".encode("utf-8"))
         self.assertNotEqual(self.verify(output).returncode, 0)
         target.unlink()
         self.assertNotEqual(self.verify(output).returncode, 0)
         target.write_bytes(self.source["phases/02/PLAN.md"])
         extra = output / "core/extra.md"
-        extra.write_text("unrecorded")
+        extra.write_bytes("unrecorded".encode("utf-8"))
         self.assertNotEqual(self.verify(output).returncode, 0)
         extra.unlink()
         self.assertEqual(self.verify(output).returncode, 0)
@@ -227,7 +227,7 @@ class CoreMigrationTests(unittest.TestCase):
         original = manifest_path.read_bytes()
         data = json.loads(original)
         data["schema"] = "different-owner/v1"
-        manifest_path.write_text(json.dumps(data))
+        manifest_path.write_bytes(json.dumps(data).encode("utf-8"))
         self.assertNotEqual(self.verify(output).returncode, 0)
         manifest_path.write_bytes(original)
         target = output / "core/PROJECT.md"
@@ -261,9 +261,9 @@ class CoreMigrationTests(unittest.TestCase):
                 self.assertEqual(verified.returncode, 0, verified.stderr)
                 self.assertEqual(json.loads(verified.stdout)["status"], "verified-bundle")
                 settings = self.root / f"{host}-settings.json"
-                settings.write_text(json.dumps({"hooks": {"PreToolUse": [{"hooks": [
+                settings.write_bytes(json.dumps({"hooks": {"PreToolUse": [{"hooks": [
                     {"type": "command", "command": "exit 7"},
-                ]}]}}))
+                ]}]}}).encode("utf-8"))
                 original = settings.read_bytes()
                 receipt = self.root / f"{host}-receipt.json"
                 settings_helper = skill / "scripts/core_hook_settings.py"

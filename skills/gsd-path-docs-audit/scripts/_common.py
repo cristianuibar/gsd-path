@@ -14,12 +14,28 @@ import sys
 # Runtime helpers must not modify their immutable installation.
 sys.dont_write_bytecode = True
 
+import contextlib
+import errno
 import json
 import os
 import re
+import shlex
+import shutil
+import signal
 import subprocess
+import time
 from pathlib import Path
-from typing import Optional
+from typing import BinaryIO, Iterator, List, Optional, Sequence
+
+# Chosen by what imports, not os.name, so tests can emulate Windows on POSIX.
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # type: ignore[assignment]
+    import msvcrt
+
+# Windows opens descriptors in text mode unless asked otherwise.
+O_BINARY = getattr(os, "O_BINARY", 0)
 
 PIPELINE_MARKER = "gsd-path/v2"
 BOUND_BRANCH_RE = re.compile(r"^gsd-path/M(\d{3,})$")
@@ -64,7 +80,8 @@ def project_ignore_error(repo: Path) -> Optional[str]:
     result = subprocess.run(
         ("git", "-C", str(repo), "check-ignore", "-v", "-n", "-z", "--no-index", "--stdin"),
         input="\0".join(PROJECT_PROBE_PATHS) + "\0",
-        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
         capture_output=True,
         check=False,
     )
@@ -144,7 +161,8 @@ def run_command(
     return subprocess.run(
         arguments,
         cwd=cwd,
-        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
         capture_output=True,
         check=False,
     )
@@ -156,7 +174,8 @@ def run_git(
     return subprocess.run(
         ("git", "-C", str(repo), *arguments),
         input=input,
-        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
         capture_output=True,
         check=False,
     )
@@ -190,14 +209,15 @@ def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:
             temporary_path.unlink()
         descriptor = os.open(
             temporary_path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | O_BINARY,
             0o666,
         )
-        handle = os.fdopen(descriptor, "w", encoding="utf-8")
+        # Bytes, so Windows text mode never turns "\n" into "\r\n".
+        handle = os.fdopen(descriptor, "wb")
         descriptor = None
         with handle:
-            handle.write(content)
-        os.replace(temporary_path, path)
+            handle.write(content.encode("utf-8"))
+        replace(temporary_path, path)
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -257,3 +277,268 @@ def unquote(value: str) -> str:
     ):
         return cleaned[1:-1]
     return cleaned
+
+
+# --- Platform helpers --------------------------------------------------------
+# Each helper keeps the POSIX behavior the scripts had before and adds the
+# native Windows equivalent. Windows has no fcntl, cannot open a directory as
+# a descriptor, and treats os.kill(pid, 0) as a Ctrl+C, not a probe.
+
+# Sharing violation and access denied: another process briefly holds the file.
+_WINDOWS_BUSY_ERRORS = (5, 32)
+_REPLACE_ATTEMPTS = 20
+
+
+def replace(source: Path, destination: Path) -> None:
+    """os.replace, retried while a Windows reader briefly holds the destination."""
+    if os.name != "nt":
+        os.replace(source, destination)
+        return
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError as error:
+            if (getattr(error, "winerror", None) not in _WINDOWS_BUSY_ERRORS
+                    or attempt == _REPLACE_ATTEMPTS - 1):
+                raise
+            time.sleep(min(0.01 * 2 ** attempt, 0.25))
+
+
+def fsync_directory(path: Path) -> None:
+    """Persist a directory entry change; Windows cannot open a directory to fsync it."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+@contextlib.contextmanager
+def exclusive_lock(
+    path: Path, *, blocking: bool = True, timeout: Optional[float] = None
+) -> Iterator[BinaryIO]:
+    """Hold an exclusive lock on the file at path, creating it when absent.
+
+    A non-blocking attempt that loses raises BlockingIOError; a blocking one
+    that outlives timeout raises TimeoutError. Windows msvcrt LK_LOCK gives up
+    after ten seconds, so both platforms poll a non-blocking lock instead.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = None if timeout is None else time.monotonic() + timeout
+    with open(path, "a+b") as handle:
+        if fcntl is None:
+            # msvcrt locks bytes from the current position; keep one to lock.
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+        delay = 0.01
+        while True:
+            try:
+                if fcntl is None:
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                elif blocking and deadline is None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as error:
+                if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                if not blocking:
+                    raise BlockingIOError(errno.EAGAIN, f"lock is held: {path}") from error
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError(f"timed out waiting for lock: {path}") from error
+                time.sleep(delay)
+                delay = min(delay * 2, 0.25)
+        try:
+            yield handle
+        finally:
+            if fcntl is None:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+_STILL_ACTIVE = 259
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_ACCESS_DENIED = 5
+
+
+def process_alive(pid: int) -> bool:
+    """Whether pid names a running process, without signalling it."""
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except OSError as error:
+            return error.errno == errno.EPERM
+        return True
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        # A protected process exists even though it refuses the query.
+        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def popen_group(argv: Sequence[str], **kwargs) -> subprocess.Popen:
+    """Start argv as the leader of a new process group that kill_tree can end."""
+    if os.name == "nt":
+        kwargs["creationflags"] = (kwargs.get("creationflags", 0)
+                                   | subprocess.CREATE_NEW_PROCESS_GROUP)
+    else:
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(list(argv), **kwargs)
+
+
+def kill_tree(process: subprocess.Popen) -> None:
+    """Forcibly end a popen_group process and every descendant it started."""
+    if os.name == "nt":
+        subprocess.run(
+            ("taskkill", "/T", "/F", "/PID", str(process.pid)),
+            capture_output=True,
+            check=False,
+        )
+        if process.poll() is None:
+            process.kill()
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+class ShellNotFound(RuntimeError):
+    pass
+
+
+def _is_wsl_launcher(path: str) -> bool:
+    folded = os.path.normcase(os.path.abspath(path))
+    system_root = os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows"))
+    windows_apps = os.path.normcase(os.path.join(
+        os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WindowsApps"))
+    return folded.startswith(system_root + os.sep) or (
+        bool(os.environ.get("LOCALAPPDATA")) and folded.startswith(windows_apps + os.sep))
+
+
+def find_bash() -> str:
+    """The bash that runs Verify commands; on Windows, Git for Windows' bash.exe.
+
+    Windows puts the WSL launcher at System32\\bash.exe, ahead of PATH, so a
+    bare "bash" would run the command in another OS. GSD_PATH_BASH overrides.
+    """
+    if os.name != "nt":
+        return "bash"
+    override = os.environ.get("GSD_PATH_BASH")
+    if override:
+        if not os.path.isfile(override):
+            raise ShellNotFound(f"GSD_PATH_BASH is not a file: {override}")
+        return override
+    candidates = []
+    found = shutil.which("bash")
+    if found:
+        candidates.append(found)
+    git = shutil.which("git")
+    if git:
+        # <Git>\cmd\git.exe or <Git>\bin\git.exe -> <Git>\bin\bash.exe
+        candidates.append(os.path.join(os.path.dirname(os.path.dirname(git)), "bin", "bash.exe"))
+    for variable in ("ProgramFiles", "ProgramW6432", "LOCALAPPDATA"):
+        base = os.environ.get(variable)
+        if base:
+            parts = ("Programs", "Git") if variable == "LOCALAPPDATA" else ("Git",)
+            candidates.append(os.path.join(base, *parts, "bin", "bash.exe"))
+    for candidate in candidates:
+        if os.path.isfile(candidate) and not _is_wsl_launcher(candidate):
+            return candidate
+    raise ShellNotFound(
+        "Verify commands need bash; install Git for Windows or set GSD_PATH_BASH "
+        "to its bin\\bash.exe (the System32 WSL launcher is never used)"
+    )
+
+
+def bash_argv(command: str) -> List[str]:
+    return [find_bash(), "-c", command]
+
+
+# cmd.exe re-parses the arguments of a .cmd or .bat target, so these would
+# let an argument escape its quoting.
+_CMD_METACHARACTERS = frozenset('%^&|<>"!\r\n')
+
+
+def resolve_argv(argv: Sequence[str]) -> List[str]:
+    """argv with its program resolved the way a shell would find it.
+
+    Windows CreateProcess only appends .exe, so npm-installed CLIs such as
+    claude.cmd or codex.cmd are found through PATHEXT here. POSIX is unchanged.
+    """
+    arguments = list(argv)
+    if os.name != "nt" or not arguments:
+        return arguments
+    program = shutil.which(arguments[0])
+    if program is None:
+        raise FileNotFoundError(f"command not found: {arguments[0]}")
+    if program.lower().endswith((".cmd", ".bat")):
+        for argument in arguments[1:]:
+            if _CMD_METACHARACTERS.intersection(argument):
+                raise ValueError(
+                    f"argument {argument!r} is unsafe to pass to {program}; "
+                    "cmd.exe would reinterpret it"
+                )
+    return [program, *arguments[1:]]
+
+
+def split_command(text: str) -> List[str]:
+    """Split a command line with the host platform's own rules."""
+    if os.name != "nt":
+        return shlex.split(text)
+    if not text.strip():
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    shell32.CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
+    shell32.CommandLineToArgvW.argtypes = (wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int))
+    kernel32.LocalFree.argtypes = (wintypes.HLOCAL,)
+    count = ctypes.c_int()
+    pointer = shell32.CommandLineToArgvW(text, ctypes.byref(count))
+    if not pointer:
+        raise ValueError(f"cannot split command: {text!r}")
+    try:
+        return [pointer[index] for index in range(count.value)]
+    finally:
+        kernel32.LocalFree(ctypes.cast(pointer, wintypes.HLOCAL))
+
+
+def rmtree_force(path: Path) -> None:
+    """shutil.rmtree that also removes read-only files, such as git objects on Windows."""
+
+    def clear_readonly(function, target, _error) -> None:
+        os.chmod(target, 0o700)
+        function(target)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=clear_readonly)
+    else:
+        shutil.rmtree(path, onerror=clear_readonly)

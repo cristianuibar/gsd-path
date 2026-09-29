@@ -30,7 +30,7 @@ def command(prompt_path, resume=None):
     args = [binary()]
     if resume:
         args += ["-S", resume]
-    return args + ["-p", Path(prompt_path).read_text(), "--output-format", "stream-json"]
+    return args + ["-p", Path(prompt_path).read_text(encoding="utf-8"), "--output-format", "stream-json"]
 
 
 def _events(lines):
@@ -68,13 +68,13 @@ def _headers(text):
 def session_evidence(session_id, agent_id):
     """What the session store recorded for the child, or None when it is not on disk."""
     for state_path in sorted(SESSION_ROOT.glob(f"*/session_{session_id.removeprefix('session_')}/state.json")):
-        agent = json.loads(state_path.read_text()).get("agents", {}).get(agent_id)
+        agent = json.loads(state_path.read_text(encoding="utf-8")).get("agents", {}).get(agent_id)
         if agent is None:
             continue
         reasons = []
         wire = state_path.parent / "agents" / agent_id / "wire.jsonl"
         if wire.exists():
-            reasons = [ev.get("reason") for ev in _events(wire.read_text().splitlines()) if ev.get("type") == "turn.ended"]
+            reasons = [ev.get("reason") for ev in _events(wire.read_text(encoding="utf-8").splitlines()) if ev.get("type") == "turn.ended"]
         return {"state": state_path.parent.name, "type": agent.get("type"), "labels": agent.get("labels", {}), "turn_ended_reasons": reasons}
     return None
 
@@ -88,7 +88,7 @@ def bind_child(run_root, child_id):
     attempts = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
         session = None
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):

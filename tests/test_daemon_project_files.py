@@ -26,11 +26,11 @@ class ProjectFilesTests(unittest.TestCase):
         self.git('config', 'user.name', 'Test')
         (self.root / '.project').mkdir()
         self.state = self.root / '.project/STATE.md'
-        self.state.write_text('# Initial\n\nstatus: active\n')
+        self.state.write_bytes('# Initial\n\nstatus: active\n'.encode("utf-8"))
         self.git('add', '.')
         self.git('commit', '-m', 'Initial state')
         self.first = self.git('rev-parse', 'HEAD').strip()
-        self.state.write_text('# Current\n\nstatus: blocked\n')
+        self.state.write_bytes('# Current\n\nstatus: blocked\n'.encode("utf-8"))
         self.git('commit', '-am', 'Record blocked state')
         self.latest = self.git('rev-parse', 'HEAD').strip()
         watcher = Mock(config=Config(parents=[], session_dirs=[]), projects={str(self.root): ProjectStatus(root=str(self.root))})
@@ -61,26 +61,26 @@ class ProjectFilesTests(unittest.TestCase):
     def test_real_files_raw_and_revision_history(self):
         archive = self.root / '.project/archive/001/FINAL.md'
         archive.parent.mkdir(parents=True)
-        archive.write_text('# Archived evidence\n')
-        (self.root / 'README.md').write_text('# Repository\n')
+        archive.write_bytes('# Archived evidence\n'.encode("utf-8"))
+        (self.root / 'README.md').write_bytes('# Repository\n'.encode("utf-8"))
         code, data = self.request()
         self.assertEqual(code, 200, data)
         self.assertEqual({f['path'] for f in data['files']}, {'.project/STATE.md', '.project/archive/001/FINAL.md', 'README.md'})
         code, data = self.request('read', path='.project/STATE.md')
         self.assertEqual(code, 200, data)
-        self.assertEqual(data['text'], self.state.read_text())
+        self.assertEqual(data['text'], self.state.read_text(encoding="utf-8"))
         code, data = self.request('history', path='.project/STATE.md')
         self.assertEqual(code, 200, data)
         self.assertEqual([r['revision'] for r in data['revisions']], [self.latest, self.first])
         code, data = self.request('read', path='.project/STATE.md', revision=self.first)
         self.assertEqual(code, 200, data)
         self.assertEqual(data['text'], '# Initial\n\nstatus: active\n')
-        self.assertIn('blocked', self.state.read_text())
-        self.assertEqual(self.request('read', path='.project/archive/001/FINAL.md')[1]['text'], archive.read_text())
+        self.assertIn('blocked', self.state.read_text(encoding="utf-8"))
+        self.assertEqual(self.request('read', path='.project/archive/001/FINAL.md')[1]['text'], archive.read_text(encoding="utf-8"))
 
     def test_paths_origin_and_revision_are_confined(self):
         outside = self.root.parent / 'outside.md'
-        outside.write_text('outside secret')
+        outside.write_bytes('outside secret'.encode("utf-8"))
         (self.root / 'linked.md').symlink_to(outside)
         (self.root / '.project/link').symlink_to(self.root.parent, target_is_directory=True)
         for path in ['.', '../outside.md', str(outside), '.git/config', 'linked.md', '.project/link/outside.md']:
@@ -97,7 +97,7 @@ class ProjectFilesTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get('GSD_UI_TEST'), 'requires Orca browser')
     def test_browser_live_file_versions_and_full_records(self):
         from tests.test_daemon_board_ui import BoardUITests
-        self.state.write_text(self.state.read_text() + '\n[Invalid encoded link](a%FF.md)\n')
+        self.state.write_bytes((self.state.read_text(encoding="utf-8") + '\n[Invalid encoded link](a%FF.md)\n').encode("utf-8"))
         self.orca = BoardUITests.orca.__get__(self)
         self.js = BoardUITests.js.__get__(self)
         self.page = self.orca('tab', 'create', '--url', f'http://127.0.0.1:{self.port}/')['browserPageId']
@@ -132,13 +132,13 @@ class ProjectFilesTests(unittest.TestCase):
     def test_browser_relative_link_preserves_selected_revision(self):
         from tests.test_daemon_board_ui import BoardUITests
         target = self.root / '.project/linked.md'
-        target.write_text('# Historical destination\n')
+        target.write_bytes('# Historical destination\n'.encode("utf-8"))
         self.git('add', '.')
         self.git('commit', '-m', 'Add destination')
-        self.state.write_text('# Linked source\n\n[Destination](linked.md)\n')
+        self.state.write_bytes('# Linked source\n\n[Destination](linked.md)\n'.encode("utf-8"))
         self.git('commit', '-am', 'Link destination')
         revision = self.git('rev-parse', 'HEAD').strip()
-        target.write_text('# Working destination\n')
+        target.write_bytes('# Working destination\n'.encode("utf-8"))
         self.orca = BoardUITests.orca.__get__(self)
         self.js = BoardUITests.js.__get__(self)
         self.page = self.orca('tab', 'create', '--url', f'http://127.0.0.1:{self.port}/')['browserPageId']
@@ -168,8 +168,8 @@ class ProjectFilesTests(unittest.TestCase):
         build = self.root / '.project/build'
         build.mkdir()
         entries = [{'task': 'T001', 'tokens_in': n} for n in range(25)]
-        (build / 'usage.jsonl').write_text('\n'.join(json.dumps(e) for e in entries) + '\nnot-json\n')
-        (build / 'verify-ledger.jsonl').write_text('\n'.join(json.dumps(e) for e in entries))
+        (build / 'usage.jsonl').write_bytes(('\n'.join(json.dumps(e) for e in entries) + '\nnot-json\n').encode("utf-8"))
+        (build / 'verify-ledger.jsonl').write_bytes('\n'.join(json.dumps(e) for e in entries).encode("utf-8"))
         self.watcher.sessions.records_for.return_value = [{'tokens_in': n} for n in range(25)]
         conn = http.client.HTTPConnection('127.0.0.1', self.port)
         self.addCleanup(conn.close)
@@ -190,7 +190,7 @@ class ProjectFilesTests(unittest.TestCase):
         if importlib.util.find_spec('markdown_it') is None:
             self.skipTest('Markdown renderer is installed with the daemon package')
         text = '---\ntitle: Preview <safe>\nstatus: active\n---\n# Heading\n\n<script>alert(1)</script>\n\n![pixel](https://example.invalid/pixel)\n\n[x](javascript:alert(1))\n\n[State](.project/STATE.md)\n\n| Name | State |\n| --- | --- |\n| Task | Done |\n'
-        (self.root / 'README.md').write_text(text)
+        (self.root / 'README.md').write_bytes(text.encode("utf-8"))
         code, body = self.request('read', path='README.md')
         self.assertEqual(code, 200, body)
         rendered = body['html']
@@ -207,7 +207,7 @@ class ProjectFilesTests(unittest.TestCase):
 
     def test_untracked_binary_missing_and_literal_path(self):
         (self.root / 'image.bin').write_bytes(b'abc\x00def')
-        (self.root / 'a [draft].md').write_text('literal name')
+        (self.root / 'a [draft].md').write_bytes('literal name'.encode("utf-8"))
         code, body = self.request('history', path='a [draft].md')
         self.assertEqual(code, 200, body)
         self.assertEqual(body['revisions'], [])

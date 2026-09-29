@@ -40,10 +40,9 @@ def write_state(root: Path, project: str, phase: str, status: str = "active",
                 milestone: str = "demo", branch: str = "gsd-path/M001",
                 archive: str = "null") -> None:
     (root / ".project").mkdir(exist_ok=True)
-    (root / ".project" / "STATE.md").write_text(
+    (root / ".project" / "STATE.md").write_bytes(
         STATE.format(project=project, milestone=milestone, phase=phase,
-                     status=status, branch=branch, archive=archive),
-        encoding="utf-8",
+                     status=status, branch=branch, archive=archive).encode("utf-8"),
     )
 
 
@@ -60,8 +59,8 @@ class MemberTests(unittest.TestCase):
         self.coordinator.mkdir()
         git(self.coordinator, "init", "-q", "-b", "main")
         write_state(self.coordinator, "acme", "plan")
-        (self.coordinator / ".project" / "REPOSITORY.md").write_text(
-            "# Repository Binding\n\nKind: new-github\n", encoding="utf-8"
+        (self.coordinator / ".project" / "REPOSITORY.md").write_bytes(
+            "# Repository Binding\n\nKind: new-github\n".encode("utf-8")
         )
         commit_all(self.coordinator)
 
@@ -73,7 +72,7 @@ class MemberTests(unittest.TestCase):
         member = (parent or self.root) / name
         member.mkdir()
         git(member, "init", "-q", "-b", "main")
-        (member / "README.md").write_text(name, encoding="utf-8")
+        (member / "README.md").write_bytes(name.encode("utf-8"))
         commit_all(member)
         git(member, "remote", "add", "origin", remote or f"https://github.com/acme/{name}.git")
         git(member, "update-ref", f"refs/remotes/origin/{default}", "HEAD")
@@ -133,13 +132,13 @@ class MemberTests(unittest.TestCase):
 
     def test_add_refuses_dirty_member_worktree(self) -> None:
         member = self.make_member("web")
-        (member / "README.md").write_text("changed", encoding="utf-8")
+        (member / "README.md").write_bytes("changed".encode("utf-8"))
         self.assert_refused(self.add("web", member), "uncommitted changes")
 
     def test_add_refuses_untracked_files_hidden_by_git_config(self) -> None:
         member = self.make_member("web")
         git(member, "config", "status.showUntrackedFiles", "no")
-        (member / "untracked.txt").write_text("hidden", encoding="utf-8")
+        (member / "untracked.txt").write_bytes("hidden".encode("utf-8"))
         self.assert_refused(self.add("web", member), "uncommitted changes")
 
     def test_add_refuses_member_nested_in_coordinator(self) -> None:
@@ -260,9 +259,9 @@ class MemberTests(unittest.TestCase):
         linked = self.root / "linked"
         git(web, "worktree", "add", "-q", "-b", "linked", str(linked))
         path = self.coordinator / ".project" / "MEMBERS.md"
-        path.write_text(path.read_text(encoding="utf-8").replace(
+        path.write_bytes(path.read_text(encoding="utf-8").replace(
             "https://github.com/acme/web.git", "https://github.com/acme/other.git"
-        ), encoding="utf-8")
+        ).encode("utf-8"))
         before = path.read_bytes()
         result = self.add("linked", linked)
         self.assertNotEqual(result.returncode, 0)
@@ -275,7 +274,7 @@ class MemberTests(unittest.TestCase):
     def test_validate_rechecks_members_after_add(self) -> None:
         web = self.make_member("web")
         self.assertEqual(self.add("web", web).returncode, 0)
-        (web / "README.md").write_text("changed", encoding="utf-8")
+        (web / "README.md").write_bytes("changed".encode("utf-8"))
         result = self.run_members("validate")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("uncommitted changes", result.stderr)
@@ -298,7 +297,7 @@ class MemberTests(unittest.TestCase):
             "unexpected preamble": "extra\n## web\nCheckout: /x\nRemote: https://github.com/a/b\nIntegration: default\n",
         }.items():
             with self.subTest(label):
-                path.write_text("# Members\n\n" + body, encoding="utf-8")
+                path.write_bytes(("# Members\n\n" + body).encode("utf-8"))
                 result = self.run_members("validate")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("MEMBERS.md", result.stderr)
@@ -361,8 +360,7 @@ class MemberTests(unittest.TestCase):
         member = self.joined()
         other = self.make_member("other")
         path = self.coordinator / ".project" / "MEMBERS.md"
-        path.write_text(path.read_text(encoding="utf-8").replace(str(member), str(other)),
-                        encoding="utf-8")
+        path.write_bytes(path.read_text(encoding="utf-8").replace(str(member), str(other)).encode("utf-8"))
         with self.assertRaisesRegex(members.MembersError, "members.py repair"):
             members.member_role(member)
 
@@ -410,7 +408,7 @@ class MemberTests(unittest.TestCase):
             "relative coordinator": json.dumps({**valid, "coordinator": "acme"}),
         }.items():
             with self.subTest(label):
-                marker.write_text(content, encoding="utf-8")
+                marker.write_bytes(content.encode("utf-8"))
                 with self.assertRaisesRegex(members.MembersError,
                                             "members.py repair --repo <coordinator>"):
                     members.member_role(member)
@@ -425,7 +423,7 @@ class MemberTests(unittest.TestCase):
         member = self.make_member("web")
         marker = self.marker_path(member)
         marker.parent.mkdir(parents=True)
-        marker.write_text('{"schema":', encoding="utf-8")
+        marker.write_bytes('{"schema":'.encode("utf-8"))
         added = self.add("web", member)
         self.assertEqual(added.returncode, 0, added.stderr)
         self.assertEqual(members.member_role(member)["coordinator"], self.coordinator)
@@ -461,11 +459,10 @@ class MemberTests(unittest.TestCase):
         with self.assertRaises(members.MembersError) as caught:
             members.member_role(member)
         self.assertIn(str(directory), str(caught.exception))
-        (self.coordinator / ".project" / "MEMBERS.md").write_text(
+        (self.coordinator / ".project" / "MEMBERS.md").write_bytes(
             members.render([{"name": "web", "checkout": str(member),
                              "remote": "https://github.com/acme/web.git",
-                             "integration": "default"}]),
-            encoding="utf-8",
+                             "integration": "default"}]).encode("utf-8"),
         )
         validation = self.run_members("validate")
         self.assertNotEqual(validation.returncode, 0)
@@ -478,7 +475,7 @@ class MemberTests(unittest.TestCase):
         marker.unlink()
         marker.mkdir()
         contents = marker / "keep.txt"
-        contents.write_text("keep", encoding="utf-8")
+        contents.write_bytes("keep".encode("utf-8"))
         for command in ("validate", "repair"):
             result = self.run_members(command)
             self.assertNotEqual(result.returncode, 0)
@@ -536,13 +533,12 @@ class MemberTests(unittest.TestCase):
         marker.parent.mkdir(parents=True)
         foreign = {"schema": "gsd-path/member/v1", "coordinator": str(self.root / "other"),
                    "project": "other", "name": "web"}
-        marker.write_text(json.dumps(foreign), encoding="utf-8")
+        marker.write_bytes(json.dumps(foreign).encode("utf-8"))
         self.assert_refused(self.add("web", member), "already a member of other")
-        (self.coordinator / ".project" / "MEMBERS.md").write_text(
+        (self.coordinator / ".project" / "MEMBERS.md").write_bytes(
             members.render([{"name": "web", "checkout": str(member),
                              "remote": "https://github.com/acme/web.git",
-                             "integration": "default"}]),
-            encoding="utf-8",
+                             "integration": "default"}]).encode("utf-8"),
         )
         result = self.run_members("repair")
         self.assertNotEqual(result.returncode, 0)
@@ -556,11 +552,11 @@ class MembersArtifactTests(unittest.TestCase):
             repo = Path(temporary).resolve()
             git(repo, "init", "-q", "-b", "gsd-path/M001")
             write_state(repo, "acme", "ship")
-            (repo / ".project" / "MEMBERS.md").write_text("# Members\n", encoding="utf-8")
+            (repo / ".project" / "MEMBERS.md").write_bytes("# Members\n".encode("utf-8"))
             commit_all(repo)
             head = git(repo, "rev-parse", "HEAD")
             lean_verification._require_ship_inputs(repo, head)
-            (repo / ".project" / "STRAY.md").write_text("x", encoding="utf-8")
+            (repo / ".project" / "STRAY.md").write_bytes("x".encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "STRAY.md"):
                 lean_verification._require_ship_inputs(repo, head)
 
@@ -575,7 +571,7 @@ class MembersArtifactTests(unittest.TestCase):
             lean_verification._require_ship_inputs(repo, head)
             self.assertFalse((repo / ".project" / ".claude").exists())
             (repo / ".project" / ".claude").mkdir()
-            (repo / ".project" / ".claude" / "note.txt").write_text("x", encoding="utf-8")
+            (repo / ".project" / ".claude" / "note.txt").write_bytes("x".encode("utf-8"))
             with self.assertRaisesRegex(check_handoffs.HandoffError, "unsupported .project artifacts: .claude"):
                 lean_verification._require_ship_inputs(repo, head)
 
@@ -584,10 +580,10 @@ class MembersArtifactTests(unittest.TestCase):
             repo = Path(temporary).resolve()
             git(repo, "init", "-q", "-b", "gsd-path/M001")
             write_state(repo, "acme", "ship")
-            (repo / ".gitignore").write_text(".DS_Store\n", encoding="utf-8")
+            (repo / ".gitignore").write_bytes(".DS_Store\n".encode("utf-8"))
             commit_all(repo)
             head = git(repo, "rev-parse", "HEAD")
-            (repo / ".project" / ".DS_Store").write_text("x", encoding="utf-8")
+            (repo / ".project" / ".DS_Store").write_bytes("x".encode("utf-8"))
             lean_verification._require_ship_inputs(repo, head)
             # A tracked copy ships, so it is an artifact again.
             git(repo, "add", "-f", ".project/.DS_Store")
@@ -600,10 +596,10 @@ class MembersArtifactTests(unittest.TestCase):
             active = Path(temporary) / ".project"
             archive = active / "archive" / "001-demo"
             archive.mkdir(parents=True)
-            (active / "STATE.md").write_text("state", encoding="utf-8")
-            (active / "MEMBERS.md").write_text("# Members\n", encoding="utf-8")
+            (active / "STATE.md").write_bytes("state".encode("utf-8"))
+            (active / "MEMBERS.md").write_bytes("# Members\n".encode("utf-8"))
             archive_milestone.require_clean_active_root(active, archive)
-            (active / "STRAY.md").write_text("x", encoding="utf-8")
+            (active / "STRAY.md").write_bytes("x".encode("utf-8"))
             with self.assertRaisesRegex(archive_milestone.ArchiveError, "STRAY.md"):
                 archive_milestone.require_clean_active_root(active, archive)
 
@@ -611,15 +607,15 @@ class MembersArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             git(root, "init", "-q")
-            (root / ".gitignore").write_text(".DS_Store\nintent/\n", encoding="utf-8")
+            (root / ".gitignore").write_bytes(".DS_Store\nintent/\n".encode("utf-8"))
             active = root / ".project"
             archive = active / "archive" / "001-demo"
             archive.mkdir(parents=True)
-            (active / "STATE.md").write_text("state", encoding="utf-8")
-            (active / ".DS_Store").write_text("x", encoding="utf-8")
+            (active / "STATE.md").write_bytes("state".encode("utf-8"))
+            (active / ".DS_Store").write_bytes("x".encode("utf-8"))
             archive_milestone.require_clean_active_root(active, archive)
             (active / "intent").mkdir()
-            (active / "intent" / "INTENT.md").write_text("x", encoding="utf-8")
+            (active / "intent" / "INTENT.md").write_bytes("x".encode("utf-8"))
             with self.assertRaisesRegex(archive_milestone.ArchiveError, "intent"):
                 archive_milestone.require_clean_active_root(active, archive)
 

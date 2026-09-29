@@ -11,8 +11,9 @@ the default offline suite.
 | --- | --- | --- | --- |
 | **Node.js** | 18.17 | 18 and 20 matrix | `node --test` installer/wizard suite |
 | **npm** | ships with Node | latest on runner | lockfile install via `npm ci` |
-| **Python** | 3.9 | 3.12 | stdlib `unittest` only for the core gate |
-| **git** | any recent | ubuntu-latest default | worktree/isolation tests need git 2.30+ |
+| **Python** | 3.9 | 3.12 (Windows: 3.9 and 3.12) | stdlib `unittest` only for the core gate; found as `python3`, `python`, or `py -3` (`GSD_PATH_PYTHON` overrides) |
+| **git** | any recent | ubuntu-latest and windows-latest defaults | worktree/isolation tests need git 2.30+ |
+| **bash** (Windows only) | Git for Windows | windows-latest default | Verify commands run in Git for Windows' `bash.exe`, never the System32 WSL launcher (`GSD_PATH_BASH` overrides) |
 
 Optional for extended tiers:
 
@@ -26,7 +27,7 @@ Check versions:
 
 ```bash
 make check-prereqs
-# or: bash scripts/check-test-prereqs.sh
+# or: npm run check:prereqs
 ```
 
 ## Bootstrap (first time)

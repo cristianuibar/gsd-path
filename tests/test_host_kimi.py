@@ -26,7 +26,7 @@ LINES = [
 def write_run(root, lines, name="run-20260906T000000000000Z"):
     run = Path(root) / "quick" / name
     run.mkdir(parents=True)
-    (run / "events.jsonl").write_text("".join(json.dumps({"elapsed_seconds": i, "raw": line}) + "\n" for i, line in enumerate(lines)))
+    (run / "events.jsonl").write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": line}) + "\n" for i, line in enumerate(lines)).encode("utf-8"))
     return run
 
 
@@ -39,7 +39,7 @@ class KimiSpecTests(unittest.TestCase):
     def test_command_puts_prompt_text_on_argv(self):
         with tempfile.TemporaryDirectory() as tmp:
             prompt = Path(tmp) / "prompt.txt"
-            prompt.write_text("Reply with exactly: ok\n")
+            prompt.write_bytes("Reply with exactly: ok\n".encode("utf-8"))
             args = kimi.command(prompt)
             self.assertEqual(args[1:], ["-p", "Reply with exactly: ok\n", "--output-format", "stream-json"])
             resumed = kimi.command(prompt, SESSION)
@@ -80,12 +80,12 @@ class BindChildTests(unittest.TestCase):
         store = self.root / "store"
         session_dir = store / "wd_child_3ef6642a9053" / SESSION
         (session_dir / "agents" / "agent-0").mkdir(parents=True)
-        (session_dir / "state.json").write_text(json.dumps({"id": SESSION, "agents": {
+        (session_dir / "state.json").write_bytes(json.dumps({"id": SESSION, "agents": {
             "main": {"type": "main"},
-            "agent-0": {"type": "sub", "parentAgentId": "main", "labels": {"parentAgentId": "main", "profileName": "coder"}}}}))
-        (session_dir / "agents" / "agent-0" / "wire.jsonl").write_text(
-            json.dumps({"type": "metadata", "protocol_version": "1.5"}) + "\n"
-            + json.dumps({"type": "turn.ended", "agentId": "agent-0", "turnId": 0, "reason": "completed", "durationMs": 9070}) + "\n")
+            "agent-0": {"type": "sub", "parentAgentId": "main", "labels": {"parentAgentId": "main", "profileName": "coder"}}}}).encode("utf-8"))
+        (session_dir / "agents" / "agent-0" / "wire.jsonl").write_bytes(
+            (json.dumps({"type": "metadata", "protocol_version": "1.5"}) + "\n"
+            + json.dumps({"type": "turn.ended", "agentId": "agent-0", "turnId": 0, "reason": "completed", "durationMs": 9070}) + "\n").encode("utf-8"))
         with mock.patch.object(kimi, "SESSION_ROOT", store):
             bound = kimi.bind_child(self.root, "build_probe")
         self.assertEqual(bound["session_store"], {"state": SESSION, "type": "sub", "turn_ended_reasons": ["completed"],

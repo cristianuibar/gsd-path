@@ -31,13 +31,13 @@ class EvaluationTests(unittest.TestCase):
             evaluation.command(["git", "config", "user.name", "Test"], repo)
             evaluation.command(["git", "config", "user.email", "test@example.invalid"], repo)
             evaluation.command(["git", "commit", "--allow-empty", "-qm", "fixture"], repo)
-            (arm / "prompt.txt").write_text("fixture prompt")
+            (arm / "prompt.txt").write_bytes("fixture prompt".encode("utf-8"))
             binary = root / "bin"
             binary.mkdir()
             host = binary / "codex"
-            host.write_text(f"#!{sys.executable}\nimport sys,json\n"
+            host.write_bytes(f"#!{sys.executable}\nimport sys,json\n"
                             "if '--version' in sys.argv: print('fixture-cli')\n"
-                            "else: print(json.dumps({'type':'turn.completed','usage':{'output_tokens':1},'argv':sys.argv,'prompt':sys.stdin.read()}))\n")
+                            "else: print(json.dumps({'type':'turn.completed','usage':{'output_tokens':1},'argv':sys.argv,'prompt':sys.stdin.read()}))\n".encode("utf-8"))
             host.chmod(0o755)
             arguments = [sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"), "run", "--arm", str(arm),
                          "--model", "fixture", "--reasoning", "high", "--sandbox", "danger-full-access"]
@@ -46,14 +46,14 @@ class EvaluationTests(unittest.TestCase):
             recorded = json.loads(result.stdout)
             self.assertEqual(recorded["sandbox"], "danger-full-access")
             events = next(arm.glob("run-*/events.jsonl"))
-            event = json.loads(json.loads(events.read_text())["raw"])
+            event = json.loads(json.loads(events.read_text(encoding="utf-8"))["raw"])
             self.assertEqual(event["argv"][event["argv"].index("--sandbox") + 1], "danger-full-access")
             self.assertEqual(event["prompt"], "fixture prompt")
             resumed = subprocess.run(arguments + ["--resume", "fixture-thread"], capture_output=True,
                                      text=True, env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]})
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             events = sorted(arm.glob("run-*/events.jsonl"))[-1]
-            argv = json.loads(json.loads(events.read_text())["raw"])["argv"]
+            argv = json.loads(json.loads(events.read_text(encoding="utf-8"))["raw"])["argv"]
             self.assertEqual(argv[argv.index("--sandbox") + 1], "danger-full-access")
             self.assertLess(argv.index("--sandbox"), argv.index("resume"))
             self.assertLess(argv.index("--add-dir"), argv.index("resume"))
@@ -64,22 +64,22 @@ class EvaluationTests(unittest.TestCase):
             script = repo / "count.py"
             for broken in (FIXTURE_SCRIPT, "print('3 widgets')\n",
                            GOOD_COUNTER.replace("{'widgets': a.count}", "{'widgets': str(a.count)}")):
-                script.write_text(broken)
+                script.write_bytes(broken.encode("utf-8"))
                 self.assertEqual(evaluate(repo)["verdict"], "fail")
-            script.write_text(GOOD_COUNTER)
+            script.write_bytes(GOOD_COUNTER.encode("utf-8"))
             self.assertEqual(evaluate(repo)["verdict"], "pass")
 
     def test_activity_records_real_exit_and_missing_data_stays_unavailable(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "manifest.json").write_text(json.dumps({"candidate": "fixture", "fixture": "fixture"}))
+            (root / "manifest.json").write_bytes(json.dumps({"candidate": "fixture", "fixture": "fixture"}).encode("utf-8"))
             for mode in ("path", "direct"):
                 repo = root / mode / "repo"
                 repo.mkdir(parents=True)
                 subprocess.run(["git", "init", "-q", str(repo)], check=True)
                 for key, value in (("user.name", "Test"), ("user.email", "test@example.invalid")):
                     evaluation.command(["git", "config", key, value], repo)
-                (repo / "count.py").write_text(GOOD_COUNTER)
+                (repo / "count.py").write_bytes(GOOD_COUNTER.encode("utf-8"))
                 evaluation.command(["git", "add", "."], repo)
                 evaluation.command(["git", "commit", "-qm", "fixture"], repo)
             result = subprocess.run([sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"), "activity",
@@ -99,7 +99,7 @@ class EvaluationTests(unittest.TestCase):
             reported = subprocess.run([sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"),
                                        "report", "--directory", str(root)], capture_output=True)
             self.assertEqual(reported.returncode, 3)
-            (root / "direct/repo/count.py").write_text("print('wrong')\n")
+            (root / "direct/repo/count.py").write_bytes("print('wrong')\n".encode("utf-8"))
             reported = subprocess.run([sys.executable, str(evaluation.ROOT / "tests/evaluate_codex.py"),
                                        "report", "--directory", str(root)], capture_output=True)
             self.assertEqual(reported.returncode, 1)
@@ -113,15 +113,15 @@ class EvaluationTests(unittest.TestCase):
             manifest = evaluation.prepare(destination, candidate)
             for mode in ("path", "direct"):
                 repo = destination / mode / "repo"
-                prompt = (destination / mode / "prompt.txt").read_text()
+                prompt = (destination / mode / "prompt.txt").read_text(encoding="utf-8")
                 self.assertIn("Per-task output tokens above 4000 are a warning, not a\n"
                               "hard task limit.", prompt)
                 self.assertIn("Keep the session output-token limit at 30000", prompt)
                 self.assertNotIn("Per-task token budget 4000", prompt)
-                self.assertEqual((repo / "count.py").read_text(), FIXTURE_SCRIPT)
+                self.assertEqual((repo / "count.py").read_text(encoding="utf-8"), FIXTURE_SCRIPT)
                 evaluation.command(["git", "merge-base", "--is-ancestor", manifest["fixture"], "HEAD"], repo)
             self.assertTrue((destination / "path/repo/.agents/skills/gsd-path/SKILL.md").is_file())
-            installation = json.loads((destination / "path/install.json").read_text())
+            installation = json.loads((destination / "path/install.json").read_text(encoding="utf-8"))
             self.assertEqual(installation["exit_code"], 0)
             self.assertIn("installed", installation["output"])
             self.assertEqual(installation["candidate"], manifest["candidate"])

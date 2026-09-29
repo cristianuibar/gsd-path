@@ -38,17 +38,17 @@ class MemberTaskBriefTests(unittest.TestCase):
         self.coordinator = root / "acme"
         (self.coordinator / ".project" / "tasks").mkdir(parents=True)
         git(root, "init", "-q", "-b", "main", str(self.coordinator))
-        (self.coordinator / ".project" / "STATE.md").write_text(
-            STATE.format(phase="plan", branch="gsd-path/M001"), encoding="utf-8")
+        (self.coordinator / ".project" / "STATE.md").write_bytes(
+            STATE.format(phase="plan", branch="gsd-path/M001").encode("utf-8"))
         (self.coordinator / "lib").mkdir()
-        (self.coordinator / "lib" / "server.py").write_text("coordinator only\n", encoding="utf-8")
+        (self.coordinator / "lib" / "server.py").write_bytes("coordinator only\n".encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "init")
         self.member = root / "web"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
         (self.member / "src").mkdir()
-        (self.member / "src" / "app.py").write_text("member only\n", encoding="utf-8")
+        (self.member / "src" / "app.py").write_bytes("member only\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
@@ -63,7 +63,7 @@ class MemberTaskBriefTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def write(self, task_id: str, text: str) -> None:
-        (self.coordinator / ".project" / "tasks" / f"{task_id}-task.md").write_text(text, encoding="utf-8")
+        (self.coordinator / ".project" / "tasks" / f"{task_id}-task.md").write_bytes(text.encode("utf-8"))
 
     def problems(self) -> str:
         try:
@@ -111,8 +111,8 @@ class MemberTaskBriefTests(unittest.TestCase):
         git(self.member, "commit", "-q", "-m", "drop app")
         git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
         (self.coordinator / ".project" / "plan").mkdir()
-        (self.coordinator / ".project" / "plan" / "PLAN.md").write_text(
-            PLAN_WAVE.format(title="demo"), encoding="utf-8")
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="demo").encode("utf-8"))
         task = member_task("T001", "src/new.py", "Follow `src/app.py`.",
                            verify="test -f src/app.py")
         task = task.replace("status: pending", "status: done").replace(
@@ -226,13 +226,13 @@ class MemberTaskBuildTests(unittest.TestCase):
             run_git(repo, "switch", "-q", "-c", BRANCH)
             (repo / ".project" / "plan").mkdir(parents=True)
             (repo / ".project" / "tasks").mkdir()
-            (repo / ".project" / "STATE.md").write_text(
-                STATE.format(phase="build", branch=BRANCH), encoding="utf-8")
-            (repo / ".project" / "plan" / "PLAN.md").write_text(
-                plan_text(((("T001", "Member", (), ("app.py",)),),)), encoding="utf-8")
+            (repo / ".project" / "STATE.md").write_bytes(
+                STATE.format(phase="build", branch=BRANCH).encode("utf-8"))
+            (repo / ".project" / "plan" / "PLAN.md").write_bytes(
+                plan_text(((("T001", "Member", (), ("app.py",)),),)).encode("utf-8"))
             text = task_text("T001", "Member", 1, (), ("app.py",))
-            (repo / ".project" / "tasks" / "T001-task.md").write_text(
-                text.replace("files:", "repo: web\nfiles:", 1), encoding="utf-8")
+            (repo / ".project" / "tasks" / "T001-task.md").write_bytes(
+                text.replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
             run_git(repo, "add", "-A")
             run_git(repo, "commit", "-q", "-m", "plan")
             with self.assertRaisesRegex(build_state.BuildStateError, "member task"):

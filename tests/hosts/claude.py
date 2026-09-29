@@ -45,7 +45,7 @@ def bind_child(run_root, child_id):
     """
     attempts = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError):

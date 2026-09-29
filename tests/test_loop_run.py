@@ -34,7 +34,7 @@ Green.
 
 def write_spec(root: Path, body: str = BASE_SPEC) -> Path:
     spec = root / "LOOP.md"
-    spec.write_text(body, encoding="utf-8")
+    spec.write_bytes(body.encode("utf-8"))
     return spec
 
 
@@ -430,7 +430,7 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual("already finished", json.loads(repeated.stdout)["reason"])
 
             log = root / ".project" / "loop" / "demo.LOG.jsonl"
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
             self.assertEqual(
                 ["claim", "verify", "finish"],
                 [record["event"] for record in records],
@@ -452,7 +452,7 @@ class LoopRunTests(unittest.TestCase):
             record["timestamp"] = (
                 datetime.now(timezone.utc) - timedelta(seconds=2)
             ).isoformat()
-            log.write_text(json.dumps(record) + "\n", encoding="utf-8")
+            log.write_bytes((json.dumps(record) + "\n").encode("utf-8"))
 
             recovery = json.loads(self.command(spec, "claim").stdout)
 
@@ -469,13 +469,12 @@ class LoopRunTests(unittest.TestCase):
             self.assertEqual(1, self.command(spec, "verify", "--claim", claim).returncode)
             self.assertEqual(1, self.command(spec, "verify", "--claim", claim).returncode)
             log = root / ".project/loop/demo.LOG.jsonl"
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
             records[0]["timestamp"] = (
                 datetime.now(timezone.utc) - timedelta(seconds=1801)
             ).isoformat()
-            log.write_text(
-                "".join(json.dumps(record) + "\n" for record in records),
-                encoding="utf-8",
+            log.write_bytes(
+                "".join(json.dumps(record) + "\n" for record in records).encode("utf-8"),
             )
 
             recovered = self.command(spec, "recover", "--claim", claim)
@@ -486,7 +485,7 @@ class LoopRunTests(unittest.TestCase):
             repeated = self.command(spec, "recover", "--claim", claim)
             self.assertEqual(0, repeated.returncode, repeated.stderr)
             self.assertEqual("already recovered", json.loads(repeated.stdout)["reason"])
-            finish = json.loads(log.read_text().splitlines()[-1])
+            finish = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
             self.assertEqual("fail", finish["result"])
             self.assertEqual(1, finish["iterations"])
 
@@ -498,19 +497,18 @@ class LoopRunTests(unittest.TestCase):
             verified = self.command(spec, "verify", "--claim", claim)
             self.assertEqual(0, verified.returncode, verified.stderr)
             log = root / ".project/loop/demo.LOG.jsonl"
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
             records[0]["timestamp"] = (
                 datetime.now(timezone.utc) - timedelta(seconds=1801)
             ).isoformat()
-            log.write_text(
-                "".join(json.dumps(record) + "\n" for record in records),
-                encoding="utf-8",
+            log.write_bytes(
+                "".join(json.dumps(record) + "\n" for record in records).encode("utf-8"),
             )
 
             recovered = self.command(spec, "recover", "--claim", claim)
 
             self.assertEqual(0, recovered.returncode, recovered.stderr)
-            finish = json.loads(log.read_text().splitlines()[-1])
+            finish = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
             self.assertEqual("pass", finish["result"])
             self.assertEqual(0, finish["iterations"])
 
@@ -528,7 +526,7 @@ class LoopRunTests(unittest.TestCase):
                 spec = write_spec(root)
                 claim = self.claim(spec)
                 log = root / ".project/loop/demo.LOG.jsonl"
-                claim_record = json.loads(log.read_text())
+                claim_record = json.loads(log.read_text(encoding="utf-8"))
                 finish = {
                     "event": "finish",
                     "claim": claim,
@@ -632,13 +630,12 @@ class LoopRunTests(unittest.TestCase):
             claim = claimed["claim"]
 
             log = root / ".project/loop/demo.LOG.jsonl"
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
             records[-1]["timestamp"] = (
                 datetime.now(timezone.utc) - timedelta(seconds=121)
             ).isoformat()
-            log.write_text(
-                "".join(json.dumps(record) + "\n" for record in records),
-                encoding="utf-8",
+            log.write_bytes(
+                "".join(json.dumps(record) + "\n" for record in records).encode("utf-8"),
             )
 
             too_late = self.command(
@@ -659,7 +656,7 @@ class LoopRunTests(unittest.TestCase):
                 "--result", "blocked",
             )
             self.assertEqual(0, finished.returncode, finished.stderr)
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
             self.assertGreaterEqual(records[-1]["wall_clock_used"], 121)
             gated = json.loads(self.command(spec, "check").stdout)
             self.assertEqual("period budget exhausted", gated["reason"])

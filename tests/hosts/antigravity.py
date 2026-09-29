@@ -32,7 +32,7 @@ DONE_STATES = {"done", "idle", "completed"}
 
 def command(prompt_path, resume=None):
     """``agy -p <prompt> --output-format stream-json``; the prompt text rides in argv."""
-    args = ["agy", "-p", Path(prompt_path).read_text(), "--output-format", "stream-json", "--dangerously-skip-permissions"]
+    args = ["agy", "-p", Path(prompt_path).read_text(encoding="utf-8"), "--output-format", "stream-json", "--dangerously-skip-permissions"]
     if resume:
         args += ["--conversation", resume]
     return args
@@ -84,7 +84,7 @@ def _transcript_done(log_uri):
     path = Path(uri[len("file://"):] if uri.startswith("file://") else uri)
     if not path.is_file():
         return None
-    steps = list(_events(path.read_text().splitlines()))
+    steps = list(_events(path.read_text(encoding="utf-8").splitlines()))
     last = steps[-1] if steps else {}
     if last.get("source") != "MODEL" or last.get("type") != "PLANNER_RESPONSE" or last.get("status") != "DONE":
         return None
@@ -101,7 +101,7 @@ def bind_child(run_root, child_id):
     """
     spawns, listings = {}, {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):

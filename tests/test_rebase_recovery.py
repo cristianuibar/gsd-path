@@ -50,23 +50,23 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.path = ".project/tasks/T001-change.md"
         task = self.repo / self.path
         task.parent.mkdir(parents=True)
-        task.write_text(task_text("T001", "Change value", "value.txt"))
-        (self.repo / "value.txt").write_text("one\n")
+        task.write_bytes(task_text("T001", "Change value", "value.txt").encode("utf-8"))
+        (self.repo / "value.txt").write_bytes("one\n".encode("utf-8"))
         plan = self.repo / ".project/plan/PLAN.md"
         plan.parent.mkdir()
-        plan.write_text("# Plan\n\n## Wave 1 — change\n\nReview depth: full\n")
+        plan.write_bytes("# Plan\n\n## Wave 1 — change\n\nReview depth: full\n".encode("utf-8"))
         self.commit("plan")
         self.base = git(self.repo, "rev-parse", "HEAD")
         done = task_text("T001", "Change value", "value.txt", "done").replace(
             "agent: null", "agent: worker").replace("base: null", "base: " + self.base)
-        task.write_text(done + "- Verify passed.\n")
-        (self.repo / "value.txt").write_text("two\n")
+        task.write_bytes((done + "- Verify passed.\n").encode("utf-8"))
+        (self.repo / "value.txt").write_bytes("two\n".encode("utf-8"))
         body = isolation.task_commit_body(self.path, [self.path, "value.txt"], self.base)
         self.commit("T001: Change value", body)
         self.original = git(self.repo, "rev-parse", "HEAD")
         git(self.repo, "branch", "keep/original")
         git(self.repo, "checkout", "-B", BOUND, self.base)
-        (self.repo / "unrelated.txt").write_text("upstream\n")
+        (self.repo / "unrelated.txt").write_bytes("upstream\n".encode("utf-8"))
         self.commit("upstream")
         # Rebase the plan as well so the original Base is absent from ancestry.
         git(self.repo, "checkout", "--orphan", "rebased")
@@ -111,13 +111,13 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def test_receipt_matches_library_output(self) -> None:
         self.adopt()
-        receipt = (self.repo / RECEIPT).read_text()
+        receipt = (self.repo / RECEIPT).read_text(encoding="utf-8")
         expected = isolation.adopt_rebase(self.repo, self.original, self.head, RULING)
         self.assertEqual(receipt, json.dumps(expected, indent=2) + "\n")
         self.assertEqual(expected["schema"], "gsd-path/rebase-adoption/v1")
 
     def test_changed_rebased_product_rejected(self) -> None:
-        (self.repo / "value.txt").write_text("wrong\n")
+        (self.repo / "value.txt").write_bytes("wrong\n".encode("utf-8"))
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "--amend", "--no-edit")
         self.head = git(self.repo, "rev-parse", "HEAD")
@@ -125,7 +125,7 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def test_changed_task_contract_rejected(self) -> None:
         task = self.repo / self.path
-        task.write_text(task.read_text().replace("Value is two.", "Anything passes."))
+        task.write_bytes(task.read_text(encoding="utf-8").replace("Value is two.", "Anything passes.").encode("utf-8"))
         self.commit("change contract")
         self.adopt(False)
 
@@ -142,9 +142,9 @@ class RebaseRecoveryTests(unittest.TestCase):
     def test_tampered_receipt_rejected(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
-        receipt = json.loads(path.read_text())
+        receipt = json.loads(path.read_text(encoding="utf-8"))
         receipt["tasks"][0]["original_landing"] = self.base
-        path.write_text(json.dumps(receipt))
+        path.write_bytes(json.dumps(receipt).encode("utf-8"))
         with self.assertRaises(isolation.IsolationError):
             self.verify()
 
@@ -183,39 +183,39 @@ class RebaseRecoveryTests(unittest.TestCase):
     def test_changed_current_task_rejected(self) -> None:
         self.adopt()
         task = self.repo / self.path
-        task.write_text(task.read_text() + "- fabricated verification\n")
+        task.write_bytes((task.read_text(encoding="utf-8") + "- fabricated verification\n").encode("utf-8"))
         with self.assertRaises(isolation.IsolationError):
             self.verify()
 
     def test_missing_task_receipt_rejected(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
-        receipt = json.loads(path.read_text())
+        receipt = json.loads(path.read_text(encoding="utf-8"))
         receipt["tasks"] = []
-        path.write_text(json.dumps(receipt))
+        path.write_bytes(json.dumps(receipt).encode("utf-8"))
         with self.assertRaises(isolation.IsolationError):
             self.verify()
 
     def test_owner_adoption_preserves_both_log_versions(self) -> None:
         task = self.repo / self.path
-        task.write_text(task.read_text().replace(
-            "Verify passed.", "Verify passed; corrected approval reference."))
+        task.write_bytes(task.read_text(encoding="utf-8").replace(
+            "Verify passed.", "Verify passed; corrected approval reference.").encode("utf-8"))
         self.commit("correct approval reference")
         self.adopt()
         self.assertEqual(self.verify()["tasks"][0]["verdict"], "attested")
-        receipt = json.loads((self.repo / RECEIPT).read_text())
+        receipt = json.loads((self.repo / RECEIPT).read_text(encoding="utf-8"))
         self.assertIn("- Verify passed.\n", receipt["tasks"][0]["original_task"])
         self.assertIn("corrected approval reference", receipt["tasks"][0]["adopted_task"])
 
     def test_ship_inputs_accept_only_valid_adoption_receipt(self) -> None:
         self.adopt()
-        (self.repo / ".project/STATE.md").write_text(
+        (self.repo / ".project/STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
             "phase: ship\nstatus: active\nbranch: gsd-path/M001\narchive: null\n"
             "integration_default: direct\nintegration: direct\nintegration_source: default\n"
-            "---\n\n## Log\n")
+            "---\n\n## Log\n".encode("utf-8"))
         lean_verification._require_ship_inputs(self.repo, self.head)
-        (self.repo / RECEIPT).write_text("{}")
+        (self.repo / RECEIPT).write_bytes("{}".encode("utf-8"))
         with self.assertRaises((isolation.IsolationError, build_state.BuildStateError)):
             lean_verification._require_ship_inputs(self.repo, self.head)
 
@@ -233,26 +233,26 @@ class RebaseRecoveryTests(unittest.TestCase):
     def test_recover_blocks_tampered_receipt_without_raising(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
-        receipt = json.loads(path.read_text())
+        receipt = json.loads(path.read_text(encoding="utf-8"))
         receipt["tasks"][0]["original_base"] = self.head
-        path.write_text(json.dumps(receipt))
+        path.write_bytes(json.dumps(receipt).encode("utf-8"))
         task = self.recover_task()
         self.assertEqual(task["verdict"], "block")
         self.assertTrue(task["reason"].startswith("rebase adoption receipt is invalid: "), task)
-        path.write_text("not json")
+        path.write_bytes("not json".encode("utf-8"))
         self.assertTrue(self.recover_task()["reason"].startswith("rebase adoption receipt is invalid: "))
 
     def test_landing_commit_after_adoption_keeps_attested(self) -> None:
         self.adopt()
         second = ".project/tasks/T002-second.md"
         pending = task_text("T002", "Second value", "value2.txt")
-        (self.repo / second).write_text(pending)
+        (self.repo / second).write_bytes(pending.encode("utf-8"))
         self.commit("plan second task")
         base = self.head
         done = pending.replace("status: pending", "status: done").replace(
             "base: null", "base: " + base).replace("agent: null", "agent: worker")
-        (self.repo / second).write_text(done + "- Verify passed.\n")
-        (self.repo / "value2.txt").write_text("two\n")
+        (self.repo / second).write_bytes((done + "- Verify passed.\n").encode("utf-8"))
+        (self.repo / "value2.txt").write_bytes("two\n".encode("utf-8"))
         body = isolation.task_commit_body(second, [second, "value2.txt"], base)
         self.commit("T002: Second value", body)
         self.assertEqual(isolation._prove_task_commit(
@@ -275,7 +275,7 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def assert_forged_product_commit_blocks(self, subject: str, body: str = "") -> None:
         self.adopt()
-        (self.repo / "backdoor.txt").write_text("unreviewed\n")
+        (self.repo / "backdoor.txt").write_bytes("unreviewed\n".encode("utf-8"))
         # Keep the receipt dirty to exercise the ship input adoption gate.
         self.commit(subject, body, "backdoor.txt")
         reason = "product changed outside a proven landing after the adopted revision"
@@ -284,11 +284,11 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.assertEqual(task["reason"], "rebase adoption receipt is invalid: " + reason)
         with self.assertRaises(isolation.IsolationError):
             self.verify()
-        (self.repo / ".project/STATE.md").write_text(
+        (self.repo / ".project/STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
             "phase: ship\nstatus: active\nbranch: gsd-path/M001\narchive: null\n"
             "integration_default: direct\nintegration: direct\nintegration_source: default\n"
-            "---\n\n## Log\n")
+            "---\n\n## Log\n".encode("utf-8"))
         with self.assertRaises((isolation.IsolationError, build_state.BuildStateError)):
             lean_verification._require_ship_inputs(self.repo, self.head)
 
@@ -301,9 +301,9 @@ class RebaseRecoveryTests(unittest.TestCase):
     def test_malformed_ruling_blocks_without_traceback(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
-        receipt = json.loads(path.read_text())
+        receipt = json.loads(path.read_text(encoding="utf-8"))
         receipt["ruling"] = []
-        path.write_text(json.dumps(receipt))
+        path.write_bytes(json.dumps(receipt).encode("utf-8"))
         self.assertEqual(self.recover_task()["verdict"], "block")
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo),
@@ -313,7 +313,7 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def test_bare_product_commit_after_adoption_blocks(self) -> None:
         self.adopt()
-        (self.repo / "value.txt").write_text("three\n")
+        (self.repo / "value.txt").write_bytes("three\n".encode("utf-8"))
         self.commit("product changed")
         task = self.recover_task()
         self.assertEqual(task["verdict"], "block")
@@ -323,13 +323,13 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def test_adopt_skips_pending_and_refuses_in_progress(self) -> None:
         second = self.repo / ".project/tasks/T002-second.md"
-        second.write_text(task_text("T002", "Second value", "value2.txt"))
+        second.write_bytes(task_text("T002", "Second value", "value2.txt").encode("utf-8"))
         self.commit("add pending task")
         self.adopt()
-        receipt = json.loads((self.repo / RECEIPT).read_text())
+        receipt = json.loads((self.repo / RECEIPT).read_text(encoding="utf-8"))
         self.assertEqual([row["path"] for row in receipt["tasks"]], [self.path])
         (self.repo / RECEIPT).unlink()
-        second.write_text(task_text("T002", "Second value", "value2.txt", "in-progress"))
+        second.write_bytes(task_text("T002", "Second value", "value2.txt", "in-progress").encode("utf-8"))
         self.commit("start second task")
         result = self.adopt(False)
         self.assertIn("rebasing a in-progress task is unsupported", result.stderr)
@@ -355,11 +355,11 @@ class RebaseRecoveryTests(unittest.TestCase):
         destination.mkdir(parents=True)
         for folder in ("tasks", "plan", "build"):
             shutil.move(str(self.repo / ".project" / folder), str(destination / folder))
-        (self.repo / ".project/STATE.md").write_text(
-            "---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
+        (self.repo / ".project/STATE.md").write_bytes(
+            ("---\npipeline: gsd-path/v2\nproject: fixture\nmilestone: adoption\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M001\narchive: " + ARCHIVE + "\n"
             "integration_default: direct\nintegration: direct\nintegration_source: default\n"
-            "---\n\n## Log\n")
+            "---\n\n## Log\n").encode("utf-8"))
         self.adopted = self.head
         self.commit(pipeline_git.ship_subject("001-adoption"),
                     pipeline_git.ship_commit_body(ARCHIVE, self.adopted))
@@ -395,7 +395,7 @@ class RebaseRecoveryTests(unittest.TestCase):
 
     def test_publish_rejects_product_in_ship_commit(self) -> None:
         self.prepare_local_publication()
-        (self.repo / "value.txt").write_text("unreviewed\n")
+        (self.repo / "value.txt").write_bytes("unreviewed\n".encode("utf-8"))
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "--amend", "--no-edit")
         self.ship = git(self.repo, "rev-parse", "HEAD")
@@ -409,8 +409,8 @@ class RebaseRecoveryTests(unittest.TestCase):
         git(self.repo, "config", "core.hooksPath", str(hooks))
         hook = hooks / "pre-push"
         # Move the remote after inspection but before the ref update.
-        hook.write_text("#!/bin/sh\ngit --git-dir=" + shlex.quote(self.remote)
-                        + " update-ref " + BOUND_REF + " " + self.mapped_base + "\n")
+        hook.write_bytes(("#!/bin/sh\ngit --git-dir=" + shlex.quote(self.remote)
+                        + " update-ref " + BOUND_REF + " " + self.mapped_base + "\n").encode("utf-8"))
         hook.chmod(0o755)
         with self.assertRaises(integration.ArchiveError):
             integration.publish_bound_branch(self.repo, BOUND, self.ship)

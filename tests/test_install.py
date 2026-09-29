@@ -26,15 +26,15 @@ class InstallerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         isolated_home = self.root / "home"
         isolated_home.mkdir()
-        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home)})
+        home_patch = mock.patch.dict(os.environ, {"HOME": str(isolated_home), "USERPROFILE": str(isolated_home)})
         home_patch.start()
         self.addCleanup(home_patch.stop)
         self.source = self.root / "source"
         (self.source / "skills").mkdir(parents=True)
         shutil.copy2(PROJECT_ROOT / "AGENTS.md", self.source / "AGENTS.md")
         shutil.copy2(PROJECT_ROOT / "WORKFLOW.md", self.source / "WORKFLOW.md")
-        (self.source / "package.json").write_text(
-            '{"version": "9.9.9"}\n', encoding="utf-8"
+        (self.source / "package.json").write_bytes(
+            '{"version": "9.9.9"}\n'.encode("utf-8")
         )
         for name in install.SKILL_NAMES:
             skill = self.source / "skills" / name
@@ -50,21 +50,19 @@ class InstallerTests(unittest.TestCase):
                     + ("Run $gsd-path status.\n" if name == "gsd-path" else "")
                 )
             )
-            (skill / "SKILL.md").write_text(
-                f"---\nname: {name}\ndescription: test\n---\n{body}",
-                encoding="utf-8",
+            (skill / "SKILL.md").write_bytes(
+                f"---\nname: {name}\ndescription: test\n---\n{body}".encode("utf-8"),
             )
             if canonical:
-                (skill / "CANONICAL.md").write_text(
-                    f"---\nname: {canonical}\ndescription: test\n---\nUse ${canonical}.\n",
-                    encoding="utf-8",
+                (skill / "CANONICAL.md").write_bytes(
+                    f"---\nname: {canonical}\ndescription: test\n---\nUse ${canonical}.\n".encode("utf-8"),
                 )
-            (skill / "guide.md").write_text("Use $gsd-path.\n", encoding="utf-8")
-            (skill / "agents" / "openai.yaml").write_text(
-                'default_prompt: "Use $gsd-path."\n', encoding="utf-8"
+            (skill / "guide.md").write_bytes("Use $gsd-path.\n".encode("utf-8"))
+            (skill / "agents" / "openai.yaml").write_bytes(
+                'default_prompt: "Use $gsd-path."\n'.encode("utf-8")
             )
-            (skill / "references" / "dispatch.md").write_text(
-                "old dispatch\n", encoding="utf-8"
+            (skill / "references" / "dispatch.md").write_bytes(
+                "old dispatch\n".encode("utf-8")
             )
             if name == "gsd-path" or name in install.ROUTER_ALIASES:
                 (skill / "scripts").mkdir()
@@ -75,7 +73,7 @@ class InstallerTests(unittest.TestCase):
         for target in install.TARGETS:
             adapter = self.source / "platforms" / target / "dispatch.md"
             adapter.parent.mkdir(parents=True)
-            adapter.write_text(f"{target} dispatch for $gsd-path\n", encoding="utf-8")
+            adapter.write_bytes(f"{target} dispatch for $gsd-path\n".encode("utf-8"))
         shared_adapter = (
             self.source
             / "platforms"
@@ -83,22 +81,21 @@ class InstallerTests(unittest.TestCase):
             / "dispatch.md"
         )
         shared_adapter.parent.mkdir(parents=True)
-        shared_adapter.write_text(
-            "shared dispatch for $gsd-path with invoke_subagent\n", encoding="utf-8"
+        shared_adapter.write_bytes(
+            "shared dispatch for $gsd-path with invoke_subagent\n".encode("utf-8")
         )
-        (self.source / "platforms" / "cursor" / "agent.md").write_text(
-            "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n",
-            encoding="utf-8",
+        (self.source / "platforms" / "cursor" / "agent.md").write_bytes(
+            "---\nname: gsd-path\ndescription: test\nmodel: inherit\n---\ncursor agent\n".encode("utf-8"),
         )
         scripts = self.source / "scripts"
         scripts.mkdir(exist_ok=True)
         for name in install.GUARD_SCRIPTS:
-            (scripts / name).write_text(
-                f"# {name}\n{install.GUARD_MARKER}\n", encoding="utf-8"
+            (scripts / name).write_bytes(
+                f"# {name}\n{install.GUARD_MARKER}\n".encode("utf-8")
             )
         for name in install.PROJECT_RUNTIME_SCRIPTS:
-            (scripts / name).write_text(
-                f"# {name}\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+            (scripts / name).write_bytes(
+                f"# {name}\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
             )
         shutil.copy2(
             PROJECT_ROOT / "scripts" / install.PROJECT_STATUS_LAUNCHER,
@@ -116,7 +113,7 @@ class InstallerTests(unittest.TestCase):
     def runtime_root(self, project):
         pin = project / install.HOOKS_DIRECTORY / "runtime.json"
         if pin.exists():
-            return install.status_runtime.runtime_home() / json.loads(pin.read_text())["digest"]
+            return install.status_runtime.runtime_home() / json.loads(pin.read_text(encoding="utf-8"))["digest"]
         return project / install.HOOKS_DIRECTORY / "runtime"
 
     def test_project_runtime_version_install_update_refresh(self):
@@ -124,19 +121,19 @@ class InstallerTests(unittest.TestCase):
         plans = [install.TargetPlan("claude", self.root / "version-skills")]
         install.install(self.source, plans, project)
         stamp = project / ".gsd-path/runtime.json"
-        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
-        (self.source / "package.json").write_text('{"version":"10.0.0"}')
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
+        (self.source / "package.json").write_bytes('{"version":"10.0.0"}'.encode("utf-8"))
         install.install(self.source, plans, project, update=True, dry_run=True)
-        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
         install.install(self.source, plans, project, update=True)
-        self.assertEqual(json.loads(stamp.read_text())["version"], "9.9.9")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "9.9.9")
         install.runtime_store.operate(self.source, project, "upgrade")
-        self.assertEqual(json.loads(stamp.read_text())["version"], "10.0.0")
-        (self.source / "package.json").write_text('{"version":"10.1.0"}')
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.0.0")
+        (self.source / "package.json").write_bytes('{"version":"10.1.0"}'.encode("utf-8"))
         install.refresh_hooks(self.source, project, full=False)
-        self.assertEqual(json.loads(stamp.read_text())["version"], "10.0.0")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.0.0")
         install.runtime_store.operate(self.source, project, "upgrade")
-        self.assertEqual(json.loads(stamp.read_text())["version"], "10.1.0")
+        self.assertEqual(json.loads(stamp.read_text(encoding="utf-8"))["version"], "10.1.0")
 
     def tearDown(self):
         self.git_hooks_patch.stop()
@@ -169,7 +166,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(Path("/tmp/g/skills"), grok)
         self.assertEqual(Path("/tmp/x/opencode/skills"), xdg)
         config = self.root / "opencode.json"
-        config.write_text("{}", encoding="utf-8")
+        config.write_bytes("{}".encode("utf-8"))
         self.assertEqual(
             self.root / "skills",
             install.default_root("opencode", {"OPENCODE_CONFIG": str(config)}),
@@ -267,7 +264,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "runtime-project"
         runtime = self.runtime_root(project)
         runtime.mkdir(parents=True)
-        manifest = json.loads((PROJECT_ROOT / "scripts/skill-resources.json").read_text())
+        manifest = json.loads((PROJECT_ROOT / "scripts/skill-resources.json").read_text(encoding="utf-8"))
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             if f"scripts/{name}" in manifest["package_files"]:
                 shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
@@ -279,7 +276,7 @@ class InstallerTests(unittest.TestCase):
         )
         state = project / ".project" / "STATE.md"
         state.parent.mkdir()
-        state.write_text(
+        state.write_bytes(
             "---\n"
             "pipeline: gsd-path/v2\n"
             "project: demo\n"
@@ -291,12 +288,11 @@ class InstallerTests(unittest.TestCase):
             "---\n\n"
             "# Project State\n\n"
             "## Log\n\n"
-            "- 2026-08-29 — ship — fixture\n",
-            encoding="utf-8",
+            "- 2026-08-29 — ship — fixture\n".encode("utf-8"),
         )
         findings = project / ".project" / "review" / "PATCH-FINDINGS.md"
         findings.parent.mkdir()
-        findings.write_text("invalid\n", encoding="utf-8")
+        findings.write_bytes("invalid\n".encode("utf-8"))
 
         result = subprocess.run(
             [
@@ -366,9 +362,8 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue(installed.is_file())
 
             source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
-            source_skill.write_text(
-                "---\nname: gsd-path\ndescription: updated\n---\nupdated\n",
-                encoding="utf-8",
+            source_skill.write_bytes(
+                "---\nname: gsd-path\ndescription: updated\n---\nupdated\n".encode("utf-8"),
             )
             status, output, error = self.run_main(
                 ["--update", "--local", "--source-root", str(self.source)]
@@ -408,9 +403,8 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("codex+antigravity+zed: installed", output)
 
             source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
-            source_skill.write_text(
-                "---\nname: gsd-path\ndescription: shared update\n---\nupdated\n",
-                encoding="utf-8",
+            source_skill.write_bytes(
+                "---\nname: gsd-path\ndescription: shared update\n---\nupdated\n".encode("utf-8"),
             )
             status, output, error = self.run_main(
                 ["--update", "--local", "--source-root", str(self.source)]
@@ -464,8 +458,8 @@ class InstallerTests(unittest.TestCase):
         foreign = target / "path"
         (foreign / "scripts").mkdir(parents=True)
         (foreign / "scripts" / "pipeline_state.py").touch()
-        (foreign / "SKILL.md").write_text(
-            "---\nname: path\n---\nforeign\n", encoding="utf-8"
+        (foreign / "SKILL.md").write_bytes(
+            "---\nname: path\n---\nforeign\n".encode("utf-8")
         )
         with self.assertRaises(install.InstallerError) as raised:
             install.install(self.source, [install.TargetPlan("grok", target)])
@@ -482,7 +476,7 @@ class InstallerTests(unittest.TestCase):
         (foreign / "scripts" / "pipeline_state.py").touch()
         for version in ("", "release", "1..0", "1.0.beta", "1.0\nforeign"):
             with self.subTest(version=version):
-                (foreign / "VERSION").write_text(version, encoding="utf-8")
+                (foreign / "VERSION").write_bytes(version.encode("utf-8"))
                 with self.assertRaisesRegex(install.InstallerError, "unrelated skill"):
                     install.install(self.source, [install.TargetPlan("grok", target)])
                 self.assertEqual(version, (foreign / "VERSION").read_text(encoding="utf-8"))
@@ -491,8 +485,8 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "pre-stamp-path" / "skills"
         scripts = target / "path" / "scripts"
         scripts.mkdir(parents=True)
-        (scripts / "pipeline_state.py").write_text(
-            f"#!/usr/bin/env python3\n# {install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (scripts / "pipeline_state.py").write_bytes(
+            f"#!/usr/bin/env python3\n# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
         install.install(self.source, [install.TargetPlan("grok", target)])
         skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
@@ -502,8 +496,8 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "owned-path" / "skills"
         owned = target / "path" / "scripts"
         owned.mkdir(parents=True)
-        (owned / "pipeline_state.py").write_text("# previous alias\n", encoding="utf-8")
-        (owned.parent / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+        (owned / "pipeline_state.py").write_bytes("# previous alias\n".encode("utf-8"))
+        (owned.parent / "VERSION").write_bytes("1.0.0\n".encode("utf-8"))
         results = install.install(self.source, [install.TargetPlan("grok", target)])
         self.assertTrue(any("backed up" in line for line in results))
         skill = (target / "path" / "SKILL.md").read_text(encoding="utf-8")
@@ -662,7 +656,7 @@ class InstallerTests(unittest.TestCase):
         install.stage_target(self.source, "claude", staged)
         self.assertFalse((staged / "gsd-path" / "VERSION").exists())
 
-        (self.source / "package.json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+        (self.source / "package.json").write_bytes('{"version": "9.9.9"}'.encode("utf-8"))
         staged = self.root / "staged-version"
         staged.mkdir()
         install.stage_target(self.source, "claude", staged)
@@ -825,7 +819,7 @@ class InstallerTests(unittest.TestCase):
         root = self.root / "cursor-install" / "skills"
         agent = root.parent / "agents" / install.CURSOR_AGENT_FILENAME
         agent.parent.mkdir(parents=True)
-        agent.write_text("old agent\n", encoding="utf-8")
+        agent.write_bytes("old agent\n".encode("utf-8"))
 
         status, output, error = self.run_main(
             [
@@ -857,10 +851,10 @@ class InstallerTests(unittest.TestCase):
         target.mkdir(parents=True)
         for name in ("ogsd", "ogsd-old", "gsd-path", "gsd-path-old"):
             (target / name).mkdir()
-            (target / name / "old.txt").write_text(name, encoding="utf-8")
+            (target / name / "old.txt").write_bytes(name.encode("utf-8"))
         outside = self.root / "outside"
         outside.mkdir()
-        (outside / "marker").write_text("preserve", encoding="utf-8")
+        (outside / "marker").write_bytes("preserve".encode("utf-8"))
         (target / "ogsd-link").symlink_to(outside, target_is_directory=True)
         unrelated = target / "other-skill"
         unrelated.mkdir()
@@ -883,7 +877,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "case-entry" / "skills"
         old = target / "GSD-PATH"
         old.mkdir(parents=True)
-        (old / "marker").write_text("old", encoding="utf-8")
+        (old / "marker").write_bytes("old".encode("utf-8"))
 
         status, _, error = self.run_main(
             [
@@ -997,7 +991,7 @@ class InstallerTests(unittest.TestCase):
     def test_project_collision_fails_before_install_mutation(self):
         project = self.root / "my project"
         project.mkdir()
-        (project / "WORKFLOW.md").write_text("existing", encoding="utf-8")
+        (project / "WORKFLOW.md").write_bytes("existing".encode("utf-8"))
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(
             [
@@ -1042,9 +1036,9 @@ class InstallerTests(unittest.TestCase):
     def test_project_collision_with_occupied_backup_has_no_move_command(self):
         project = self.root / "project"
         project.mkdir()
-        (project / "WORKFLOW.md").write_text("existing", encoding="utf-8")
+        (project / "WORKFLOW.md").write_bytes("existing".encode("utf-8"))
         aside = project / "WORKFLOW.pre-path.md"
-        aside.write_text("earlier backup", encoding="utf-8")
+        aside.write_bytes("earlier backup".encode("utf-8"))
         status, _, error = self.run_main(
             [
                 "--claude",
@@ -1087,7 +1081,7 @@ class InstallerTests(unittest.TestCase):
 
         # Update replaces only the block; text on both sides stays byte-for-byte.
         (project / "AGENTS.md").write_bytes(("above\n" + merged).encode("utf-8"))
-        (self.source / "AGENTS.md").write_text("# New contract\n", encoding="utf-8")
+        (self.source / "AGENTS.md").write_bytes("# New contract\n".encode("utf-8"))
         self.install_agents(project, update=True)
         self.assertEqual(
             "above\n" + install._agents_block("# New contract\n") + "\n" + owner,
@@ -1106,7 +1100,7 @@ class InstallerTests(unittest.TestCase):
         ):
             project = self.root / f"markers-{index}"
             project.mkdir()
-            (project / "AGENTS.md").write_text(text, encoding="utf-8")
+            (project / "AGENTS.md").write_bytes(text.encode("utf-8"))
             with self.assertRaisesRegex(install.InstallerError, "exactly one"):
                 self.install_agents(project)
             self.assertEqual(text, (project / "AGENTS.md").read_text(encoding="utf-8"))
@@ -1120,7 +1114,7 @@ class InstallerTests(unittest.TestCase):
         owner_after = b"after\r\nowner\n"
         block = install._agents_block("# Old contract\n").replace("\n", "\r\n")
         agents.write_bytes(owner_before + block.encode("utf-8") + owner_after)
-        (self.source / "AGENTS.md").write_text("# New contract\n", encoding="utf-8")
+        (self.source / "AGENTS.md").write_bytes("# New contract\n".encode("utf-8"))
 
         self.install_agents(project, update=True)
 
@@ -1134,7 +1128,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "large-agents"
         project.mkdir()
         owner = "x" * install.CODEX_DOC_LIMIT
-        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
         block = install._agents_block((self.source / "AGENTS.md").read_text(encoding="utf-8"))
         merged_size = len(block.encode("utf-8")) + 1 + len(owner)
 
@@ -1152,7 +1146,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "released-agents"
         project.mkdir()
         released = install.LEGACY_AGENTS_TITLE + "\n\nold rules\n"
-        (project / "AGENTS.md").write_text(released, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(released.encode("utf-8"))
         digest = hashlib.sha256(released.encode("utf-8")).hexdigest()
 
         with mock.patch.object(install, "RELEASED_AGENTS", frozenset({digest})):
@@ -1167,7 +1161,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "edited-agents"
         project.mkdir()
         edited = install.LEGACY_AGENTS_TITLE + "\n\nmy own edit\n"
-        (project / "AGENTS.md").write_text(edited, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(edited.encode("utf-8"))
 
         with self.assertRaises(install.InstallerError) as raised:
             self.install_agents(project)
@@ -1182,7 +1176,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "retitled-agents"
         project.mkdir()
         edited = "# Our rules\n\n" + install.LEGACY_AGENTS_MARKER + "\n- mine\n"
-        (project / "AGENTS.md").write_text(edited, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(edited.encode("utf-8"))
 
         with self.assertRaisesRegex(install.InstallerError, "edited whole-file"):
             self.install_agents(project)
@@ -1192,7 +1186,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "inline-legacy-marker"
         project.mkdir()
         owner = f"Old Path files used `{install.LEGACY_AGENTS_MARKER}`.\n"
-        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
 
         self.install_agents(project)
 
@@ -1202,7 +1196,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "changing-agents"
         project.mkdir()
         agents = project / "AGENTS.md"
-        agents.write_text("owner\n", encoding="utf-8")
+        agents.write_bytes("owner\n".encode("utf-8"))
         reads = iter((b"owner\n", b"owner edit\n"))
 
         with mock.patch.object(install, "_read_agents", side_effect=lambda _: next(reads)):
@@ -1220,7 +1214,7 @@ class InstallerTests(unittest.TestCase):
             f"Path writes `{install.AGENTS_BEGIN}` and\n"
             f"`{install.AGENTS_END}` around its rules.\n"
         )
-        (project / "AGENTS.md").write_text(owner, encoding="utf-8")
+        (project / "AGENTS.md").write_bytes(owner.encode("utf-8"))
 
         self.install_agents(project)
 
@@ -1243,7 +1237,7 @@ class InstallerTests(unittest.TestCase):
              "fail", "Codex reads only the first"),
         )
         for text, level, expected in cases:
-            (project / "AGENTS.md").write_text(text, encoding="utf-8")
+            (project / "AGENTS.md").write_bytes(text.encode("utf-8"))
             findings = install.doctor(self.source, [], lambda _: self.root, project)
             agents = [f for f in findings if "AGENTS.md" in f["text"]]
             self.assertEqual(1, len(agents), findings)
@@ -1253,7 +1247,7 @@ class InstallerTests(unittest.TestCase):
     def test_claude_bridge_collision_names_its_own_move(self):
         project = self.root / "project"
         (project / ".claude").mkdir(parents=True)
-        (project / ".claude" / "CLAUDE.md").write_text("mine", encoding="utf-8")
+        (project / ".claude" / "CLAUDE.md").write_bytes("mine".encode("utf-8"))
         status, _, error = self.run_main(
             [
                 "--claude",
@@ -1277,7 +1271,7 @@ class InstallerTests(unittest.TestCase):
         (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
         (
             project / install.HOOKS_DIRECTORY / install.PROJECT_STATUS_LAUNCHER
-        ).write_text("foreign", encoding="utf-8")
+        ).write_bytes("foreign".encode("utf-8"))
         status, _, error = self.run_main(
             [
                 "--claude",
@@ -1325,7 +1319,7 @@ class InstallerTests(unittest.TestCase):
 
         def create_contract_after_target(plan, staged, transaction):
             original(plan, staged, transaction)
-            (project / "WORKFLOW.md").write_text("concurrent", encoding="utf-8")
+            (project / "WORKFLOW.md").write_bytes("concurrent".encode("utf-8"))
 
         with mock.patch.object(
             install, "_apply_target", side_effect=create_contract_after_target
@@ -1513,7 +1507,7 @@ class InstallerTests(unittest.TestCase):
         codex.mkdir(parents=True)
         old = codex / "gsd-path-old"
         old.mkdir()
-        (old / "marker").write_text("old", encoding="utf-8")
+        (old / "marker").write_bytes("old".encode("utf-8"))
         claude = self.root / "claude" / "skills"
         original = install._apply_target
         calls = 0
@@ -1543,7 +1537,7 @@ class InstallerTests(unittest.TestCase):
         codex.mkdir(parents=True)
         old = codex / "gsd-path-old"
         old.mkdir()
-        (old / "marker").write_text("old", encoding="utf-8")
+        (old / "marker").write_bytes("old".encode("utf-8"))
         claude = self.root / "claude-interrupt" / "skills"
         original = install._apply_target
         calls = 0
@@ -1578,7 +1572,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "move-interrupt" / "skills"
         old = target / "gsd-path-old"
         old.mkdir(parents=True)
-        (old / "marker").write_text("old", encoding="utf-8")
+        (old / "marker").write_bytes("old".encode("utf-8"))
         original_replace = install.os.replace
         interrupted = False
 
@@ -1631,8 +1625,8 @@ class InstallerTests(unittest.TestCase):
             if path == destination and not raced:
                 raced = True
                 path.mkdir()
-                (path / "other-installer.txt").write_text(
-                    "live install\n", encoding="utf-8"
+                (path / "other-installer.txt").write_bytes(
+                    "live install\n".encode("utf-8")
                 )
             original(path)
 
@@ -1654,7 +1648,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "owned-install" / "skills"
         existing = target / "gsd-path-old"
         existing.mkdir(parents=True)
-        (existing / "marker").write_text("old\n", encoding="utf-8")
+        (existing / "marker").write_bytes("old\n".encode("utf-8"))
         (install._install_lock_path(target)).mkdir(parents=True)
 
         with self.assertRaisesRegex(install.InstallerError, "already in progress"):
@@ -1692,15 +1686,14 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "stale-owner" / "skills"
         lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
-        (lock / install.INSTALL_LOCK_OWNER).write_text(
+        (lock / install.INSTALL_LOCK_OWNER).write_bytes(
             json.dumps(
                 {
                     "schema": install.INSTALL_LOCK_SCHEMA,
                     "pid": os.getpid(),
                     "identity": "reused-pid",
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
 
         install.install(self.source, [install.TargetPlan("claude", target)])
@@ -1714,9 +1707,8 @@ class InstallerTests(unittest.TestCase):
         second_target = parent / "second-skills"
         lock = install._install_lock_path(first_target)
         lock.mkdir(parents=True)
-        (lock / install.INSTALL_LOCK_OWNER).write_text(
-            json.dumps({"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid(), "identity": "reused-pid"}),
-            encoding="utf-8",
+        (lock / install.INSTALL_LOCK_OWNER).write_bytes(
+            json.dumps({"schema": install.INSTALL_LOCK_SCHEMA, "pid": os.getpid(), "identity": "reused-pid"}).encode("utf-8"),
         )
         original_rename = Path.rename
         raced = False
@@ -1751,15 +1743,14 @@ class InstallerTests(unittest.TestCase):
         lock = install._install_lock_path(target)
         quarantine = lock.with_name(f"{lock.name}.stale")
         quarantine.mkdir(parents=True)
-        (quarantine / install.INSTALL_LOCK_OWNER).write_text(
+        (quarantine / install.INSTALL_LOCK_OWNER).write_bytes(
             json.dumps(
                 {
                     "schema": install.INSTALL_LOCK_SCHEMA,
                     "pid": os.getpid(),
                     "identity": "reused-pid",
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
 
         install.install(self.source, [install.TargetPlan("claude", target)])
@@ -1781,8 +1772,8 @@ class InstallerTests(unittest.TestCase):
         )
         for directory in (staging, quarantine):
             directory.mkdir(parents=True)
-            (directory / install.INSTALL_LOCK_OWNER).write_text(
-                owner, encoding="utf-8"
+            (directory / install.INSTALL_LOCK_OWNER).write_bytes(
+                owner.encode("utf-8")
             )
 
         install.install(self.source, [install.TargetPlan("claude", target)])
@@ -1796,15 +1787,14 @@ class InstallerTests(unittest.TestCase):
         lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
         owner_path = lock / install.INSTALL_LOCK_OWNER
-        owner_path.write_text(
+        owner_path.write_bytes(
             json.dumps(
                 {
                     "schema": install.INSTALL_LOCK_SCHEMA,
                     "pid": os.getpid(),
                     "identity": "reused-pid",
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         displaced = lock.parent / "displaced-stale-lock"
         original_rename = Path.rename
@@ -1816,15 +1806,14 @@ class InstallerTests(unittest.TestCase):
                 raced = True
                 original_rename(candidate, displaced)
                 lock.mkdir(parents=True)
-                owner_path.write_text(
+                owner_path.write_bytes(
                     json.dumps(
                         {
                             "schema": install.INSTALL_LOCK_SCHEMA,
                             "pid": os.getpid(),
                             "identity": install._process_identity(os.getpid()),
                         }
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
             return original_rename(candidate, destination)
 
@@ -1844,15 +1833,14 @@ class InstallerTests(unittest.TestCase):
         lock = install._install_lock_path(target)
         lock.mkdir(parents=True)
         owner_path = lock / install.INSTALL_LOCK_OWNER
-        owner_path.write_text(
+        owner_path.write_bytes(
             json.dumps(
                 {
                     "schema": install.INSTALL_LOCK_SCHEMA,
                     "pid": os.getpid(),
                     "identity": "reused-pid",
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         original_rename = Path.rename
         raced = False
@@ -1862,15 +1850,14 @@ class InstallerTests(unittest.TestCase):
             if candidate.name.startswith(".install-lock-stage-") and not raced:
                 raced = True
                 lock.mkdir(parents=True)
-                owner_path.write_text(
+                owner_path.write_bytes(
                     json.dumps(
                         {
                             "schema": install.INSTALL_LOCK_SCHEMA,
                             "pid": os.getpid(),
                             "identity": install._process_identity(os.getpid()),
                         }
-                    ),
-                    encoding="utf-8",
+                    ).encode("utf-8"),
                 )
             return original_rename(candidate, destination)
 
@@ -1886,7 +1873,7 @@ class InstallerTests(unittest.TestCase):
         cursor = self.root / "cursor-rollback" / "skills"
         agent = cursor.parent / "agents" / install.CURSOR_AGENT_FILENAME
         agent.parent.mkdir(parents=True)
-        agent.write_text("old cursor agent\n", encoding="utf-8")
+        agent.write_bytes("old cursor agent\n".encode("utf-8"))
         claude = self.root / "claude-after-cursor" / "skills"
         original = install._apply_target
         calls = 0
@@ -1942,9 +1929,9 @@ class InstallerTests(unittest.TestCase):
     def test_hooks_init_adds_guards_without_changing_existing_contracts(self):
         project = self.root / "existing-project"
         (project / ".git").mkdir(parents=True)
-        (project / "AGENTS.md").write_text("existing agents\n", encoding="utf-8")
-        (project / "WORKFLOW.md").write_text(
-            "existing workflow\n", encoding="utf-8"
+        (project / "AGENTS.md").write_bytes("existing agents\n".encode("utf-8"))
+        (project / "WORKFLOW.md").write_bytes(
+            "existing workflow\n".encode("utf-8")
         )
 
         status, _, error = self.run_main(
@@ -1983,7 +1970,7 @@ class InstallerTests(unittest.TestCase):
         settings = project / ".claude" / "settings.json"
         settings.parent.mkdir(parents=True)
         original = json.dumps({"hooks": {"custom": True}}) + "\n"
-        settings.write_text(original, encoding="utf-8")
+        settings.write_bytes(original.encode("utf-8"))
 
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value="python3"
@@ -2083,8 +2070,8 @@ class InstallerTests(unittest.TestCase):
         cursor_path = project / ".cursor" / "hooks.json"
         codex_path.parent.mkdir()
         cursor_path.parent.mkdir()
-        codex_path.write_text(
-            json.dumps(
+        codex_path.write_bytes(
+            (json.dumps(
                 {
                     "userSetting": True,
                     "hooks": {
@@ -2099,19 +2086,17 @@ class InstallerTests(unittest.TestCase):
                     },
                 }
             )
-            + "\n",
-            encoding="utf-8",
+            + "\n").encode("utf-8"),
         )
-        cursor_path.write_text(
-            json.dumps(
+        cursor_path.write_bytes(
+            (json.dumps(
                 {
                     "version": 1,
                     "userSetting": True,
                     "hooks": {"preToolUse": [{"command": "custom-cursor"}]},
                 }
             )
-            + "\n",
-            encoding="utf-8",
+            + "\n").encode("utf-8"),
         )
         plans = [
             install.TargetPlan("codex", self.root / "codex" / "skills"),
@@ -2185,7 +2170,7 @@ class InstallerTests(unittest.TestCase):
         ):
             install.install(self.source, plans, project=project, hooks=True)
         guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
-        guard.write_text('print("guard-ran")\n', encoding="utf-8")
+        guard.write_bytes('print("guard-ran")\n'.encode("utf-8"))
         subdirectory = project / "nested"
         subdirectory.mkdir()
         codex = json.loads(
@@ -2309,8 +2294,8 @@ class InstallerTests(unittest.TestCase):
         (project / ".git").mkdir(parents=True)
         (project / ".claude").mkdir(parents=True)
         settings_path = project / ".claude" / "settings.json"
-        settings_path.write_text(
-            json.dumps(
+        settings_path.write_bytes(
+            (json.dumps(
                 {
                     "userSetting": True,
                     "hooks": {
@@ -2323,8 +2308,7 @@ class InstallerTests(unittest.TestCase):
                     },
                 }
             )
-            + "\n",
-            encoding="utf-8",
+            + "\n").encode("utf-8"),
         )
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
@@ -2344,7 +2328,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
         (project / ".claude").mkdir(parents=True)
-        (project / ".claude" / "settings.json").write_text("not json", encoding="utf-8")
+        (project / ".claude" / "settings.json").write_bytes("not json".encode("utf-8"))
         target = self.root / "claude" / "skills"
         status, _, error = self.run_main(self.hooks_arguments(project, target))
         self.assertEqual(1, status)
@@ -2364,11 +2348,11 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         agents = project / "AGENTS.md"
         owner = "\n## Owner rules\n\n- keep me\n"
-        agents.write_text(agents.read_text(encoding="utf-8") + owner, encoding="utf-8")
+        agents.write_bytes((agents.read_text(encoding="utf-8") + owner).encode("utf-8"))
         installed_agents = agents.read_text(encoding="utf-8")
         template = (self.source / "AGENTS.md").read_text(encoding="utf-8")
-        (self.source / "AGENTS.md").write_text(template + "\n- new rule\n", encoding="utf-8")
-        (project / ".claude" / "CLAUDE.md").write_text("edited bridge\n", encoding="utf-8")
+        (self.source / "AGENTS.md").write_bytes((template + "\n- new rule\n").encode("utf-8"))
+        (project / ".claude" / "CLAUDE.md").write_bytes("edited bridge\n".encode("utf-8"))
         runtime_file = (
             self.runtime_root(project)
             / install.PROJECT_RUNTIME_SCRIPTS[0]
@@ -2377,11 +2361,11 @@ class InstallerTests(unittest.TestCase):
         stale_runtime = runtime_file.read_text(encoding="utf-8")
         original_guard = guard_file.read_text(encoding="utf-8")
         original_pin = (project / ".gsd-path/runtime.json").read_bytes()
-        (self.source / "scripts" / runtime_file.name).write_text(f"# newer\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8")
+        (self.source / "scripts" / runtime_file.name).write_bytes(f"# newer\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"))
         settings_path = project / ".claude" / "settings.json"
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         settings["userSetting"] = True
-        settings_path.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
 
         status, output, error = self.run_main(
             [*self.hooks_arguments(project, target), "--update", "--dry-run"]
@@ -2438,7 +2422,7 @@ class InstallerTests(unittest.TestCase):
             self.runtime_root(project)
             / install.PROJECT_RUNTIME_SCRIPTS[0]
         )
-        runtime_file.write_text("foreign\n", encoding="utf-8")
+        runtime_file.write_bytes("foreign\n".encode("utf-8"))
         status, _, error = self.run_main([*arguments, "--update"])
         self.assertEqual(1, status)
         self.assertIn("runtime file changed", error)
@@ -2462,11 +2446,11 @@ class InstallerTests(unittest.TestCase):
         (project / ".git").mkdir(parents=True)
         target = self.root / "claude" / "skills"
         self.run_main(self.hooks_arguments(project, target))
-        (self.source / "scripts" / "guard_hook.py").write_text(
-            f"# guard v2\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# guard v2\n{install.GUARD_MARKER}\n".encode("utf-8")
         )
-        (self.source / "scripts" / "pipeline_state.py").write_text(
-            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
         status, output, error = self.run_main(
             [
@@ -2530,17 +2514,15 @@ class InstallerTests(unittest.TestCase):
     def test_refresh_and_doctor_reject_marker_only_legacy_contracts(self):
         project = self.root / "stale-legacy-project"
         project.mkdir()
-        (project / "AGENTS.md").write_text(
+        (project / "AGENTS.md").write_bytes(
             "# AGENTS.md — Operating Rules for the GSD Path Pipeline\n\n"
             "## Plain-prompt re-entry\n\n"
-            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
-            encoding="utf-8",
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n".encode("utf-8"),
         )
-        (project / "WORKFLOW.md").write_text(
+        (project / "WORKFLOW.md").write_bytes(
             "# WORKFLOW.md — GSD Path Pipeline SOP\n\n"
             "### Plain-prompt re-entry\n\n"
-            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n",
-            encoding="utf-8",
+            "<!-- gsd-path/plain-prompt-reentry/v1 -->\n".encode("utf-8"),
         )
 
         status, _, error = self.run_main(
@@ -2609,8 +2591,8 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         runtime = self.runtime_root(project)
         before = {name: (runtime / name).read_bytes() for name in install.PROJECT_RUNTIME_SCRIPTS}
-        (self.source / "scripts" / "pipeline_state.py").write_text(
-            f"# changed\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# changed\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
         original_copy = shutil.copyfile
         copies = 0
@@ -2638,7 +2620,7 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertEqual(0, status, error)
         extra = self.runtime_root(project) / "site_policy.py"
-        extra.write_text("keep\n", encoding="utf-8")
+        extra.write_bytes("keep\n".encode("utf-8"))
 
         status, _, error = self.run_main(
             ["--hooks-refresh", "--project", str(project), "--source-root", str(self.source)]
@@ -2658,8 +2640,8 @@ class InstallerTests(unittest.TestCase):
         shutil.rmtree(runtime)
         guard = project / install.HOOKS_DIRECTORY / "guard_hook.py"
         before = guard.read_bytes()
-        (self.source / "scripts" / "guard_hook.py").write_text(
-            f"# changed\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# changed\n{install.GUARD_MARKER}\n".encode("utf-8")
         )
         original_copy = install._atomic_copy
 
@@ -2692,8 +2674,8 @@ class InstallerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(0, status, error)
-        (self.source / "scripts" / "pipeline_state.py").write_text(
-            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
 
         status, _, error = self.run_main(
@@ -2734,8 +2716,8 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         runtime = self.runtime_root(project) / "pipeline_state.py"
         before = runtime.read_bytes()
-        (self.source / "scripts" / "pipeline_state.py").write_text(
-            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
 
         with mock.patch.object(
@@ -2758,8 +2740,8 @@ class InstallerTests(unittest.TestCase):
     def test_hooks_refresh_rejects_unmanaged_guard_scripts(self):
         project = self.root / "project"
         (project / install.HOOKS_DIRECTORY).mkdir(parents=True)
-        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_text(
-            "custom\n", encoding="utf-8"
+        (project / install.HOOKS_DIRECTORY / "guard_hook.py").write_bytes(
+            "custom\n".encode("utf-8")
         )
         status, _, error = self.run_main(
             [
@@ -2782,7 +2764,7 @@ class InstallerTests(unittest.TestCase):
             self.runtime_root(project)
             / "pipeline_state.py"
         )
-        runtime.write_text("custom\n", encoding="utf-8")
+        runtime.write_bytes("custom\n".encode("utf-8"))
 
         status, _, error = self.run_main(
             [
@@ -2925,8 +2907,8 @@ class InstallerTests(unittest.TestCase):
         runtime.replace(outside)
         runtime.symlink_to(outside, target_is_directory=True)
         before = (outside / "pipeline_state.py").read_bytes()
-        (self.source / "scripts" / "pipeline_state.py").write_text(
-            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "pipeline_state.py").write_bytes(
+            f"# runtime v2\n{install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8")
         )
 
         status, _, error = self.run_main(
@@ -2944,8 +2926,8 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(before, (outside / "pipeline_state.py").read_bytes())
 
     def test_doctor_checks_install_project_runtime_and_state(self):
-        (self.source / "package.json").write_text(
-            '{"version": "9.9.9"}\n', encoding="utf-8"
+        (self.source / "package.json").write_bytes(
+            '{"version": "9.9.9"}\n'.encode("utf-8")
         )
         for name in install.PROJECT_RUNTIME_SCRIPTS:
             shutil.copy2(
@@ -2960,7 +2942,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         state = project / ".project" / "STATE.md"
         state.parent.mkdir()
-        state.write_text(
+        state.write_bytes(
             "---\n"
             "pipeline: gsd-path/v2\n"
             "project: demo\n"
@@ -2969,8 +2951,7 @@ class InstallerTests(unittest.TestCase):
             "status: done\n"
             "branch: null\n"
             "archive: null\n"
-            "---\n",
-            encoding="utf-8",
+            "---\n".encode("utf-8"),
         )
         arguments = [
             "--doctor",
@@ -3003,11 +2984,10 @@ class InstallerTests(unittest.TestCase):
         runtime_script = self.runtime_root(project) / "pipeline_state.py"
         original_runtime = runtime_script.read_bytes()
         doctor_side_effect = project / "doctor-runtime-executed"
-        runtime_script.write_text(
+        runtime_script.write_bytes(
             "from pathlib import Path\n"
             f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
-            f"# {install.PROJECT_RUNTIME_MARKER}\n",
-            encoding="utf-8",
+            f"# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"),
         )
         status, _, error = self.run_main(arguments)
         self.assertEqual(1, status)
@@ -3019,11 +2999,10 @@ class InstallerTests(unittest.TestCase):
 
         def replace_runtime_after_validation(source_root, candidate):
             state = original_validator(source_root, candidate)
-            runtime_script.write_text(
+            runtime_script.write_bytes(
                 "from pathlib import Path\n"
                 f"Path({str(doctor_side_effect)!r}).write_text('executed')\n"
-                f"# {install.PROJECT_RUNTIME_MARKER}\n",
-                encoding="utf-8",
+                f"# {install.PROJECT_RUNTIME_MARKER}\n".encode("utf-8"),
             )
             return state
 
@@ -3141,7 +3120,7 @@ class InstallerTests(unittest.TestCase):
         settings = project / ".claude" / "settings.json"
         parsed = json.loads(settings.read_text(encoding="utf-8"))
         parsed["hooks"]["PreToolUse"][0]["matcher"] = "Write"
-        settings.write_text(json.dumps(parsed) + "\n", encoding="utf-8")
+        settings.write_bytes((json.dumps(parsed) + "\n").encode("utf-8"))
 
         findings = install.doctor(
             self.source, ["claude"], lambda _target: target, project
@@ -3355,13 +3334,12 @@ class InstallerTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        (project / "AGENTS.md").write_text("agents\n", encoding="utf-8")
-        (project / "WORKFLOW.md").write_text("workflow\n", encoding="utf-8")
+        (project / "AGENTS.md").write_bytes("agents\n".encode("utf-8"))
+        (project / "WORKFLOW.md").write_bytes("workflow\n".encode("utf-8"))
         state = project / ".project" / "STATE.md"
         state.parent.mkdir()
-        state.write_text(
-            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n",
-            encoding="utf-8",
+        state.write_bytes(
+            "---\npipeline: gsd-path/v2\nphase: plan\nstatus: done\n---\n".encode("utf-8"),
         )
 
         findings = install.doctor(self.source, [], lambda _target: Path(), project)
@@ -3379,7 +3357,7 @@ class InstallerTests(unittest.TestCase):
         project = self.root / "doctor-without-path-python"
         state = project / ".project" / "STATE.md"
         state.parent.mkdir(parents=True)
-        state.write_text("owned\n", encoding="utf-8")
+        state.write_bytes("owned\n".encode("utf-8"))
 
         with mock.patch.dict(os.environ, {"PATH": ""}):
             findings = install.doctor(
@@ -3442,7 +3420,7 @@ class InstallerTests(unittest.TestCase):
         settings["hooks"]["PreToolUse"][0]["matcher"] = "old"
         settings["permissions"] = {"allow": ["Bash(npm test)"]}
         settings["model"] = "opus"
-        settings_path.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
         status, _, error = self.run_main(self.refresh_full_arguments(project))
         self.assertEqual(0, status, error)
         refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -3473,14 +3451,14 @@ class InstallerTests(unittest.TestCase):
             {"type": "command", "command": "custom-codex"}
         )
         codex["userSetting"] = True
-        codex_path.write_text(json.dumps(codex) + "\n", encoding="utf-8")
+        codex_path.write_bytes((json.dumps(codex) + "\n").encode("utf-8"))
         cursor_path = project / ".cursor" / "hooks.json"
         cursor = json.loads(cursor_path.read_text(encoding="utf-8"))
         cursor["hooks"]["preToolUse"][0]["command"] = (
             'python "C:\\repo\\.gsd-path\\guard_hook.py"'
         )
         cursor["userSetting"] = True
-        cursor_path.write_text(json.dumps(cursor) + "\n", encoding="utf-8")
+        cursor_path.write_bytes((json.dumps(cursor) + "\n").encode("utf-8"))
 
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value="python3"
@@ -3541,7 +3519,7 @@ class InstallerTests(unittest.TestCase):
         cursor_path = project / ".cursor" / "hooks.json"
         codex_path.parent.mkdir()
         cursor_path.parent.mkdir()
-        codex_path.write_text(
+        codex_path.write_bytes(
             json.dumps(
                 {
                     "custom": "codex",
@@ -3554,10 +3532,9 @@ class InstallerTests(unittest.TestCase):
                         ]
                     },
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
-        cursor_path.write_text(
+        cursor_path.write_bytes(
             json.dumps(
                 {
                     "custom": "cursor",
@@ -3567,8 +3544,7 @@ class InstallerTests(unittest.TestCase):
                         ]
                     },
                 }
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
 
         with mock.patch.object(
@@ -3619,7 +3595,7 @@ class InstallerTests(unittest.TestCase):
             )
             + "\n"
         )
-        settings.write_text(original, encoding="utf-8")
+        settings.write_bytes(original.encode("utf-8"))
 
         status, _, error = self.run_main(self.refresh_full_arguments(project))
 
@@ -3636,7 +3612,7 @@ class InstallerTests(unittest.TestCase):
         ):
             install.install(self.source, plans, project=project, hooks=True)
         outside = self.root / "outside-hooks.json"
-        outside.write_text("outside\n", encoding="utf-8")
+        outside.write_bytes("outside\n".encode("utf-8"))
         legacy_temporary = project / ".codex" / ".hooks.json.gsd-path-tmp"
         legacy_temporary.symlink_to(outside)
 
@@ -3678,7 +3654,7 @@ class InstallerTests(unittest.TestCase):
         target = self.root / "claude" / "skills"
         self.run_main(self.hooks_arguments(project, target))
         settings_path = project / ".claude" / "settings.json"
-        settings_path.write_text("{ guard_hook.py .gsd-path\n", encoding="utf-8")
+        settings_path.write_bytes("{ guard_hook.py .gsd-path\n".encode("utf-8"))
         status, _, error = self.run_main(self.refresh_full_arguments(project))
         self.assertEqual(1, status)
         self.assertIn("not valid JSON", error)
@@ -3751,7 +3727,7 @@ class InstallerTests(unittest.TestCase):
     def test_hooks_reject_git_file_that_cannot_be_resolved(self):
         project = self.root / "gitfile-project"
         project.mkdir()
-        (project / ".git").write_text("gitdir: /nonexistent\n", encoding="utf-8")
+        (project / ".git").write_bytes("gitdir: /nonexistent\n".encode("utf-8"))
         target = self.root / "claude" / "skills"
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value="python3"
@@ -3787,7 +3763,7 @@ class InstallerTests(unittest.TestCase):
         settings["hooks"]["PreToolUse"].append(user_entry)
         stop_entry = [{"hooks": [{"type": "command", "command": "echo done"}]}]
         settings["hooks"]["Stop"] = stop_entry
-        settings_path.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+        settings_path.write_bytes((json.dumps(settings) + "\n").encode("utf-8"))
         status, _, error = self.run_main(self.refresh_full_arguments(project))
         self.assertEqual(0, status, error)
         refreshed = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -3852,8 +3828,8 @@ class InstallerTests(unittest.TestCase):
         settings_before = settings_path.read_text(encoding="utf-8")
         pre_commit = project / ".git" / "hooks" / "pre-commit"
         hook_before = pre_commit.read_text(encoding="utf-8")
-        (self.source / "scripts" / "guard_hook.py").write_text(
-            f"# guard v2\n{install.GUARD_MARKER}\n", encoding="utf-8"
+        (self.source / "scripts" / "guard_hook.py").write_bytes(
+            f"# guard v2\n{install.GUARD_MARKER}\n".encode("utf-8")
         )
         with mock.patch.object(
             install, "_detect_python_interpreter", return_value=None
@@ -3875,8 +3851,8 @@ class InstallerTests(unittest.TestCase):
         managed = project / install.HOOKS_DIRECTORY
         managed.mkdir(parents=True)
         for name in install.GUARD_SCRIPTS:
-            (managed / name).write_text(
-                f"old\n{install.GUARD_MARKER}\n", encoding="utf-8"
+            (managed / name).write_bytes(
+                f"old\n{install.GUARD_MARKER}\n".encode("utf-8")
             )
         before = (managed / "guard_hook.py").read_text(encoding="utf-8")
         with mock.patch.object(
@@ -3960,10 +3936,9 @@ class InstallerParityTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q"], cwd=project, check=True)
         if name == "hooks-existing-settings":
             (project / ".claude").mkdir()
-            (project / ".claude" / "settings.json").write_text(
+            (project / ".claude" / "settings.json").write_bytes(
                 '{"userSetting": true, "hooks": {"PreToolUse": [{"matcher": "Bash", '
-                '"hooks": [{"type": "command", "command": "echo hi"}]}]}}\n',
-                encoding="utf-8",
+                '"hooks": [{"type": "command", "command": "echo hi"}]}]}}\n'.encode("utf-8"),
             )
         outputs = []
         for step in steps:

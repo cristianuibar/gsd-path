@@ -45,7 +45,7 @@ class QwenHostTests(unittest.TestCase):
     def record(self, events, run="run-1"):
         path = self.run_root / "quick" / run / "events.jsonl"
         path.parent.mkdir(parents=True)
-        path.write_text("".join(json.dumps({"elapsed_seconds": i, "raw": json.dumps(ev)}) + "\n" for i, ev in enumerate(events)))
+        path.write_bytes("".join(json.dumps({"elapsed_seconds": i, "raw": json.dumps(ev)}) + "\n" for i, ev in enumerate(events)).encode("utf-8"))
 
     def test_spec_matches_manifest_and_is_marked_unverified(self):
         self.assertEqual(qwen.SPEC.name, "qwen")
@@ -58,7 +58,7 @@ class QwenHostTests(unittest.TestCase):
 
     def test_command_places_prompt_in_argv_and_resumes_by_session_id(self):
         prompt = self.run_root / "prompt.txt"
-        prompt.write_text("line one\nline two\n")
+        prompt.write_bytes("line one\nline two\n".encode("utf-8"))
         self.assertFalse(qwen.SPEC.prompt_on_stdin)
         fresh = qwen.command(prompt)
         self.assertEqual(fresh[:4], ["qwen", "--yolo", "--output-format", "stream-json"])

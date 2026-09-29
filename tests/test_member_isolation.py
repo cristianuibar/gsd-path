@@ -35,14 +35,14 @@ class MemberIsolationTests(unittest.TestCase):
         self.coordinator = self.root / "acme"
         (self.coordinator / ".project" / "tasks").mkdir(parents=True)
         git(self.root, "init", "-q", "-b", "gsd-path/M001", str(self.coordinator))
-        (self.coordinator / ".project" / "STATE.md").write_text(STATE, encoding="utf-8")
-        (self.coordinator / ".project" / "tasks" / "T001-t.md").write_text(TASK, encoding="utf-8")
+        (self.coordinator / ".project" / "STATE.md").write_bytes(STATE.encode("utf-8"))
+        (self.coordinator / ".project" / "tasks" / "T001-t.md").write_bytes(TASK.encode("utf-8"))
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "init")
         self.member = self.root / "web"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
-        (self.member / "app.py").write_text("v1\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes("v1\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
         git(self.member, "remote", "add", "origin", "https://github.com/acme/web.git")
@@ -101,13 +101,13 @@ class MemberIsolationTests(unittest.TestCase):
 
     def test_bound_checkout_explains_how_to_repair_malformed_members(self) -> None:
         path = self.coordinator / ".project" / "MEMBERS.md"
-        path.write_text(path.read_text(encoding="utf-8") + "unexpected line\n", encoding="utf-8")
+        path.write_bytes((path.read_text(encoding="utf-8") + "unexpected line\n").encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "MEMBERS.md.*members.py repair --repo"):
             isolation.member_bound_checkout(self.coordinator, "web")
 
     def test_bound_checkout_explains_how_to_repair_an_unreadable_marker(self) -> None:
         common = git(self.member, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
-        (Path(common) / "gsd-path" / "member.json").write_text("invalid json\n", encoding="utf-8")
+        (Path(common) / "gsd-path" / "member.json").write_bytes("invalid json\n".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "member marker is unreadable.*members.py repair --repo") as caught:
             isolation.member_bound_checkout(self.coordinator, "web")
         self.assertIn(str(self.coordinator), str(caught.exception))
@@ -126,13 +126,13 @@ class MemberIsolationTests(unittest.TestCase):
 
     def test_bound_checkout_refuses_an_invalid_registered_checkout(self) -> None:
         bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
-        (bound / ".git").write_text("invalid gitfile\n", encoding="utf-8")
+        (bound / ".git").write_bytes("invalid gitfile\n".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "bound checkout.*missing or invalid"):
             isolation.member_bound_checkout(self.coordinator, "web")
 
     def test_member_task_isolates_in_a_member_sidecar_at_the_bound_tip(self) -> None:
         bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
-        (bound / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        (bound / "landed.py").write_bytes("earlier landing\n".encode("utf-8"))
         git(bound, "add", "-A")
         git(bound, "commit", "-q", "--no-verify", "-m", "earlier landing")
         tip = git(bound, "rev-parse", "HEAD").stdout.strip()
@@ -149,7 +149,7 @@ class MemberIsolationTests(unittest.TestCase):
 
     def test_member_task_isolation_requires_a_clean_bound_checkout(self) -> None:
         bound = Path(isolation.member_bound_checkout(self.coordinator, "web")["checkout"])
-        (bound / "app.py").write_text("dirty\n", encoding="utf-8")
+        (bound / "app.py").write_bytes("dirty\n".encode("utf-8"))
         with self.assertRaisesRegex(isolation.IsolationError, "clean"):
             isolation.isolate_member_task(self.coordinator, "web", "T001")
 
@@ -161,7 +161,7 @@ class MemberIsolationTests(unittest.TestCase):
         self.assertEqual(git(self.member, "branch", "--list", "gsd-path-task/acme-T001").stdout, "")
         result = isolation.isolate_member_task(self.coordinator, "web", "T001")
         sidecar = Path(result["worktree"])
-        (sidecar / "app.py").write_text("work\n", encoding="utf-8")
+        (sidecar / "app.py").write_bytes("work\n".encode("utf-8"))
         git(sidecar, "commit", "-q", "--no-verify", "-am", "work")
         with self.assertRaisesRegex(isolation.IsolationError, "unlanded"):
             isolation.retire_member_task(self.coordinator, "web", "T001")

@@ -320,8 +320,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -339,7 +339,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             blocked = self.status(root, action="block")
             blocked["route"]["reason"] = "branch mismatch"
             with (
@@ -368,8 +368,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -387,7 +387,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -405,7 +405,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -423,7 +423,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -444,8 +444,8 @@ class GuardHookTests(unittest.TestCase):
             root = Path(temporary) / "repo"
             root.mkdir()
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -467,7 +467,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -530,8 +530,8 @@ class GuardHookTests(unittest.TestCase):
             root = Path(temporary) / "repo"
             root.mkdir()
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -555,8 +555,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -579,7 +579,7 @@ class GuardHookTests(unittest.TestCase):
             outside.mkdir()
             (root / ".gsd-path").symlink_to(outside, target_is_directory=True)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             for phase in ("plan", "build"):
                 with (
                     mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -590,7 +590,7 @@ class GuardHookTests(unittest.TestCase):
                     ),
                 ):
                     (root / "src").mkdir(exist_ok=True)
-                    (root / "src" / "app.py").write_text("app\n", encoding="utf-8")
+                    (root / "src" / "app.py").write_bytes("app\n".encode("utf-8"))
                     link = root / ".project" / "link"
                     if not link.exists():
                         link.symlink_to(root / "src" / "app.py")
@@ -628,8 +628,8 @@ class GuardHookTests(unittest.TestCase):
                 check=True,
             )
             (primary / ".project").mkdir()
-            (primary / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (primary / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             subprocess.run(["git", "add", "."], cwd=primary, check=True)
             subprocess.run(
@@ -678,8 +678,8 @@ class GuardHookTests(unittest.TestCase):
                 (root / ".Project").mkdir()
             except FileExistsError:
                 self.skipTest("requires a case-sensitive test filesystem")
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -698,8 +698,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
 
             def case_insensitive_samefile(left, right):
@@ -727,8 +727,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             original_samefile = os.path.samefile
 
@@ -760,7 +760,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -780,7 +780,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -800,7 +800,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             recovery = self.status(root, phase="build", action="resume-undo")
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -817,7 +817,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -834,7 +834,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -860,7 +860,7 @@ class GuardHookTests(unittest.TestCase):
                 shutil.copy2(scripts / name, runtime / name)
             state = root / ".project" / "STATE.md"
             state.parent.mkdir()
-            state.write_text(
+            state.write_bytes(
                 "---\n"
                 "pipeline: gsd-path/v2\n"
                 "project: demo\n"
@@ -869,8 +869,7 @@ class GuardHookTests(unittest.TestCase):
                 "status: done\n"
                 "branch: null\n"
                 "archive: null\n"
-                "---\n",
-                encoding="utf-8",
+                "---\n".encode("utf-8"),
             )
             environment = os.environ.copy()
             environment.pop("PYTHONDONTWRITEBYTECODE", None)
@@ -899,14 +898,14 @@ class GuardHookTests(unittest.TestCase):
             managed = root / ".gsd-path"
             runtime = managed / "runtime" / "pipeline_state.py"
             runtime.parent.mkdir(parents=True)
-            runtime.write_text("old runtime\n", encoding="utf-8")
+            runtime.write_bytes("old runtime\n".encode("utf-8"))
             calls = []
 
             def exec_runtime(command, **options):
                 calls.append((command, options))
                 if len(calls) == 1:
                     runtime.unlink()
-                    runtime.write_text("new runtime with a new inode\n", encoding="utf-8")
+                    runtime.write_bytes("new runtime with a new inode\n".encode("utf-8"))
                     return subprocess.CompletedProcess(command, 0, b"old route\n", b"")
                 return subprocess.CompletedProcess(command, 0, b"new route\n", b"")
 
@@ -924,7 +923,7 @@ class GuardHookTests(unittest.TestCase):
             root = Path(temporary)
             runtime = root / ".gsd-path" / "runtime" / "pipeline_state.py"
             runtime.parent.mkdir(parents=True)
-            runtime.write_text("runtime\n", encoding="utf-8")
+            runtime.write_bytes("runtime\n".encode("utf-8"))
             result = subprocess.CompletedProcess([], 0, b"route\n", b"")
             with (
                 mock.patch.object(
@@ -947,28 +946,26 @@ class GuardHookTests(unittest.TestCase):
             lock = root / ".gsd-path-install-lock"
             lock.mkdir()
             owner_path = lock / status_runtime.INSTALL_LOCK_OWNER
-            owner_path.write_text(
+            owner_path.write_bytes(
                 json.dumps(
                     {
                         "schema": status_runtime.INSTALL_LOCK_SCHEMA,
                         "pid": os.getpid(),
                         "identity": status_runtime.process_identity(os.getpid()),
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             self.assertTrue(status_runtime.install_lock_active(lock))
             finished = subprocess.Popen([sys.executable, "-c", "pass"])
             finished.wait()
-            owner_path.write_text(
+            owner_path.write_bytes(
                 json.dumps(
                     {
                         "schema": status_runtime.INSTALL_LOCK_SCHEMA,
                         "pid": finished.pid,
                         "identity": "expired",
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             self.assertFalse(status_runtime.install_lock_active(lock))
             error = io.StringIO()
@@ -982,15 +979,14 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             lock = Path(temporary) / ".gsd-path-install-lock"
             lock.mkdir()
-            (lock / status_runtime.INSTALL_LOCK_OWNER).write_text(
+            (lock / status_runtime.INSTALL_LOCK_OWNER).write_bytes(
                 json.dumps(
                     {
                         "schema": status_runtime.INSTALL_LOCK_SCHEMA,
                         "pid": os.getpid(),
                         "identity": "temporarily unavailable",
                     }
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             with mock.patch.object(status_runtime, "process_identity", return_value=None):
                 self.assertTrue(status_runtime.install_lock_active(lock))
@@ -1025,7 +1021,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -1046,7 +1042,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -1069,8 +1065,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -1092,7 +1088,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -1115,8 +1111,8 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text(
-                "owned\n", encoding="utf-8"
+            (root / ".project" / "STATE.md").write_bytes(
+                "owned\n".encode("utf-8")
             )
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
@@ -1143,7 +1139,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / ".project").mkdir()
-            (root / ".project" / "STATE.md").write_text("invalid\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("invalid\n".encode("utf-8"))
             with (
                 mock.patch.object(guard_hook, "repository_root", return_value=root),
                 mock.patch.object(
@@ -2034,7 +2030,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
             (root / ".project" / "next").mkdir(parents=True)
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             (root / ".gsd-path").mkdir()
             with (
                 mock.patch.object(guard_hook.os, "getcwd", return_value=str(root)),
@@ -2082,7 +2078,7 @@ class GuardHookTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
             (root / ".project").mkdir(parents=True)
-            (root / ".project" / "STATE.md").write_text("owned\n", encoding="utf-8")
+            (root / ".project" / "STATE.md").write_bytes("owned\n".encode("utf-8"))
             with mock.patch.object(guard_hook, "repository_root", return_value=root):
                 status, _, error = run_guard(
                     {"tool_name": "Write", "tool_input": {"file_path": ".project/STATE.md"}}

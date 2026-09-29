@@ -81,7 +81,7 @@ class TaskBriefTests(unittest.TestCase):
     def write(self, root: Path, relative: str, content: str) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_bytes(content.encode("utf-8"))
 
     def init_repo(self, root: Path) -> None:
         git(root, "init")
@@ -242,7 +242,7 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(code, 0, error)
             self.write(root, ".project/intent/INTENT.md", "# Active intent\n")
             task = root / ".project/next/tasks/T001-demo.md"
-            task.write_text(task.read_text().replace(".project/next/intent", ".project/intent"))
+            task.write_bytes(task.read_text(encoding="utf-8").replace(".project/next/intent", ".project/intent").encode("utf-8"))
             code, _, error = self.run_main(args)
             self.assertEqual(code, 1)
             self.assertIn("missing at the layer base: .project/intent/INTENT.md", error)
@@ -253,11 +253,10 @@ class TaskBriefTests(unittest.TestCase):
             self.init_repo(root)
             self.write_happy_tasks(root)
             task_path = root / ".project/tasks/T001-demo.md"
-            task_path.write_text(
+            task_path.write_bytes(
                 task_path.read_text(encoding="utf-8").replace(
                     "base: null\n", "base: null\ncommit: null\n", 1
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             base = self.commit(root)
 
@@ -289,7 +288,7 @@ class TaskBriefTests(unittest.TestCase):
                 self.init_repo(root)
                 parent = root / "obstacle"
                 if kind == "file":
-                    parent.write_text("not a directory")
+                    parent.write_bytes("not a directory".encode("utf-8"))
                 elif kind == "symlink":
                     parent.symlink_to("src", target_is_directory=True)
                 base = self.commit(root)
@@ -355,7 +354,7 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(status, 0, error)
 
             consumer = root / ".project/tasks/T003-demo.md"
-            consumer.write_text(consumer.read_text().replace("write CSV rows", "write JSON rows"))
+            consumer.write_bytes(consumer.read_text(encoding="utf-8").replace("write CSV rows", "write JSON rows").encode("utf-8"))
             status, _output, error = self.lint(root, base)
             self.assertEqual(status, 1)
             self.assertIn("T002: interface contract is not shared", error)
@@ -439,9 +438,8 @@ class TaskBriefTests(unittest.TestCase):
             self.write_task(root, "T003", contract="- None",
                             context="The task adds a file.")
             task_path = root / ".project/tasks/T003-demo.md"
-            task_path.write_text(
-                task_path.read_text(encoding="utf-8").replace("## Log", "## Notes"),
-                encoding="utf-8",
+            task_path.write_bytes(
+                task_path.read_text(encoding="utf-8").replace("## Log", "## Notes").encode("utf-8"),
             )
             base = self.commit(root)
 
@@ -458,11 +456,10 @@ class TaskBriefTests(unittest.TestCase):
             self.write_task(root, "T003", contract="- None",
                             context="The task adds a file.")
             task_path = root / ".project/tasks/T003-demo.md"
-            task_path.write_text(
+            task_path.write_bytes(
                 task_path.read_text(encoding="utf-8").replace(
                     "task_branch: null\n", ""
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             base = self.commit(root)
 
@@ -477,11 +474,10 @@ class TaskBriefTests(unittest.TestCase):
             self.init_repo(root)
             self.write_happy_tasks(root)
             task_path = root / ".project/tasks/T001-demo.md"
-            task_path.write_text(
+            task_path.write_bytes(
                 task_path.read_text(encoding="utf-8").replace(
                     "status: pending\n", "status: pending\nstatus: done\n"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             base = self.commit(root)
 
@@ -496,11 +492,10 @@ class TaskBriefTests(unittest.TestCase):
             self.init_repo(root)
             self.write_happy_tasks(root)
             task_path = root / ".project/tasks/T001-demo.md"
-            task_path.write_text(
+            task_path.write_bytes(
                 task_path.read_text(encoding="utf-8").replace(
                     "status: pending\n", "status pending\n"
-                ),
-                encoding="utf-8",
+                ).encode("utf-8"),
             )
             base = self.commit(root)
 
@@ -538,9 +533,8 @@ class TaskBriefTests(unittest.TestCase):
             self.init_repo(root)
             self.write_happy_tasks(root)
             task_path = root / ".project/tasks/T001-demo.md"
-            task_path.write_text(
-                task_path.read_text(encoding="utf-8").replace("\n  - ", "\n- "),
-                encoding="utf-8",
+            task_path.write_bytes(
+                task_path.read_text(encoding="utf-8").replace("\n  - ", "\n- ").encode("utf-8"),
             )
             base = self.commit(root)
 

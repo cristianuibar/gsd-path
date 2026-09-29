@@ -36,7 +36,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
         remotes = root / "remotes"
         remotes.mkdir()
         gh = binary / "gh"
-        gh.write_text(
+        gh.write_bytes(
             textwrap.dedent(
                 """\
                 #!/usr/bin/env python3
@@ -109,8 +109,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
                 print(f"unsupported fake gh command: {args}", file=sys.stderr)
                 raise SystemExit(2)
                 """
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         gh.chmod(0o755)
         return binary, remotes
@@ -154,12 +153,12 @@ class BootstrapRepositoryTests(unittest.TestCase):
             worktree = root / "managed" / "demo" / "primary"
             worktree.parent.mkdir(parents=True)
         repository_template = root / "repository.md"
-        repository_template.write_text(
+        repository_template.write_bytes(
             "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
             "Remote default: <remote-default>\n"
             "Remote default SHA: <remote-default-sha>\n"
             "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
-            "Primary worktree: <primary-worktree>\n"
+            "Primary worktree: <primary-worktree>\n".encode("utf-8")
         )
         environment = os.environ.copy()
         environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
@@ -202,7 +201,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
             workspace, checkout, worktree, _, _, _ = self.complete_bootstrap(root, managed_primary=True)
             self.assertFalse(worktree.is_relative_to(workspace))
             self.assertEqual(checkout.parent, workspace)
-            binding = (worktree / ".project/REPOSITORY.md").read_text()
+            binding = (worktree / ".project/REPOSITORY.md").read_text(encoding="utf-8")
             self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
             self.assertEqual(self.git(worktree, "rev-parse", "--git-common-dir").returncode, 0)
 
@@ -244,7 +243,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
                 elif collision in {"worktree", "nonempty"}:
                     request.worktree_path.mkdir()
                     if collision == "nonempty":
-                        (request.worktree_path / "keep.txt").write_text("keep")
+                        (request.worktree_path / "keep.txt").write_bytes("keep".encode("utf-8"))
                 elif collision == "symlink":
                     target = workspace / "empty"
                     target.mkdir()
@@ -268,7 +267,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
 
                 self.assertFalse(request.journal_path.exists())
                 if collision == "nonempty":
-                    self.assertEqual((request.worktree_path / "keep.txt").read_text(), "keep")
+                    self.assertEqual((request.worktree_path / "keep.txt").read_text(encoding="utf-8"), "keep")
                 if collision == "symlink":
                     self.assertTrue(request.worktree_path.is_symlink())
 
@@ -281,12 +280,12 @@ class BootstrapRepositoryTests(unittest.TestCase):
             checkout = workspace / "demo"
             worktree = workspace / "demo-gsd-path"
             repository_template = root / "repository.md"
-            repository_template.write_text(
+            repository_template.write_bytes(
                 "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
                 "Remote default: <remote-default>\n"
                 "Remote default SHA: <remote-default-sha>\n"
                 "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
-                "Primary worktree: <primary-worktree>\n"
+                "Primary worktree: <primary-worktree>\n".encode("utf-8")
             )
             environment = os.environ.copy()
             environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
@@ -309,7 +308,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
         self.assertEqual(cloned.returncode, 0, cloned.stderr)
         self.git(updater, "config", "user.name", "Updater")
         self.git(updater, "config", "user.email", "updater@example.invalid")
-        (updater / "README.md").write_text("# Updated\n")
+        (updater / "README.md").write_bytes("# Updated\n".encode("utf-8"))
         self.git(updater, "add", "README.md")
         committed = self.git(updater, "commit", "-q", "-m", "Advance default")
         self.assertEqual(committed.returncode, 0, committed.stderr)
@@ -325,7 +324,7 @@ class BootstrapRepositoryTests(unittest.TestCase):
             checkout = workspace / "demo"
             worktree = workspace / "demo-gsd-path"
             repository_template = root / "repository.md"
-            repository_template.write_text(
+            repository_template.write_bytes(
                 """# Repository Binding
 
 Kind: <kind>
@@ -336,8 +335,7 @@ Remote default SHA: <remote-default-sha>
 Default checkout: <default-checkout>
 GSD Path branch: <branch>
 Primary worktree: <primary-worktree>
-""",
-                encoding="utf-8",
+""".encode("utf-8"),
             )
             environment = os.environ.copy()
             environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
@@ -397,8 +395,8 @@ Primary worktree: <primary-worktree>
             result = json.loads(resumed.stdout)
             self.assertEqual(result["status"], "complete")
             self.assertEqual(result["branch"], "gsd-path/M001")
-            state = (worktree / ".project" / "STATE.md").read_text()
-            binding = (worktree / ".project" / "REPOSITORY.md").read_text()
+            state = (worktree / ".project" / "STATE.md").read_text(encoding="utf-8")
+            binding = (worktree / ".project" / "REPOSITORY.md").read_text(encoding="utf-8")
             self.assertIn("branch: gsd-path/M001", state)
             self.assertIn(f"Default checkout: {checkout.resolve()}", binding)
             self.assertIn(f"Primary worktree: {worktree.resolve()}", binding)
@@ -422,18 +420,18 @@ Primary worktree: <primary-worktree>
             self.assertIn("Visibility", wrong_request.stderr)
 
             visibility = remote / "gsd-path-visibility"
-            visibility.write_text("public\n")
+            visibility.write_bytes("public\n".encode("utf-8"))
             changed_remote = self.run_command(*command, cwd=workspace, env=environment)
             self.assertNotEqual(changed_remote.returncode, 0)
             self.assertIn("visibility", changed_remote.stderr.lower())
-            visibility.write_text("private\n")
+            visibility.write_bytes("private\n".encode("utf-8"))
 
             binding_path = worktree / ".project" / "REPOSITORY.md"
-            binding_path.write_text(
+            binding_path.write_bytes(
                 binding.replace(
                     f"Remote default SHA: {base}",
                     f"Remote default SHA: {'0' * 40}",
-                )
+                ).encode("utf-8")
             )
             mismatched = self.run_command(*command, cwd=workspace, env=environment)
             self.assertNotEqual(mismatched.returncode, 0)
@@ -455,12 +453,12 @@ Primary worktree: <primary-worktree>
                 description=None,
             )
             repository_template = root / "repository.md"
-            repository_template.write_text(
+            repository_template.write_bytes(
                 "Kind: <kind>\nRemote: <remote>\nRemote default: <remote-default>\n"
                 "Visibility: <visibility>\n"
                 "Remote default SHA: <remote-default-sha>\n"
                 "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
-                "Primary worktree: <primary-worktree>\n"
+                "Primary worktree: <primary-worktree>\n".encode("utf-8")
             )
             real_atomic_write = bootstrap_repository.atomic_write
             writes = 0
@@ -496,12 +494,12 @@ Primary worktree: <primary-worktree>
             checkout = workspace / "demo"
             worktree = workspace / "demo-gsd-path"
             repository_template = root / "repository.md"
-            repository_template.write_text(
+            repository_template.write_bytes(
                 "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
                 "Remote default: <remote-default>\n"
                 "Remote default SHA: <remote-default-sha>\n"
                 "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
-                "Primary worktree: <primary-worktree>\n"
+                "Primary worktree: <primary-worktree>\n".encode("utf-8")
             )
             environment = os.environ.copy()
             environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"
@@ -537,7 +535,7 @@ Primary worktree: <primary-worktree>
                 self.assertEqual(update_clone.returncode, 0, update_clone.stderr)
                 self.git(updater, "config", "user.name", "Updater")
                 self.git(updater, "config", "user.email", "updater@example.invalid")
-                (updater / "README.md").write_text("# Updated\n")
+                (updater / "README.md").write_bytes("# Updated\n".encode("utf-8"))
                 self.git(updater, "add", "README.md")
                 commit = self.git(updater, "commit", "-q", "-m", "Advance default")
                 self.assertEqual(commit.returncode, 0, commit.stderr)
@@ -629,7 +627,7 @@ Primary worktree: <primary-worktree>
             )
             self.git(worktree, "config", "user.name", "Builder")
             self.git(worktree, "config", "user.email", "builder@example.invalid")
-            (worktree / "PROJECT.md").write_text("# Project\n", encoding="utf-8")
+            (worktree / "PROJECT.md").write_bytes("# Project\n".encode("utf-8"))
             self.git(worktree, "add", "PROJECT.md")
             committed = self.git(worktree, "commit", "-q", "-m", "Build project")
             self.assertEqual(committed.returncode, 0, committed.stderr)
@@ -668,12 +666,12 @@ Primary worktree: <primary-worktree>
             )
             binary, remotes = self.write_fake_gh(root)
             repository_template = root / "repository.md"
-            repository_template.write_text(
+            repository_template.write_bytes(
                 "Kind: <kind>\nRemote: <remote>\nVisibility: <visibility>\n"
                 "Remote default: <remote-default>\n"
                 "Remote default SHA: <remote-default-sha>\n"
                 "Default checkout: <default-checkout>\nGSD Path branch: <branch>\n"
-                "Primary worktree: <primary-worktree>\n"
+                "Primary worktree: <primary-worktree>\n".encode("utf-8")
             )
             environment = os.environ.copy()
             environment["PATH"] = f"{binary}{os.pathsep}{environment['PATH']}"

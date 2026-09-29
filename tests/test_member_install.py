@@ -34,13 +34,13 @@ def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.Completed
 
 def write_state(repo: Path, project: str, phase: str, status: str, archive: str = "null") -> None:
     (repo / ".project").mkdir(exist_ok=True)
-    (repo / ".project" / "STATE.md").write_text(
-        STATE.format(project=project, phase=phase, status=status, archive=archive), encoding="utf-8"
+    (repo / ".project" / "STATE.md").write_bytes(
+        STATE.format(project=project, phase=phase, status=status, archive=archive).encode("utf-8")
     )
 
 
 def executable(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
+    path.write_bytes(text.encode("utf-8"))
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
@@ -55,11 +55,11 @@ class MemberInstallTests(unittest.TestCase):
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "init")
         (self.coordinator / ".gsd-path").mkdir()
-        (self.coordinator / ".gsd-path" / "git_guard.py").write_text(GUARD_LAUNCHER, encoding="utf-8")
+        (self.coordinator / ".gsd-path" / "git_guard.py").write_bytes(GUARD_LAUNCHER.encode("utf-8"))
         self.member = self.root / "web"
         self.member.mkdir()
         git(self.member, "init", "-q", "-b", "main")
-        (self.member / "app.py").write_text("print('v1')\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes("print('v1')\n".encode("utf-8"))
         write_state(self.member, "web", "shipped", "done", ".project/archive/001-demo")
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "init")
@@ -97,13 +97,13 @@ class MemberInstallTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def change(self, text: str = "print('v2')\n") -> subprocess.CompletedProcess:
-        (self.member / "app.py").write_text(text, encoding="utf-8")
+        (self.member / "app.py").write_bytes(text.encode("utf-8"))
         git(self.member, "add", "app.py")
         return git(self.member, "commit", "-q", "-m", "feat: member change", check=False)
 
     def branch(self, name: str) -> str:
         git(self.member, "checkout", "-q", "-b", name)
-        (self.member / "app.py").write_text(f"print({name!r})\n", encoding="utf-8")
+        (self.member / "app.py").write_bytes(f"print({name!r})\n".encode("utf-8"))
         git(self.member, "add", "app.py")
         git(self.member, "commit", "-q", "--no-verify", "-m", f"work on {name}")
         sha = git(self.member, "rev-parse", "HEAD").stdout.strip()
@@ -210,7 +210,7 @@ class MemberInstallTests(unittest.TestCase):
     def test_unmanaged_coordinator_guard_refuses_without_writing_hooks(self) -> None:
         self.join()
         guard = self.coordinator / ".gsd-path" / "git_guard.py"
-        guard.write_text("raise SystemExit(0)\n", encoding="utf-8")
+        guard.write_bytes("raise SystemExit(0)\n".encode("utf-8"))
 
         result = self.install()
 

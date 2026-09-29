@@ -21,16 +21,16 @@ class DispatchPolicyTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         (self.root / '.project').mkdir()
         self.policy = self.root / '.project/model-policy.json'
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'small', 'effort': 'low'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'small', 'effort': 'low'}}}).encode("utf-8"))
         self.caps = self.root / 'capabilities.json'
-        self.caps.write_text(json.dumps({
+        self.caps.write_bytes(json.dumps({
             'host': 'codex',
             'model': {'values': ['small', 'large'], 'field': 'model', 'args': ['--model', '{value}']},
             'effort': {'values': ['low', 'high'], 'field': 'reasoning_effort',
                        'args': ['--effort', '{value}']},
-        }))
+        }).encode("utf-8"))
         self.child = self.root / 'child.py'
-        self.child.write_text('import json, sys\nprint(json.dumps(sys.argv[1:]))\n')
+        self.child.write_bytes('import json, sys\nprint(json.dumps(sys.argv[1:]))\n'.encode("utf-8"))
         self.options = argparse.Namespace(
             repo=self.root, project_dir='.project', action='round',
             model_capabilities=self.caps, model=None, effort=None,
@@ -52,7 +52,7 @@ class DispatchPolicyTests(unittest.TestCase):
         self.assertEqual(received, ['--model', 'small', '--effort', 'low'])
 
     def test_unsupported_explicit_choice_stops_before_attempt(self):
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'unavailable'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'unavailable'}}}).encode("utf-8"))
         with self.assertRaisesRegex(Exception, 'unavailable'):
             self.launch()
         self.assertFalse((self.root / 'records/T001').exists())
@@ -60,13 +60,13 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_retry_keeps_choice_after_policy_edit(self):
         state, _ = self.launch()
         state['finished_at'] = 'completed'
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'large', 'effort': 'high'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'large', 'effort': 'high'}}}).encode("utf-8"))
         _, received = self.launch(state)
         self.assertEqual(received, ['--model', 'small', '--effort', 'low'])
 
     def test_task_partial_override_preserves_role_effort(self):
         task = self.root / '.project/task.md'
-        task.write_text('---\nid: T001\nmodel: large\n---\n')
+        task.write_bytes('---\nid: T001\nmodel: large\n---\n'.encode("utf-8"))
         self.state['task_file'] = '.project/task.md'
         _, received = self.launch()
         self.assertEqual(received, ['--model', 'large', '--effort', 'low'])
@@ -78,9 +78,9 @@ class DispatchPolicyTests(unittest.TestCase):
 
     def test_native_fields_match_every_installed_host(self):
         from scripts import model_policy
-        manifest = json.loads((Path(__file__).parents[1] / 'scripts/skill-resources.json').read_text())
+        manifest = json.loads((Path(__file__).parents[1] / 'scripts/skill-resources.json').read_text(encoding="utf-8"))
         for host in manifest['hosts']:
-            caps = json.loads(self.caps.read_text())
+            caps = json.loads(self.caps.read_text(encoding="utf-8"))
             caps['host'] = host
             with self.subTest(host=host):
                 result = model_policy.resolve(self.root, '.project', 'coder', caps, {})
@@ -96,7 +96,7 @@ class DispatchPolicyTests(unittest.TestCase):
 
     def test_invalid_capabilities_are_a_typed_policy_error(self):
         from scripts import model_policy
-        self.caps.write_text('{broken json')
+        self.caps.write_bytes('{broken json'.encode("utf-8"))
         with self.assertRaises(model_policy.PolicyError):
             self.launch()
 
@@ -150,10 +150,10 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_panel_choice_reaches_brief_and_child_without_family_drift(self):
         self.options.action = 'panel'
         self.state.update(family='gpt', slug='gpt-old')
-        caps = json.loads(self.caps.read_text())
+        caps = json.loads(self.caps.read_text(encoding="utf-8"))
         caps['model']['values'] = ['gpt-old', 'gpt-new', 'claude-other']
-        self.caps.write_text(json.dumps(caps))
-        self.policy.write_text(json.dumps({'roles': {'review_panel': {'model': 'gpt-new'}}}))
+        self.caps.write_bytes(json.dumps(caps).encode("utf-8"))
+        self.policy.write_bytes(json.dumps({'roles': {'review_panel': {'model': 'gpt-new'}}}).encode("utf-8"))
         state, received = self.launch()
         self.assertEqual(state['slug'], 'gpt-new')
         self.assertEqual(received, ['--model', 'gpt-new'])
@@ -173,9 +173,9 @@ class DispatchPolicyTests(unittest.TestCase):
 
     def test_host_override_explicit_inherit_and_default_hints(self):
         from scripts import model_policy
-        self.policy.write_text(json.dumps({'roles': {'plan': {'model': 'small', 'effort': 'low'}},
-                                           'hosts': {'codex': {'plan': {'model': 'large'}}}}))
-        caps = json.loads(self.caps.read_text())
+        self.policy.write_bytes(json.dumps({'roles': {'plan': {'model': 'small', 'effort': 'low'}},
+                                           'hosts': {'codex': {'plan': {'model': 'large'}}}}).encode("utf-8"))
+        caps = json.loads(self.caps.read_text(encoding="utf-8"))
         selected = model_policy.resolve(self.root, '.project/next', 'plan', caps, {'effort': 'inherit'})
         self.assertEqual(selected['native'], {'model': 'large'})
         self.assertEqual(selected['sources'], {'model': 'hosts.codex.plan', 'effort': 'task'})
@@ -189,7 +189,7 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_native_resume_and_scope_collision(self):
         code, first = self.native('resolve', '--model', 'small')
         self.assertEqual(code, 0, first)
-        self.policy.write_text(json.dumps({'roles': {'plan': {'model': 'large', 'effort': 'low'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'plan': {'model': 'large', 'effort': 'low'}}}).encode("utf-8"))
         self.assertEqual(self.native()[1]['selection'], first['selection'])
         before = (self.root / 'native.json').read_bytes()
         self.assertNotEqual(self.native(scope='M002/active/plan')[0], 0)
@@ -205,13 +205,13 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_new_attempt_reloads_assignment_selection(self):
         state, _ = self.launch()
         dispatch_driver.update_state(state, finished_at='completed', outcome='blocked')
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'large'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'large'}}}).encode("utf-8"))
         _, received = self.launch()
         self.assertEqual(received, ['--model', 'small', '--effort', 'low'])
 
     def test_bundled_helpers_execute_outside_source_checkout(self):
         repo = Path(__file__).parents[1]
-        manifest = json.loads((repo / 'scripts/skill-resources.json').read_text())
+        manifest = json.loads((repo / 'scripts/skill-resources.json').read_text(encoding="utf-8"))
         for skill in manifest['skills']:
             with self.subTest(skill=skill):
                 script = repo / 'skills' / skill / 'scripts/model_policy.py'
@@ -229,8 +229,8 @@ class DispatchPolicyTests(unittest.TestCase):
         fixture = DispatchDriverTests()
         fixture.fixture(self.root)
         child = self.root / 'fake_coder.py'
-        child.write_text("import sys\nassert sys.argv[1:] == ['--model', 'small', '--effort', 'low']\n"
-                         + child.read_text())
+        child.write_bytes(("import sys\nassert sys.argv[1:] == ['--model', 'small', '--effort', 'low']\n"
+                         + child.read_text(encoding="utf-8")).encode("utf-8"))
         subprocess.run(['git', '-C', str(self.root), 'commit', '-qam', 'fixture argv assertion'], check=True,
                        capture_output=True)
         result = fixture.round(self.root, '--model-capabilities', str(self.caps), '--child-command',
@@ -242,27 +242,27 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_invalid_policy_leaves_ready_task_unactivated(self):
         from tests.test_dispatch_driver import DispatchDriverTests
         fixture = DispatchDriverTests()
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'unavailable'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'unavailable'}}}).encode("utf-8"))
         fixture.fixture(self.root)
         result = fixture.round(self.root, '--model-capabilities', str(self.caps))
         self.assertEqual(result['status'], 'blocked', result)
         self.assertIn('unavailable', json.dumps(result))
         self.assertEqual(fixture.branches(self.root), ['gsd-path/M001'])
         for path in (self.root / '.project/tasks').glob('*.md'):
-            fields, _ = dispatch_driver.isolation.task_frontmatter(path.read_text())
+            fields, _ = dispatch_driver.isolation.task_frontmatter(path.read_text(encoding="utf-8"))
             self.assertEqual(fields['status'], 'pending')
 
     def test_changed_explicit_override_cannot_bypass_pinned_selection(self):
         state, _ = self.launch()
         dispatch_driver.update_state(state, finished_at='completed')
         task = self.root / '.project/task.md'
-        task.write_text('---\nid: T001\nmodel: large\n---\n')
+        task.write_bytes('---\nid: T001\nmodel: large\n---\n'.encode("utf-8"))
         state['task_file'] = '.project/task.md'
         with self.assertRaisesRegex(Exception, 'reassign'):
             self.launch(state)
 
     def test_reassign_model_preserves_implicit_effort_and_command(self):
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'small'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'small'}}}).encode("utf-8"))
         self.options.child_command = shlex.join([sys.executable, str(self.child), '{model_args}'])
         state, _ = self.launch()
         dispatch_driver.update_state(state, finished_at='completed')
@@ -276,11 +276,11 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_panel_override_is_scoped_to_one_assignment(self):
         self.options.action = 'panel'
         self.options.model_overrides = self.root / 'overrides.json'
-        self.options.model_overrides.write_text(json.dumps({'panel_gpt': {'model': 'gpt-new'}}))
-        caps = json.loads(self.caps.read_text())
+        self.options.model_overrides.write_bytes(json.dumps({'panel_gpt': {'model': 'gpt-new'}}).encode("utf-8"))
+        caps = json.loads(self.caps.read_text(encoding="utf-8"))
         caps['model']['values'] = ['gpt-new', 'claude-other']
-        self.caps.write_text(json.dumps(caps))
-        self.policy.write_text('{}')
+        self.caps.write_bytes(json.dumps(caps).encode("utf-8"))
+        self.policy.write_bytes('{}'.encode("utf-8"))
         self.state.update(task_id='panel_claude', family='claude', slug='claude-other')
         state, received = self.launch()
         self.assertEqual(state['slug'], 'claude-other')
@@ -295,7 +295,7 @@ class DispatchPolicyTests(unittest.TestCase):
         fixture = DispatchDriverTests()
         fixture.fixture(self.root)
         task = next((self.root / '.project/tasks').glob('T001*.md'))
-        task.write_text(task.read_text().replace('id: T001', 'id: T001\nmodel: unavailable', 1))
+        task.write_bytes(task.read_text(encoding="utf-8").replace('id: T001', 'id: T001\nmodel: unavailable', 1).encode("utf-8"))
         subprocess.run(['git', '-C', str(self.root), 'commit', '-qam', 'fixture task override'],
                        check=True, capture_output=True)
         result = fixture.round(
@@ -310,7 +310,7 @@ class DispatchPolicyTests(unittest.TestCase):
         self.assertFalse((dispatch_driver.records_root(self.root) / 'T001').exists())
         self.assertFalse(any('t001' in branch.lower() for branch in fixture.branches(self.root)))
         task = next((self.root / '.project/tasks').glob('T001*.md'))
-        fields, _ = dispatch_driver.isolation.task_frontmatter(task.read_text())
+        fields, _ = dispatch_driver.isolation.task_frontmatter(task.read_text(encoding="utf-8"))
         self.assertEqual(fields['status'], 'pending')
 
     def test_legacy_retry_does_not_adopt_new_policy(self):
@@ -320,7 +320,7 @@ class DispatchPolicyTests(unittest.TestCase):
         state, received = self.launch()
         self.assertEqual(received, ['owner-argument'])
         dispatch_driver.update_state(state, finished_at='completed', outcome='question')
-        self.policy.write_text(json.dumps({'roles': {'coder': {'model': 'large'}}}))
+        self.policy.write_bytes(json.dumps({'roles': {'coder': {'model': 'large'}}}).encode("utf-8"))
         self.options.model_capabilities = self.caps
         self.options.child_command = shlex.join([sys.executable, str(self.child), '{model_args}'])
         _, received = self.launch()
@@ -342,9 +342,9 @@ class DispatchPolicyTests(unittest.TestCase):
         from tests.test_dispatch_driver import DispatchDriverTests
         fixture = DispatchDriverTests()
         self.policy.unlink()
-        caps = json.loads(self.caps.read_text())
+        caps = json.loads(self.caps.read_text(encoding="utf-8"))
         caps['model']['values'] = ['gpt-6-astra', 'claude-opus', 'grok-4']
-        self.caps.write_text(json.dumps(caps))
+        self.caps.write_bytes(json.dumps(caps).encode("utf-8"))
         fixture.fixture(self.root)
         fixture.set_panel(self.root, 'detected')
         self.assertEqual(fixture.round(self.root, '--wait', '60')['status'], 'done')
@@ -370,7 +370,7 @@ class DispatchPolicyTests(unittest.TestCase):
         self.policy.unlink()
         overrides = self.root / 'review-overrides.json'
         rejected = 'review_wave_1_cycle_1_contract'
-        overrides.write_text(json.dumps({rejected: {'model': 'unavailable'}}))
+        overrides.write_bytes(json.dumps({rejected: {'model': 'unavailable'}}).encode("utf-8"))
         fixture.fixture(self.root)
         fixture.set_deep_review_with_skeptics(self.root)
         self.assertEqual(fixture.round(self.root, '--wait', '60')['status'], 'done')
@@ -392,7 +392,7 @@ class DispatchPolicyTests(unittest.TestCase):
         artifact = self.root / saved['relative']
         original = artifact.read_bytes()
         corrected = records / 'corrected-overrides.json'
-        corrected.write_text(json.dumps({rejected: {'model': 'small'}}))
+        corrected.write_bytes(json.dumps({rejected: {'model': 'small'}}).encode("utf-8"))
         arguments = ('--wait', '60', '--model-capabilities', str(self.caps),
                      '--model-overrides', str(corrected), '--child-command',
                      shlex.join([sys.executable, str(self.root / 'fake_reviewer.py'), '{model_args}']))
@@ -425,7 +425,7 @@ class DispatchPolicyTests(unittest.TestCase):
         fixture = DispatchDriverTests()
         fixture.fixture(self.root)
         task = next((self.root / '.project/tasks').glob('T002*.md'))
-        task.write_text(task.read_text().replace('id: T002', 'id: T002\nmodel: large', 1))
+        task.write_bytes(task.read_text(encoding="utf-8").replace('id: T002', 'id: T002\nmodel: large', 1).encode("utf-8"))
         subprocess.run(['git', '-C', str(self.root), 'commit', '-qam', 'fixture distinct models'],
                        check=True, capture_output=True)
         command = shlex.join([sys.executable, str(self.root / 'fake_coder.py'),
@@ -437,10 +437,10 @@ class DispatchPolicyTests(unittest.TestCase):
             self.assertEqual(fixture.driver(self.root, 'answer', '--task-id', task_id,
                                            '--answer', 'hello')['status'], 'answered')
         records = dispatch_driver.records_root(self.root)
-        caps = json.loads(self.caps.read_text())
+        caps = json.loads(self.caps.read_text(encoding="utf-8"))
         caps['model']['values'] = ['large']
         changed_caps = records / 'capabilities.json'
-        changed_caps.write_text(json.dumps(caps))
+        changed_caps.write_bytes(json.dumps(caps).encode("utf-8"))
         result = fixture.round(self.root, '--wait', '60', '--model-capabilities', str(changed_caps),
                                '--child-command', command)
         self.assertEqual([row['task'] for row in result['landed']], ['T002'], result)
@@ -456,7 +456,7 @@ class DispatchPolicyTests(unittest.TestCase):
     def test_native_roster_filters_before_selection_and_rejects_named_conflicts(self):
         from scripts import model_policy
         plan = self.root / '.project/native-plan.md'
-        plan.write_text('- review_panel: detected\n')
+        plan.write_bytes('- review_panel: detected\n'.encode("utf-8"))
         command = [sys.executable, '-B', str(Path(__file__).parents[1] / 'scripts/review_panel.py'),
                    'resolve', '--plan', str(plan), '--advertised', 'gpt-6,claude-opus,grok-4',
                    '--parent-slug', 'gpt-6']
@@ -470,7 +470,7 @@ class DispatchPolicyTests(unittest.TestCase):
         roster = json.loads(corrected.stdout)['selected']
         self.assertEqual(roster, [{'family': 'grok', 'slug': 'grok-4'}])
         model_policy.validate_panel({'effective_model': roster[0]['slug']}, 'grok', ['gpt', 'claude'])
-        plan.write_text('- review_panel: claude,grok\n')
+        plan.write_bytes('- review_panel: claude,grok\n'.encode("utf-8"))
         explicit = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(explicit.returncode, 2)
         self.assertIn('independent family', json.loads(explicit.stdout)['error'])

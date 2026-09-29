@@ -62,26 +62,24 @@ Depth: full
 def make_project(root: Path) -> Path:
     project_dir = root / ".project"
     (project_dir / "tasks").mkdir(parents=True)
-    (project_dir / "STATE.md").write_text(STATE, encoding="utf-8")
-    (project_dir / "tasks" / "T001-one.md").write_text(
-        TASK.format(task_id="T001", status="done"), encoding="utf-8")
-    (project_dir / "tasks" / "T002-two.md").write_text(
-        TASK.format(task_id="T002", status="pending"), encoding="utf-8")
+    (project_dir / "STATE.md").write_bytes(STATE.encode("utf-8"))
+    (project_dir / "tasks" / "T001-one.md").write_bytes(
+        TASK.format(task_id="T001", status="done").encode("utf-8"))
+    (project_dir / "tasks" / "T002-two.md").write_bytes(
+        TASK.format(task_id="T002", status="pending").encode("utf-8"))
     review_dir = project_dir / "review"
     review_dir.mkdir()
-    (review_dir / "wave-1.cycle1.md").write_text(WAVE_REVIEW, encoding="utf-8")
+    (review_dir / "wave-1.cycle1.md").write_bytes(WAVE_REVIEW.encode("utf-8"))
     build_dir = project_dir / "build"
     build_dir.mkdir()
-    (build_dir / "verify-ledger.jsonl").write_text(
-        json.dumps({"command": "make test", "commit": "abc1234", "result": "pass",
-                    "recorded_at": "2026-09-11T12:00:00+00:00"}) + "\n",
-        encoding="utf-8",
+    (build_dir / "verify-ledger.jsonl").write_bytes(
+        (json.dumps({"command": "make test", "commit": "abc1234", "result": "pass",
+                    "recorded_at": "2026-09-11T12:00:00+00:00"}) + "\n").encode("utf-8"),
     )
-    (build_dir / "usage.jsonl").write_text(
-        json.dumps({"task": "T001", "model": "kimi-k2", "family": "kimi",
+    (build_dir / "usage.jsonl").write_bytes(
+        (json.dumps({"task": "T001", "model": "kimi-k2", "family": "kimi",
                     "tokens_in": 100, "tokens_out": 50, "cost": 0.01,
-                    "phase": "build"}) + "\n",
-        encoding="utf-8",
+                    "phase": "build"}) + "\n").encode("utf-8"),
     )
     return root
 
@@ -95,10 +93,9 @@ class ServeTests(unittest.TestCase):
         parent.mkdir()
         make_project(parent / "demo")
         cls.history = Path(cls.tmp.name) / "history.jsonl"
-        cls.history.write_text(
-            json.dumps({"type": "phase-changed", "root": str(parent / "demo"),
-                        "detail": "plan -> build", "at": "2026-09-11T10:00:00+00:00"}) + "\n",
-            encoding="utf-8",
+        cls.history.write_bytes(
+            (json.dumps({"type": "phase-changed", "root": str(parent / "demo"),
+                        "detail": "plan -> build", "at": "2026-09-11T10:00:00+00:00"}) + "\n").encode("utf-8"),
         )
         cls._env = mock.patch.dict("os.environ", {"GSD_DAEMON_HISTORY": str(cls.history)})
         cls._env.start()
@@ -231,7 +228,7 @@ class ServeHistoryTests(unittest.TestCase):
         state = project / ".project" / "STATE.md"
         # Replace atomically: a poll must never see a half-written STATE.md.
         staged = state.with_name("STATE.md.tmp")
-        staged.write_text(state.read_text(encoding="utf-8").replace("phase: build", "phase: ship"), encoding="utf-8")
+        staged.write_bytes(state.read_text(encoding="utf-8").replace("phase: build", "phase: ship").encode("utf-8"))
         os.utime(staged, (time.time() + 5, time.time() + 5))
         os.replace(staged, state)
         while "phase-changed" not in (history.read_text(encoding="utf-8") if history.exists() else "") and time.time() < deadline:
@@ -279,7 +276,7 @@ class ParentsEndpointTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.config_path = Path(cls.tmp.name) / "daemon.json"
-        cls.config_path.write_text('{"parents": []}', encoding="utf-8")
+        cls.config_path.write_bytes('{"parents": []}'.encode("utf-8"))
         cls._env = mock.patch.dict("os.environ", {"GSD_DAEMON_CONFIG": str(cls.config_path)})
         cls._env.start()
         cls.addClassCleanup(cls._env.stop)
@@ -335,10 +332,10 @@ class BrowseEndpointTests(unittest.TestCase):
         (root / "alpha").mkdir(parents=True)
         (root / "beta").mkdir()
         (root / ".hidden").mkdir()
-        (root / "afile.txt").write_text("x", encoding="utf-8")
+        (root / "afile.txt").write_bytes("x".encode("utf-8"))
         (root / "proj" / ".project").mkdir(parents=True)
-        (root / "proj" / ".project" / "STATE.md").write_text(
-            "---\npipeline: gsd-path/v2\nproject: p\n", encoding="utf-8")
+        (root / "proj" / ".project" / "STATE.md").write_bytes(
+            "---\npipeline: gsd-path/v2\nproject: p\n".encode("utf-8"))
         cls.root = root
         watcher = Watcher(Config(parents=[]))
         cls.server = serve(watcher, port=0)

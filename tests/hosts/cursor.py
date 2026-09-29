@@ -25,7 +25,7 @@ def command(prompt_path, resume=None):
     args = ["cursor-agent", "-p", "--output-format", "stream-json", "--force", "--trust"]
     if resume:
         args += ["--resume", resume]
-    return args + [Path(prompt_path).read_text()]
+    return args + [Path(prompt_path).read_text(encoding="utf-8")]
 
 
 def _events(lines):
@@ -76,7 +76,7 @@ def bind_child(run_root, child_id):
     """
     attempts = {}
     for events in sorted(Path(run_root).glob("quick/run-*/events.jsonl")):
-        for line in events.read_text().splitlines():
+        for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])
             except (ValueError, KeyError, TypeError):

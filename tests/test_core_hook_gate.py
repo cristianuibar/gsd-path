@@ -21,12 +21,12 @@ class CoreHookGateTests(unittest.TestCase):
         self.core.mkdir()
         self.marker = self.root / "hook-ran"
         hook = self.root / "original.py"
-        hook.write_text(
+        hook.write_bytes(
             "import pathlib, sys\n"
             f"pathlib.Path({str(self.marker)!r}).write_text('ran')\n"
             "sys.stdout.buffer.write(sys.stdin.buffer.read())\n"
             "sys.stderr.write('original hook error')\n"
-            "raise SystemExit(2)\n"
+            "raise SystemExit(2)\n".encode("utf-8")
         )
         self.command = shlex.join([sys.executable, str(hook)])
 
@@ -53,7 +53,7 @@ class CoreHookGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, payload)
         self.assertEqual(result.stderr, b"original hook error")
-        self.assertEqual(self.marker.read_text(), "ran")
+        self.assertEqual(self.marker.read_text(encoding="utf-8"), "ran")
 
     def test_uncertain_or_unrelated_cwd_does_not_bypass_core(self):
         for value in (b"bad json", b"null", b"{}", b'{"cwd":null}', b'{"cwd":"relative"}',
@@ -63,7 +63,7 @@ class CoreHookGateTests(unittest.TestCase):
 
     def test_recorded_native_codex_events_are_scoped(self):
         trace = SCRIPT.parent.parent / "docs/trust-validation/evidence/releases/1.0.0/codex-quick-4295d75/guard/traced-hook-payloads.log"
-        events = [json.loads(line) for line in trace.read_text().splitlines() if line.startswith("{")]
+        events = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line.startswith("{")]
         self.assertTrue(events)
         for event in events:
             with self.subTest(tool=event["tool_name"]):

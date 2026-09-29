@@ -35,11 +35,9 @@ files:
 def make_project(root: Path, phase: str = "build", status: str = "active") -> Path:
     project_dir = root / ".project"
     (project_dir / "tasks").mkdir(parents=True, exist_ok=True)
-    (project_dir / "STATE.md").write_text(STATE.format(phase=phase, status=status), encoding="utf-8")
-    (project_dir / "tasks" / "T001-one.md").write_text(TASK.format(task_id="T001", status="done"),
-                                                        encoding="utf-8")
-    (project_dir / "tasks" / "T002-two.md").write_text(TASK.format(task_id="T002", status="pending"),
-                                                       encoding="utf-8")
+    (project_dir / "STATE.md").write_bytes(STATE.format(phase=phase, status=status).encode("utf-8"))
+    (project_dir / "tasks" / "T001-one.md").write_bytes(TASK.format(task_id="T001", status="done").encode("utf-8"))
+    (project_dir / "tasks" / "T002-two.md").write_bytes(TASK.format(task_id="T002", status="pending").encode("utf-8"))
     return root
 
 
@@ -83,8 +81,8 @@ class WatcherTests(unittest.TestCase):
         watcher = self.watcher()
         watcher.poll_once()
         touch(self.project)
-        (self.project / ".project" / "STATE.md").write_text(
-            STATE.format(phase="ship", status="active"), encoding="utf-8")
+        (self.project / ".project" / "STATE.md").write_bytes(
+            STATE.format(phase="ship", status="active").encode("utf-8"))
         events = watcher.poll_once()
         changed = self.events_of(events, "phase-changed")
         self.assertEqual(len(changed), 1)
@@ -95,8 +93,8 @@ class WatcherTests(unittest.TestCase):
         watcher = self.watcher()
         watcher.poll_once()
         touch(self.project)
-        (self.project / ".project" / "STATE.md").write_text(
-            STATE.format(phase="build", status="blocked"), encoding="utf-8")
+        (self.project / ".project" / "STATE.md").write_bytes(
+            STATE.format(phase="build", status="blocked").encode("utf-8"))
         events = watcher.poll_once()
         self.assertEqual(len(self.events_of(events, "blocked")), 1)
         status_changed = self.events_of(events, "status-changed")
@@ -107,8 +105,8 @@ class WatcherTests(unittest.TestCase):
         watcher = self.watcher()
         watcher.poll_once()
         touch(self.project)
-        (self.project / ".project" / "tasks" / "T002-two.md").write_text(
-            TASK.format(task_id="T002", status="done"), encoding="utf-8")
+        (self.project / ".project" / "tasks" / "T002-two.md").write_bytes(
+            TASK.format(task_id="T002", status="done").encode("utf-8"))
         events = watcher.poll_once()
         changed = self.events_of(events, "tasks-changed")
         self.assertEqual(len(changed), 1)
@@ -146,8 +144,8 @@ class WatcherTests(unittest.TestCase):
         watcher = self.watcher(probe_hook=calls.append)
         watcher.poll_once()
         touch(self.project)
-        (self.project / ".project" / "STATE.md").write_text(
-            STATE.format(phase="ship", status="active"), encoding="utf-8")
+        (self.project / ".project" / "STATE.md").write_bytes(
+            STATE.format(phase="ship", status="active").encode("utf-8"))
         watcher.poll_once()
         self.assertEqual(calls, [str(self.project), str(self.project)])
 

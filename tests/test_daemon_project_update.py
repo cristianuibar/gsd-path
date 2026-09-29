@@ -61,8 +61,8 @@ class ProjectUpdateTests(unittest.TestCase):
             self.orca('wait', '--page', self.page, '--selector', '.plugin-controls:not([disabled])')
             self.assertIn('Update complete', self.js("document.querySelector('#plugin-feedback').textContent"))
             self.assertIn('Using local plugin source', self.js("document.querySelector('#plugin-feedback').textContent"))
-            pin = json.loads((repo / '.gsd-path/runtime.json').read_text())
-            self.assertEqual(pin['version'], json.loads((SOURCE / 'package.json').read_text())['version'])
+            pin = json.loads((repo / '.gsd-path/runtime.json').read_text(encoding="utf-8"))
+            self.assertEqual(pin['version'], json.loads((SOURCE / 'package.json').read_text(encoding="utf-8"))['version'])
             self.assertFalse(runtime.exists())
             self.assertNotIn('Unknown —', self.js('document.body.innerText'))
             # A second click upgrades the pinned runtime, preserving its declaration.
@@ -70,4 +70,4 @@ class ProjectUpdateTests(unittest.TestCase):
             self.orca('wait', '--page', self.page, '--selector', '.plugin-controls:not([disabled])')
             self.assertIn('Update complete', self.js("document.querySelector('#plugin-feedback').textContent"))
             self.assertIn('Using local plugin source', self.js("document.querySelector('#plugin-feedback').textContent"))
-            self.assertEqual(json.loads((repo / '.gsd-path/runtime.json').read_text()), pin)
+            self.assertEqual(json.loads((repo / '.gsd-path/runtime.json').read_text(encoding="utf-8")), pin)

@@ -95,7 +95,7 @@ class BuildStateTests(unittest.TestCase):
         run_git(self.repo, "switch", "-q", "-c", BRANCH)
         (self.repo / ".project" / "plan").mkdir(parents=True)
         (self.repo / ".project" / "tasks").mkdir()
-        (self.repo / ".project" / "STATE.md").write_text(
+        (self.repo / ".project" / "STATE.md").write_bytes(
             f"""---
 pipeline: gsd-path/v2
 project: test
@@ -105,8 +105,7 @@ status: active
 branch: {BRANCH}
 archive: null
 ---
-""",
-            encoding="utf-8",
+""".encode("utf-8"),
         )
 
     def write_plan(
@@ -115,13 +114,13 @@ archive: null
             tuple[tuple[str, str, tuple[str, ...], tuple[str, ...]], ...], ...
         ],
     ) -> None:
-        (self.repo / ".project" / "plan" / "PLAN.md").write_text(
-            plan_text(rows_by_wave), encoding="utf-8"
+        (self.repo / ".project" / "plan" / "PLAN.md").write_bytes(
+            plan_text(rows_by_wave).encode("utf-8")
         )
 
     def write_task(self, task_id: str, content: str, slug: str = "task") -> None:
-        (self.repo / ".project" / "tasks" / f"{task_id}-{slug}.md").write_text(
-            content, encoding="utf-8"
+        (self.repo / ".project" / "tasks" / f"{task_id}-{slug}.md").write_bytes(
+            content.encode("utf-8")
         )
 
     def commit_all(self, subject: str) -> str:
@@ -182,9 +181,8 @@ archive: null
         self.write_plan(((("T001", "One", (), ("one.py",)),),))
         self.write_task("T001", task_text("T001", "One", 1, (), ("one.py",)))
         state_path = self.repo / ".project" / "STATE.md"
-        state_path.write_text(
-            state_path.read_text(encoding="utf-8").replace("archive: null\n", ""),
-            encoding="utf-8",
+        state_path.write_bytes(
+            state_path.read_text(encoding="utf-8").replace("archive: null\n", "").encode("utf-8"),
         )
         self.commit_all("invalid state")
 
@@ -226,11 +224,10 @@ archive: null
                 worktree=str(self.repo),
             ),
         )
-        task_path.write_text(
-            task_path.read_text(encoding="utf-8") + "- implementation complete\n",
-            encoding="utf-8",
+        task_path.write_bytes(
+            (task_path.read_text(encoding="utf-8") + "- implementation complete\n").encode("utf-8"),
         )
-        (self.repo / "one.py").write_text("done = True\n", encoding="utf-8")
+        (self.repo / "one.py").write_bytes("done = True\n".encode("utf-8"))
         isolation.land(
             self.repo,
             self.repo,
@@ -428,8 +425,8 @@ archive: null
 
     def test_ready_rejects_a_noncanonical_task_filename(self) -> None:
         self.write_plan(((("T001", "One", (), ("one.py",)),),))
-        (self.repo / ".project" / "tasks" / "T001.md").write_text(
-            task_text("T001", "One", 1, (), ("one.py",)), encoding="utf-8"
+        (self.repo / ".project" / "tasks" / "T001.md").write_bytes(
+            task_text("T001", "One", 1, (), ("one.py",)).encode("utf-8")
         )
         self.commit_all("plan")
 
@@ -441,8 +438,8 @@ archive: null
     def test_ready_rejects_a_stray_entry_beside_a_canonical_task(self) -> None:
         self.write_plan(((("T001", "One", (), ("one.py",)),),))
         self.write_task("T001", task_text("T001", "One", 1, (), ("one.py",)))
-        (self.repo / ".project" / "tasks" / "notes.md").write_text(
-            "post-review notes\n", encoding="utf-8"
+        (self.repo / ".project" / "tasks" / "notes.md").write_bytes(
+            "post-review notes\n".encode("utf-8")
         )
         self.commit_all("plan")
 
@@ -456,8 +453,8 @@ archive: null
         self.write_plan(((("T001", "One", (), ("one.py",)),),))
         self.write_task("T001", task_text("T001", "One", 1, (), ("one.py",)))
         self.commit_all("plan")
-        (self.repo / ".git" / "info" / "exclude").write_text(".DS_Store\n", encoding="utf-8")
-        (self.repo / ".project" / "tasks" / ".DS_Store").write_text("finder\n", encoding="utf-8")
+        (self.repo / ".git" / "info" / "exclude").write_bytes(".DS_Store\n".encode("utf-8"))
+        (self.repo / ".project" / "tasks" / ".DS_Store").write_bytes("finder\n".encode("utf-8"))
 
         result, payload = self.cli("ready")
 
@@ -477,7 +474,7 @@ archive: null
 
     def prepare_in_progress_task(self) -> tuple[str, str]:
         self.write_plan(((("T001", "Implement feature", (), ("app.py",)),),))
-        (self.repo / "app.py").write_text("value = 0\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("value = 0\n".encode("utf-8"))
         self.write_task(
             "T001", task_text("T001", "Implement feature", 1, (), ("app.py",))
         )
@@ -499,10 +496,10 @@ archive: null
         return base, ".project/tasks/T001-task.md"
 
     def land_task(self, task_file: str, sequence: int) -> str:
-        (self.repo / "app.py").write_text(f"value = {sequence}\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes(f"value = {sequence}\n".encode("utf-8"))
         current = (self.repo / task_file).read_text(encoding="utf-8")
-        (self.repo / task_file).write_text(
-            current + f"- implementation {sequence}\n", encoding="utf-8"
+        (self.repo / task_file).write_bytes(
+            (current + f"- implementation {sequence}\n").encode("utf-8")
         )
         fields = dict(
             line.split(": ", 1)
@@ -548,15 +545,14 @@ archive: null
         self.assertEqual(payload["landed_commit"], landed)
 
     def test_reconcile_rejects_rewritten_ancestral_dispatch_base(self) -> None:
-        (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        (self.repo / "seed.txt").write_bytes("seed\n".encode("utf-8"))
         earlier = self.commit_all("seed")
         base, task_file = self.prepare_in_progress_task()
         landed = self.land_task(task_file, 1)
         path = self.repo / task_file
-        path.write_text(
+        path.write_bytes(
             path.read_text(encoding="utf-8")
-            .replace(f"base: {base}", f"base: {earlier}"),
-            encoding="utf-8",
+            .replace(f"base: {base}", f"base: {earlier}").encode("utf-8"),
         )
 
         result, payload = self.cli("reconcile", "--task-id", "T001")
@@ -592,7 +588,7 @@ archive: null
 
     def attest_task_outside_land(self) -> tuple[str, str]:
         base, task_file = self.prepare_in_progress_task()
-        (self.repo / "app.py").write_text("value = 1\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("value = 1\n".encode("utf-8"))
         self.write_task(
             "T001",
             task_text(
@@ -682,9 +678,9 @@ archive: null
         )
 
     def test_verify_ledger_records_and_looks_up_runs(self) -> None:
-        (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        (self.repo / "seed.txt").write_bytes("seed\n".encode("utf-8"))
         first = self.commit_all("seed")
-        (self.repo / "seed.txt").write_text("more\n", encoding="utf-8")
+        (self.repo / "seed.txt").write_bytes("more\n".encode("utf-8"))
         second = self.commit_all("more")
         command = "python3  -m unittest   tests.test_one"
 
@@ -725,7 +721,7 @@ archive: null
         self.assertEqual(payload["entry"]["result"], "fail")
 
     def test_verify_record_refuses_an_ignored_ledger(self) -> None:
-        (self.repo / ".gitignore").write_text("build/\n", encoding="utf-8")
+        (self.repo / ".gitignore").write_bytes("build/\n".encode("utf-8"))
         commit = self.commit_all("product rule")
         result, _ = self.cli(
             "verify-record", "--command", "true", "--commit", commit, "--result", "pass"
@@ -747,16 +743,16 @@ archive: null
         _, recorded = self.cli("verify-record", "--command", multiline, "--commit", commit, "--result", "pass")
         self.assertEqual(recorded["entry"]["command"], multiline)
         ledger = self.repo / ".project/build/verify-ledger.jsonl"
-        ledger.write_text(json.dumps({"command": passed, "commit": commit, "result": "pass", "recorded_at": "legacy"}) + "\n")
+        ledger.write_bytes((json.dumps({"command": passed, "commit": commit, "result": "pass", "recorded_at": "legacy"}) + "\n").encode("utf-8"))
         _, result = self.cli("verify-lookup", "--command", passed, "--commit", commit)
         self.assertFalse(result["reuse"])
 
     def test_verify_ledger_rejects_malformed_entries_and_short_commits(self) -> None:
-        (self.repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        (self.repo / "seed.txt").write_bytes("seed\n".encode("utf-8"))
         commit = self.commit_all("seed")
         ledger = self.repo / ".project" / "build" / "verify-ledger.jsonl"
         ledger.parent.mkdir()
-        ledger.write_text('{"command": "x"}\n', encoding="utf-8")
+        ledger.write_bytes('{"command": "x"}\n'.encode("utf-8"))
 
         result, payload = self.cli("verify-lookup", "--command", "x", "--commit", commit)
         self.assertEqual(result.returncode, 1)

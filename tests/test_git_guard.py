@@ -137,12 +137,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("init", "-q")
         archived = self.repo / ".project" / "archive" / "001-mvp"
         archived.mkdir(parents=True)
-        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (self.repo / ".project" / "STATE.md").write_text(
-            "---\npipeline: gsd-path/v2\narchive: null\n---\n",
-            encoding="utf-8",
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
+            "---\npipeline: gsd-path/v2\narchive: null\n---\n".encode("utf-8"),
         )
-        (self.repo / "app.py").write_text("print('hi')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('hi')\n".encode("utf-8"))
         self.git("add", "-A")
         self.commit("seed")
 
@@ -172,7 +171,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         rendered = subject + "\n"
         if body:
             rendered += "\n" + body + "\n"
-        message.write_text(rendered, encoding="utf-8")
+        message.write_bytes(rendered.encode("utf-8"))
         return subprocess.run(
             [sys.executable, str(SCRIPT), str(message)],
             cwd=self.repo,
@@ -181,8 +180,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
         )
 
     def test_blocks_staged_archive_tamper_and_allows_clean_commit(self):
-        (self.repo / ".project" / "archive" / "001-mvp" / "MANIFEST.md").write_text(
-            "tampered\n", encoding="utf-8"
+        (self.repo / ".project" / "archive" / "001-mvp" / "MANIFEST.md").write_bytes(
+            "tampered\n".encode("utf-8")
         )
         self.git("add", "-A")
         result = self.run_guard("fix: tweak manifest")
@@ -191,14 +190,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         self.git("restore", "--staged", ".")
         self.git("checkout", "--", ".")
-        (self.repo / "app.py").write_text("print('changed')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('changed')\n".encode("utf-8"))
         self.git("add", "-A")
         result = self.run_guard("feat: change app")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_blocks_late_addition_to_a_committed_archive(self):
-        (self.repo / ".project" / "archive" / "001-mvp" / "late.txt").write_text(
-            "late\n", encoding="utf-8"
+        (self.repo / ".project" / "archive" / "001-mvp" / "late.txt").write_bytes(
+            "late\n".encode("utf-8")
         )
         self.git("add", "-A")
         result = self.run_guard("feat: late archive addition")
@@ -209,12 +208,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archived = self.repo / ".project" / "archive" / "002-next"
         archived.mkdir()
-        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (self.repo / ".project" / "STATE.md").write_text(
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n",
-            encoding="utf-8",
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         reviewed_head = self.head()
@@ -250,7 +248,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         self.install_hooks()
         malformed_message = self.repo / "COMMIT_MSG"
-        malformed_message.write_text("ship: M002 — next\n" + body + "\n", encoding="utf-8")
+        malformed_message.write_bytes(("ship: M002 — next\n" + body + "\n").encode("utf-8"))
         refused = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
              "commit", "-q", "-F", str(malformed_message)],
@@ -285,13 +283,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archived = self.repo / ".project" / "archive" / "002-next"
         archived.mkdir()
-        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (self.repo / ".project" / "STATE.md").write_text(
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
             "archive: .project/archive/002-next\n"
-            "integration_default: direct\nintegration: direct\n---\n",
-            encoding="utf-8",
+            "integration_default: direct\nintegration: direct\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         reviewed_head = self.head()
@@ -305,12 +302,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
         state_path = self.repo / ".project" / "STATE.md"
-        state_path.write_text(
+        state_path.write_bytes(
             state_path.read_text(encoding="utf-8").replace(
                 "integration: direct\n",
                 "integration: direct\nintegration_source: default\n",
-            ),
-            encoding="utf-8",
+            ).encode("utf-8"),
         )
         self.git("add", ".project/STATE.md")
         result = self.run_guard("ship: M002 — next", body)
@@ -320,12 +316,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
         archive.mkdir()
-        (archive / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (self.repo / ".project/STATE.md").write_text(
+        (archive / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project/STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n",
-            encoding="utf-8",
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         reviewed_head = self.head()
@@ -347,17 +342,17 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertIn("exactly one new current archive", duplicate.stderr)
 
     def test_blocks_ship_commit_with_non_project_paths(self):
-        (self.repo / "app.py").write_text("print('ship')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('ship')\n".encode("utf-8"))
         (self.repo / ".project" / "STATE.md").parent.mkdir(parents=True, exist_ok=True)
-        (self.repo / ".project" / "STATE.md").write_text("state\n", encoding="utf-8")
+        (self.repo / ".project" / "STATE.md").write_bytes("state\n".encode("utf-8"))
         self.git("add", "-A")
         result = self.run_guard("ship: 002-next")
         self.assertEqual(result.returncode, 1)
         self.assertIn("only touch .project/", result.stderr)
 
     def test_pre_commit_blocks_staged_archive_tamper(self):
-        (self.repo / ".project" / "archive" / "001-mvp" / "MANIFEST.md").write_text(
-            "tampered\n", encoding="utf-8"
+        (self.repo / ".project" / "archive" / "001-mvp" / "MANIFEST.md").write_bytes(
+            "tampered\n".encode("utf-8")
         )
         self.git("add", "-A")
         result = subprocess.run(
@@ -372,21 +367,19 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def install_hooks(self):
         hooks = self.repo / ".git" / "hooks"
         pre_commit = hooks / "pre-commit"
-        pre_commit.write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n',
-            encoding="utf-8",
+        pre_commit.write_bytes(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n'.encode("utf-8"),
         )
         commit_msg = hooks / "commit-msg"
-        commit_msg.write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" commit-msg "$1"\n',
-            encoding="utf-8",
+        commit_msg.write_bytes(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" commit-msg "$1"\n'.encode("utf-8"),
         )
         pre_commit.chmod(0o755)
         commit_msg.chmod(0o755)
 
     def test_commit_after_ship_commit_is_not_blocked_at_pre_commit(self):
-        (self.repo / ".project" / "STATE.md").write_text(
-            "---\npipeline: gsd-path/v2\narchive: null\nnote: stale\n---\n", encoding="utf-8"
+        (self.repo / ".project" / "STATE.md").write_bytes(
+            "---\npipeline: gsd-path/v2\narchive: null\nnote: stale\n---\n".encode("utf-8")
         )
         self.git("add", "-A")
         self.commit("ship: stale previous message")
@@ -394,7 +387,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         # The next commit runs pre-commit while .git/COMMIT_EDITMSG still
         # holds the previous `ship:` subject; it must not be blocked.
-        (self.repo / "app.py").write_text("print('changed')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('changed')\n".encode("utf-8"))
         self.git("add", "-A")
         result = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
@@ -406,7 +399,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
         # A real ship-scope violation is still blocked at commit-msg.
-        (self.repo / "app.py").write_text("print('ship')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('ship')\n".encode("utf-8"))
         self.git("add", "-A")
         result = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
@@ -423,12 +416,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
         hooks = repo / ".git" / "hooks"
-        (hooks / "pre-commit").write_text(
-            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n',
-            encoding="utf-8",
+        (hooks / "pre-commit").write_bytes(
+            f'#!/bin/sh\nexec "{sys.executable}" "{SCRIPT}" pre-commit\n'.encode("utf-8"),
         )
         (hooks / "pre-commit").chmod(0o755)
-        (repo / "README.md").write_text("first\n", encoding="utf-8")
+        (repo / "README.md").write_bytes("first\n".encode("utf-8"))
         subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
 
         result = subprocess.run(
@@ -461,12 +453,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("checkout", "-q", "-b", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
         archive.mkdir()
-        (archive / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (self.repo / ".project/STATE.md").write_text(
+        (archive / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (self.repo / ".project/STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n",
-            encoding="utf-8",
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         self.commit("ship: M002 — next")
@@ -499,21 +490,18 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archive = self.repo / ".project/archive/002-next"
         archive.mkdir()
-        (archive / "MANIFEST.md").write_text(
+        (archive / "MANIFEST.md").write_bytes(
             "# Archive — 002-next\n\nMilestone: next\nAbandoned: 2026-08-23\n"
-            "Reason: User ruled: stop\n",
-            encoding="utf-8",
+            "Reason: User ruled: stop\n".encode("utf-8"),
         )
-        (self.repo / ".project/ROADMAP.md").write_text(
+        (self.repo / ".project/ROADMAP.md").write_bytes(
             "# Roadmap\n\n### M002 — next\n\nStatus: abandoned\n"
-            "Archive: .project/archive/002-next\n",
-            encoding="utf-8",
+            "Archive: .project/archive/002-next\n".encode("utf-8"),
         )
-        (self.repo / ".project/STATE.md").write_text(
+        (self.repo / ".project/STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: null\n"
             "phase: roadmap\nstatus: active\nbranch: gsd-path/M002\n"
-            "archive: null\n---\n",
-            encoding="utf-8",
+            "archive: null\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         self.install_hooks()
@@ -554,14 +542,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         tasks = self.repo / ".project" / "tasks"
         tasks.mkdir()
-        (tasks / "T001-demo.md").write_text(TASK_FILE, encoding="utf-8")
+        (tasks / "T001-demo.md").write_bytes(TASK_FILE.encode("utf-8"))
         return self.write_state(phase, status, subject="build: enter build")
 
     def write_state(self, phase, status, archive="null", subject=None):
-        (self.repo / ".project" / "STATE.md").write_text(
+        (self.repo / ".project" / "STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
-            f"phase: {phase}\nstatus: {status}\nbranch: gsd-path/M002\narchive: {archive}\n---\n",
-            encoding="utf-8",
+            f"phase: {phase}\nstatus: {status}\nbranch: gsd-path/M002\narchive: {archive}\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         self.commit(subject or f"router: enter {phase}/{status}")
@@ -577,18 +564,18 @@ class GitGuardEndToEndTests(unittest.TestCase):
         )
 
     def stage_product_change(self):
-        (self.repo / "app.py").write_text("print('landed')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('landed')\n".encode("utf-8"))
         self.git("add", "-A")
 
     def stamp_task(self, base):
         """Rewrite the task file the way isolation.py land stamps a landed task."""
         task = self.repo / ".project" / "tasks" / "T001-demo.md"
-        text = task.read_text()
+        text = task.read_text(encoding="utf-8")
         for field, value in (
             ("status", "done"), ("base", base), ("worktree", "null"), ("task_branch", "null")
         ):
             text = re.sub(rf"^{field}: .*$", f"{field}: {value}", text, count=1, flags=re.M)
-        task.write_text(text + "landed\n", encoding="utf-8")
+        task.write_bytes((text + "landed\n").encode("utf-8"))
 
     def landing_body(self, base, *paths):
         return f"Task: .project/tasks/T001-demo.md\nBase: {base}\nFiles:\n" + "\n".join(
@@ -607,14 +594,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertIn("Base: must be", forged.stderr)
 
         task = self.repo / ".project" / "tasks" / "T001-demo.md"
-        task.write_text(task.read_text().replace("in-progress", "done"), encoding="utf-8")
+        task.write_bytes(task.read_text(encoding="utf-8").replace("in-progress", "done").encode("utf-8"))
         self.git("add", "-A", "--", ".project/tasks/T001-demo.md")
         unstamped = self.run_guard("T001: Demo task", self.landing_body(head, "app.py"))
         self.assertEqual(1, unstamped.returncode)
         self.assertIn("landed task frontmatter has invalid", unstamped.stderr)
 
         self.stamp_task(head)
-        (self.repo / "extra.py").write_text("print('stray')\n", encoding="utf-8")
+        (self.repo / "extra.py").write_bytes("print('stray')\n".encode("utf-8"))
         self.git("add", "-A", "--", "extra.py", ".project/tasks/T001-demo.md")
         stray = self.run_guard("T001: Demo task", self.landing_body(head, "app.py", "extra.py"))
         self.assertEqual(1, stray.returncode)
@@ -633,9 +620,8 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
         self.git("restore", "--staged", ".")
         self.git("checkout", "--", ".")
-        (self.repo / ".project" / "STATE.md").write_text(
-            (self.repo / ".project" / "STATE.md").read_text() + "log line\n",
-            encoding="utf-8",
+        (self.repo / ".project" / "STATE.md").write_bytes(
+            ((self.repo / ".project" / "STATE.md").read_text(encoding="utf-8") + "log line\n").encode("utf-8"),
         )
         self.git("add", ".project/STATE.md")
         bookkeeping = self.run_guard("build: checkpoint bookkeeping")
@@ -652,9 +638,9 @@ class GitGuardEndToEndTests(unittest.TestCase):
             "commit", "-q", "-m", "T001: Demo task", "-m", body,
         )
 
-        (self.repo / "app.py").write_text("print('again')\n", encoding="utf-8")
+        (self.repo / "app.py").write_bytes("print('again')\n".encode("utf-8"))
         task = self.repo / ".project" / "tasks" / "T001-demo.md"
-        task.write_text(task.read_text() + "more\n", encoding="utf-8")
+        task.write_bytes((task.read_text(encoding="utf-8") + "more\n").encode("utf-8"))
         self.git("add", "-A", "--", "app.py", ".project/tasks/T001-demo.md")
         again = self.run_guard("T001: Demo task", body)
         self.assertEqual(1, again.returncode)
@@ -663,15 +649,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def test_landing_accepts_a_commented_inline_files_list(self):
         self.enter_build()
         task = self.repo / ".project" / "tasks" / "T001-demo.md"
-        task.write_text(
-            task.read_text().replace("files:\n  - app.py", "files: ['plan #1.py'] # planning note"),
-            encoding="utf-8",
+        task.write_bytes(
+            task.read_text(encoding="utf-8").replace("files:\n  - app.py", "files: ['plan #1.py'] # planning note").encode("utf-8"),
         )
-        (self.repo / "plan #1.py").write_text("base\n", encoding="utf-8")
+        (self.repo / "plan #1.py").write_bytes("base\n".encode("utf-8"))
         self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
         self.commit("build: declare a quoted path")
         head = self.head()
-        (self.repo / "plan #1.py").write_text("done\n", encoding="utf-8")
+        (self.repo / "plan #1.py").write_bytes("done\n".encode("utf-8"))
         self.stamp_task(head)
         self.git("add", "-A", "--", ".project/tasks/T001-demo.md", "plan #1.py")
         landing = self.run_guard("T001: Demo task", self.landing_body(head, "plan #1.py"))
@@ -680,7 +665,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def test_build_entry_commit_must_stay_project_only(self):
         self.enter_build(phase="plan")
         state = self.repo / ".project" / "STATE.md"
-        state.write_text(state.read_text().replace("phase: plan", "phase: build"), encoding="utf-8")
+        state.write_bytes(state.read_text(encoding="utf-8").replace("phase: plan", "phase: build").encode("utf-8"))
         self.stage_product_change()
         result = self.run_guard("build: start plus product")
         self.assertEqual(1, result.returncode)
@@ -689,9 +674,9 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def test_guard_install_artifacts_commit_as_bookkeeping(self):
         self.enter_build()
         (self.repo / ".gsd-path").mkdir()
-        (self.repo / ".gsd-path" / "git_guard.py").write_text("# guard\n", encoding="utf-8")
+        (self.repo / ".gsd-path" / "git_guard.py").write_bytes("# guard\n".encode("utf-8"))
         (self.repo / ".codex").mkdir()
-        (self.repo / ".codex" / "hooks.json").write_text("{}\n", encoding="utf-8")
+        (self.repo / ".codex" / "hooks.json").write_bytes("{}\n".encode("utf-8"))
         self.git("add", "-A", "--", ".gsd-path", ".codex")
         result = self.run_guard("router: install guard hooks")
         self.assertEqual(0, result.returncode, result.stderr)
@@ -726,7 +711,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
 
     def test_bookkeeping_commits_pass_outside_build(self):
         self.enter_build(phase="ship", status="blocked")
-        (self.repo / ".project" / "note.md").write_text("ok\n", encoding="utf-8")
+        (self.repo / ".project" / "note.md").write_bytes("ok\n".encode("utf-8"))
         self.git("add", "-A")
         result = self.run_guard("router: record final gap")
         self.assertEqual(0, result.returncode, result.stderr)
@@ -771,7 +756,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                          subject="ship: M002 — next")
         # Execute installed selection against a real committed roadmap and fetched ref.
         self.git("checkout", "-q", "-b", "fixture/default")
-        (self.repo / ".project" / "ROADMAP.md").write_text("### M002 — next\nStatus: shipped\n\n### M003 — later\nStatus: pending\nDepends on: [M002]\n")
+        (self.repo / ".project" / "ROADMAP.md").write_bytes("### M002 — next\nStatus: shipped\n\n### M003 — later\nStatus: pending\nDepends on: [M002]\n".encode("utf-8"))
         self.git("add", ".project/ROADMAP.md")
         self.commit("fixture: next roadmap")
         base = self.head()
@@ -788,7 +773,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             if rewritten:
                 self.write_state("build", "active")
             for path in ("app.py", ".project/note.md"):
-                (self.repo / path).write_text("new work\n")
+                (self.repo / path).write_bytes("new work\n".encode("utf-8"))
                 self.git("add", "-A")
                 result = self.run_guard("chore: new work")
                 with self.subTest(rewritten=rewritten, path=path):
@@ -862,7 +847,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             (sibling / "contents/app.py").symlink_to(self.repo / "app.py")
             (sibling / "safe").mkdir()
             (sibling / "src").mkdir()
-            (sibling / "src/app.py").write_text("new\n")
+            (sibling / "src/app.py").write_bytes("new\n".encode("utf-8"))
             (sibling / "dest/src").mkdir()
             (sibling / "dest/src/app.py").symlink_to(self.repo / "app.py")
             other_hooks = sibling / ".gsd-path"
@@ -1003,7 +988,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
     def test_fails_closed_outside_git(self):
         with tempfile.TemporaryDirectory() as empty:
             message = Path(empty) / "COMMIT_MSG"
-            message.write_text("feat: anything\n", encoding="utf-8")
+            message.write_bytes("feat: anything\n".encode("utf-8"))
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), str(message)],
                 cwd=empty,

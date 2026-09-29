@@ -209,7 +209,7 @@ class ReviewPanelResolveTests(unittest.TestCase):
 class ReviewPanelMergeTests(unittest.TestCase):
     def write(self, directory: Path, name: str, content: str) -> Path:
         path = directory / name
-        path.write_text(content, encoding="utf-8")
+        path.write_bytes(content.encode("utf-8"))
         return path
 
     def test_agreeing_families_with_different_wording_are_not_a_conflict(self) -> None:
@@ -314,7 +314,7 @@ class ReviewPanelCliTests(unittest.TestCase):
     def test_resolve_cli_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             plan = Path(temporary) / "PLAN.md"
-            plan.write_text("## Config\n- review_panel: detected\n", encoding="utf-8")
+            plan.write_bytes("## Config\n- review_panel: detected\n".encode("utf-8"))
             with redirect_stdout(io.StringIO()) as captured:
                 code = review_panel.main(
                     [
@@ -333,7 +333,7 @@ class ReviewPanelCliTests(unittest.TestCase):
     def test_named_missing_cli_exits_2(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             plan = Path(temporary) / "PLAN.md"
-            plan.write_text("## Config\n- review_panel: claude,gpt\n", encoding="utf-8")
+            plan.write_bytes("## Config\n- review_panel: claude,gpt\n".encode("utf-8"))
             with redirect_stdout(io.StringIO()):
                 code = review_panel.main(
                     [
@@ -349,7 +349,7 @@ class ReviewPanelCliTests(unittest.TestCase):
     def test_parse_cli_reads_charter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             charter = Path(temporary) / "CHARTER.md"
-            charter.write_text("Review panel: detected\n", encoding="utf-8")
+            charter.write_bytes("Review panel: detected\n".encode("utf-8"))
             with redirect_stdout(io.StringIO()) as captured:
                 code = review_panel.main(["parse", "--charter", str(charter)])
             self.assertEqual(code, 0)

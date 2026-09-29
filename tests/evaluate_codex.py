@@ -35,7 +35,7 @@ def command(arguments: list, cwd: Path) -> str:
 
 
 def write_json(path: Path, value: dict) -> None:
-    path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    path.write_bytes((json.dumps(value, indent=2) + "\n").encode("utf-8"))
 
 
 def prepare(directory: Path, candidate: Path) -> dict:
@@ -52,8 +52,8 @@ def prepare(directory: Path, candidate: Path) -> dict:
     command(["git", "init", "-q", "-b", "main"], seed)
     command(["git", "config", "user.name", "Evaluation"], seed)
     command(["git", "config", "user.email", "evaluation@example.invalid"], seed)
-    (seed / "count.py").write_text(FIXTURE_SCRIPT)
-    (seed / "README.md").write_text("# Widget Counter\n\nRun `python3 count.py 3` to print `3 widgets`.\n")
+    (seed / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
+    (seed / "README.md").write_bytes("# Widget Counter\n\nRun `python3 count.py 3` to print `3 widgets`.\n".encode("utf-8"))
     command(["git", "add", "."], seed)
     command(["git", "commit", "-qm", "fixture: widget counter"], seed)
     fixture = command(["git", "rev-parse", "HEAD"], seed)
@@ -87,7 +87,7 @@ def prepare(directory: Path, candidate: Path) -> dict:
         prompt += ("\nUse ordinary tools in the correct worktree. The evaluator records native events "
                    "and elapsed execution time externally; do not wrap commands for measurement or "
                    "invent activity categories or durations.\n")
-        (arm / "prompt.txt").write_text(prompt)
+        (arm / "prompt.txt").write_bytes(prompt.encode("utf-8"))
         write_json(arm / "setup.json", {"elapsed_seconds": time.monotonic() - setup_started})
     manifest = {"candidate": revision, "fixture": fixture, "created_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     write_json(directory / "manifest.json", manifest)
@@ -110,7 +110,7 @@ def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None,
     settings = {"model": model, "reasoning": reasoning, "sandbox": sandbox,
                 "cli": command(["codex", "--version"], arm)}
     for existing in arm.parent.glob("*/settings.json"):
-        if json.loads(existing.read_text()) != settings:
+        if json.loads(existing.read_text(encoding="utf-8")) != settings:
             raise ValueError("comparison settings differ from an existing arm")
     write_json(arm / "settings.json", settings)
     run_dir = arm / ("run-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
@@ -120,8 +120,8 @@ def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None,
         arguments += ["resume", resume]
     arguments += ["--ignore-user-config", "--model", model, "-c", f'model_reasoning_effort="{reasoning}"', "--json"]
     arguments += ["-"]
-    prompt = (prompt_file or arm / "prompt.txt").read_text()
-    (run_dir / "prompt.txt").write_text(prompt)
+    prompt = (prompt_file or arm / "prompt.txt").read_text(encoding="utf-8")
+    (run_dir / "prompt.txt").write_bytes(prompt.encode("utf-8"))
     started = time.monotonic()
     started_at = dt.datetime.now(dt.timezone.utc).isoformat()
     with (run_dir / "stderr.txt").open("w") as errors, (run_dir / "events.jsonl").open("w") as events:
@@ -141,14 +141,14 @@ def run(arm: Path, model: str, reasoning: str, sandbox: str, resume: str = None,
 
 
 def report(directory: Path, receipt: Path = None) -> dict:
-    result = {"manifest": json.loads((directory / "manifest.json").read_text()), "arms": {}}
+    result = {"manifest": json.loads((directory / "manifest.json").read_text(encoding="utf-8")), "arms": {}}
     for mode in ("path", "direct"):
         arm = directory / mode
-        runs = [json.loads(path.read_text()) for path in sorted(arm.glob("run-*/run.json"))]
+        runs = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(arm.glob("run-*/run.json"))]
         observed = []
         usage = []
         for path in sorted(arm.glob("run-*/events.jsonl")):
-            for line in path.read_text().splitlines():
+            for line in path.read_text(encoding="utf-8").splitlines():
                 try:
                     event = json.loads(json.loads(line)["raw"])
                 except (ValueError, KeyError):
@@ -157,11 +157,11 @@ def report(directory: Path, receipt: Path = None) -> dict:
                     usage.append(event["usage"])
         activity_path = arm / "activities.jsonl"
         if activity_path.exists():
-            observed = [json.loads(line) for line in activity_path.read_text().splitlines()]
+            observed = [json.loads(line) for line in activity_path.read_text(encoding="utf-8").splitlines()]
         repo = arm / "repo"
         product = evaluate(repo)
         result["arms"][mode] = {
-            "setup": json.loads((arm / "setup.json").read_text()) if (arm / "setup.json").exists() else None,
+            "setup": json.loads((arm / "setup.json").read_text(encoding="utf-8")) if (arm / "setup.json").exists() else None,
             "product": product, "head": command(["git", "rev-parse", "HEAD"], repo),
             "dirty": bool(command(["git", "status", "--porcelain"], repo)),
             "elapsed_seconds": sum(run["elapsed_seconds"] for run in runs) if runs else None,
@@ -178,8 +178,8 @@ def report(directory: Path, receipt: Path = None) -> dict:
         }
     if receipt is not None:
         plugin = directory / "plugin"
-        manifest = json.loads((plugin / "scripts/skill-resources.json").read_text())
-        version = json.loads((plugin / "package.json").read_text())["version"]
+        manifest = json.loads((plugin / "scripts/skill-resources.json").read_text(encoding="utf-8"))
+        version = json.loads((plugin / "package.json").read_text(encoding="utf-8"))["version"]
         host = manifest["hosts"]["codex"]
         try:
             check_trust_evidence._validate_receipt(receipt.resolve(), "codex", version,
@@ -207,7 +207,7 @@ def report(directory: Path, receipt: Path = None) -> dict:
     lines += ["", "Activity categories are caller-declared; durations are measured subprocess time. Unwrapped work is unclassified.",
               "Summed activity durations can overlap. Missing usage and category durations are unavailable, not zero.",
               "Pipeline trust requires the separate canonical milestone receipt validator; CLI exit and product correctness do not establish it."]
-    (directory / "comparison.md").write_text("\n".join(lines) + "\n")
+    (directory / "comparison.md").write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
     return result
 
 

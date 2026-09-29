@@ -116,14 +116,14 @@ def git(repo, *args):
 
 def make_fixture(repo, today):
     repo.mkdir(parents=True)
-    (repo / "README.md").write_text(FIXTURE_README, encoding="utf-8")
-    (repo / "count.py").write_text(FIXTURE_SCRIPT, encoding="utf-8")
+    (repo / "README.md").write_bytes(FIXTURE_README.encode("utf-8"))
+    (repo / "count.py").write_bytes(FIXTURE_SCRIPT.encode("utf-8"))
     (repo / ".project" / "research").mkdir(parents=True)
     (repo / ".project" / "archive" / "001-seed").mkdir(parents=True)
-    (repo / ".project" / "archive" / "001-seed" / "NOTE.md").write_text(
-        "archived\n", encoding="utf-8"
+    (repo / ".project" / "archive" / "001-seed" / "NOTE.md").write_bytes(
+        "archived\n".encode("utf-8")
     )
-    (repo / ".project" / "STATE.md").write_text(STATE.format(today=today), encoding="utf-8")
+    (repo / ".project" / "STATE.md").write_bytes(STATE.format(today=today).encode("utf-8"))
     git(repo, "init", "-q", "-b", "main")
     git(repo, "config", "user.email", "dogfood@example.invalid")
     git(repo, "config", "user.name", "Dogfood")
@@ -162,12 +162,12 @@ def audit_notes(repo):
 def check_guards(repo):
     findings = []
     note = repo / ".project" / "archive" / "001-seed" / "NOTE.md"
-    note.write_text("tampered\n", encoding="utf-8")
+    note.write_bytes("tampered\n".encode("utf-8"))
     git(repo, "add", "-A", ".project/archive")
     code, out = git(repo, "commit", "-qm", "tamper archive")
     findings.append(("pre-commit blocks archive modification", code != 0, out.strip()[-300:]))
     git(repo, "reset", "-q", "--hard", "HEAD")
-    (repo / "CHANGELOG.md").write_text("- dogfood\n", encoding="utf-8")
+    (repo / "CHANGELOG.md").write_bytes("- dogfood\n".encode("utf-8"))
     git(repo, "add", "CHANGELOG.md")
     code, out = git(repo, "commit", "-qm", "outside archive")
     findings.append(("commit outside archive succeeds", code == 0, out.strip()[-300:]))
@@ -256,7 +256,7 @@ def main(argv=None):
             host_out[-3000:],
             "```",
         ]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
         print(f"evidence: {path}")
 
     if not args.keep:
