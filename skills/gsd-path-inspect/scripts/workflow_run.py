@@ -30,6 +30,14 @@ INSPECTION_SPECS = (("inspect_codebase", "codebase-mapper", "codebase", "evidenc
                     ("inspect_docs", "docs-auditor", "docs-audit", "DOCS-AUDIT.md"))
 
 
+def _task_member(repo: Path, project_dir: str, task_id: str):
+    """The `repo:` member a task names, or None for a coordinator task."""
+    for path in sorted((repo / project_dir / "tasks").glob(f"{task_id}-*.md")):
+        match = re.search(r"(?m)^repo:[ \t]*(\S+)[ \t]*$", path.read_text(encoding="utf-8").split("\n---", 1)[0])
+        return match.group(1) if match else None
+    return None
+
+
 def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str = None,
                  task_id: str = None, round_size: int = None, inspection: Path = None,
                  mapper_reviewed: bool = False, kind: str = None) -> dict:
@@ -190,6 +198,10 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             step("check_task_briefs.py", "--repo", str(repo), "--base", head,
                  "--tasks-dir", f"{project_dir}/tasks")
             step("check_handoffs.py", "plan", *common)
+        elif action == "prepare-task" and _task_member(repo, project_dir, task_id):
+            # A member task works in a sidecar of its member; its Verify runs there at finish.
+            step("isolation.py", "isolate-member-task", "--repo", str(repo),
+                 "--member", _task_member(repo, project_dir, task_id), "--task-id", task_id)
         elif action == "prepare-task":
             task = step("isolation.py", "isolate-task", "--repo", str(repo),
                         "--base", expected_head, "--task-id", task_id,

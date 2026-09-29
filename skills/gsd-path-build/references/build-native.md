@@ -210,6 +210,16 @@ dispatch contract and perform steps 1–5 by hand.
    round. Do not append a dispatch Log entry: the isolated task later appends
    at that location, and two parallel appends make the cherry-pick ambiguous. Reuse a retained worktree only when
    its recorded base, branch, and task agree exactly.
+   A member task (`repo: <member>`) returns `mode: member` from
+   `prepare-task`: a member sidecar at the member bound tip, with no
+   coordinator verify sidecar. Record its dispatch with `python3 <absolute
+   isolation.py> activate-member-task --repo <absolute primary> --member
+   <member> --task-id <id> --agent build_<id> --task-file <exact task-file
+   path> --base <recorded base>`. It writes the live task copy (returned as
+   `copy`) inside the member sidecar; the coordinator task file stays
+   unchanged. Brief the coder with the member sidecar root and that live copy
+   as its task file, plus the coordinator's INTENT.md. Step 5's `finish` lands
+   it in the member and records it in the coordinator.
 
 4. **Dispatch the round.** Following the local runtime dispatch contract,
    spawn one implementation-capable child per task with deterministic logical

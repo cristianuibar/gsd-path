@@ -393,6 +393,24 @@ def state_from_task(primary: Path, task_id: str) -> Dict[str, object]:
             break
     else:
         raise DriverStop(f"task {task_id} has no task file")
+    member = fields.get("repo")
+    if member:
+        # A member activation lives in the live copy inside its member sidecar.
+        try:
+            checkout, project, _ = isolation._member_context(primary, str(member))
+        except isolation.IsolationError as error:
+            raise DriverStop(str(error), task=task_id) from error
+        task_file = task_path.relative_to(primary).as_posix()
+        sidecar = isolation.sidecar_root(checkout, "task", f"{project}-{task_id}").resolve()
+        copy = isolation.member_task_copy(sidecar, task_file)
+        live, _ = isolation.task_frontmatter(copy.read_text(encoding="utf-8")) if copy.is_file() else ({}, None)
+        if not live or live.get("status") != "in-progress" or not live.get("base") or not live.get("member_base"):
+            raise DriverStop(f"member task {task_id} has no activated live copy in {sidecar}", task=task_id)
+        return {"task_id": task_id, "title": str(live.get("title")), "task_file": copy.relative_to(sidecar).as_posix(),
+                "contract_file": task_file, "files": list(live.get("files") or []), "base": str(live["base"]),
+                "worktree": str(sidecar), "task_branch": f"{isolation.TASK_BRANCH_PREFIX}{project}-{task_id}",
+                "mode": "member", "member": str(member), "member_base": str(live["member_base"]),
+                "project_root": str(primary), "sidecar": None}
     if fields.get("status") != "in-progress" or not fields.get("base"):
         # A parallel activation lives only in its isolate; the primary copy stays pending.
         isolate = isolation.sidecar_root(primary, "task", task_id).resolve()
