@@ -703,41 +703,49 @@ def isolate_member_task(coordinator: Path, member: str, task_id: str) -> Dict[st
 
 def _rejected_member_attempt_error(
     coordinator: Path, member: str, task_id: str, task_file: Optional[str], sidecar: Path
-) -> Optional[str]:
-    """A forced retire discards a rejected attempt only after the parent kept its evidence."""
+) -> tuple[Optional[str], Optional[str]]:
+    """A forced retire discards a rejected attempt only after the parent kept its evidence.
+
+    Returns (refusal, copy_rejected); an invalid live copy holds no trusted Log delta,
+    so the parent's own rejection record stands in for it.
+    """
     if not task_file:
-        return "forced member task retirement requires --task-file"
+        return "forced member task retirement requires --task-file", None
     task_file = relative_posix(task_file)
     shown = run_git(coordinator, "show", f"HEAD:{task_file}")
     fields, error = task_frontmatter(shown.stdout) if shown.returncode == 0 else (None, "task file is not committed")
     if error or fields is None:
-        return error or "unreadable task file"
+        return error or "unreadable task file", None
     if str(fields.get("id")) != task_id or fields.get("repo") != member:
-        return f"{task_file} does not own member task {task_id} in {member}"
+        return f"{task_file} does not own member task {task_id} in {member}", None
     # A member task never leaves pending in the coordinator until its landing record.
     if fields.get("status") != "pending":
-        return "forced member task retirement requires the coordinator task at pending"
+        return "forced member task retirement requires the coordinator task at pending", None
     if os.path.lexists(_member_journal_path(coordinator, task_id)):
-        return "member task has a landing journal; recover it instead"
+        return "member task has a landing journal; recover it instead", None
     if sidecar.is_dir():
         copy = _safe_member_task_copy(sidecar, task_file)
         if copy.is_file():
-            text = copy.read_text(encoding="utf-8")
-            base = str((task_frontmatter(text)[0] or {}).get("base", ""))
-            contract = git_text(coordinator, "show", f"{require_full_sha(base)}:{task_file}")
-            delta = member_log_delta(contract, text).strip()
+            try:
+                text = copy.read_text(encoding="utf-8")
+                base = str((task_frontmatter(text)[0] or {}).get("base", ""))
+                contract = git_text(coordinator, "show", f"{require_full_sha(base)}:{task_file}")
+                delta = member_log_delta(contract, text).strip()
+            except (IsolationError, UnicodeDecodeError) as copy_error:
+                return None, str(copy_error)
             if delta and delta not in _normalize_newlines(shown.stdout):
                 return ("copy the rejected attempt's Log delta into the coordinator task file "
-                        "and checkpoint it before forced retirement")
-    return None
+                        "and checkpoint it before forced retirement"), None
+    return None, None
 
 
 def retire_member_task(
     coordinator: Path, member: str, task_id: str, force: bool = False, task_file: Optional[str] = None
-) -> None:
+) -> Optional[str]:
     """Remove an unused member task sidecar; landed work needs the landing proof.
 
-    `force` discards a rejected (dirty) attempt so a retry starts from a fresh sidecar.
+    `force` discards a rejected (dirty) attempt so a retry starts from a fresh sidecar,
+    and returns why its live task copy was rejected, if it was.
     """
     checkout, project, entry = _member_context(coordinator, member)
     name = f"{project}-{validate_task_id(task_id)}"
@@ -749,8 +757,9 @@ def retire_member_task(
             not line.startswith("- ") for line in cherry.stdout.splitlines())):
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
+    copy_rejected = None
     if force:
-        rejected = _rejected_member_attempt_error(coordinator, member, task_id, task_file, destination)
+        rejected, copy_rejected = _rejected_member_attempt_error(coordinator, member, task_id, task_file, destination)
         if rejected:
             raise IsolationError(rejected)
     registered = _registered_worktrees(checkout)
@@ -767,6 +776,7 @@ def retire_member_task(
         deleted = run_git(checkout, "update-ref", "-d", ref, tip.stdout.strip())
         if deleted.returncode != 0:
             raise IsolationError((deleted.stderr or deleted.stdout).strip() or "git update-ref failed")
+    return copy_rejected
 
 
 MEMBER_LANDING_DIR = ("gsd-path", "member-landings")
@@ -4524,9 +4534,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = activate_member_task(arguments.repo, arguments.member, arguments.task_id,
                                           arguments.agent, arguments.task_file, arguments.base)
         elif arguments.command == "retire-member-task":
-            retire_member_task(arguments.repo, arguments.member, arguments.task_id,
-                               arguments.force, arguments.task_file)
+            copy_rejected = retire_member_task(arguments.repo, arguments.member, arguments.task_id,
+                                               arguments.force, arguments.task_file)
             result = {"member": arguments.member, "retired": True, "task_id": arguments.task_id}
+            if copy_rejected:
+                result["copy_rejected"] = copy_rejected
         elif arguments.command == "deactivate-task":
             result = deactivate_task(
                 arguments.repo,

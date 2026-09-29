@@ -180,7 +180,10 @@ dispatch contract and perform steps 1–5 by hand.
    checkpoint it, then retire the sidecar with `python3 <absolute isolation.py>
    retire-member-task --repo <absolute primary> --member <member> --task-id
    <id> --task-file <task path> --force`. It refuses until the committed task
-   file holds that delta, and a rerun finishes an interrupted retirement. The
+   file holds that delta, and a rerun finishes an interrupted retirement. A
+   copy that fails the append-only check holds no trusted delta: record your
+   own rejection evidence in the coordinator task Log and checkpoint it, as for
+   a coordinator diff rejection; retirement then reports `copy_rejected`. The
    next `prepare-task` creates the retry sidecar at the member bound tip. After
    resolving a recoverable `build/blocked` condition, use
    `pipeline_state.py transition` with the blocked state and bound branch as

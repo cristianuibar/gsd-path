@@ -112,6 +112,26 @@ class NativeMemberDispatchTests(unittest.TestCase):
         self.assertIn("coder: wrote wrong", record)
         self.assertIn("orchestrator Verify (isolate gsd-path-task/acme-T001): fail", record)
 
+    def test_forced_retire_reports_a_copy_rewritten_in_place_and_retry_lands(self) -> None:
+        active = self.attempt("wrong\n")
+        copy = Path(active["copy"])
+        copy.write_text(copy.read_text(encoding="utf-8").replace("## Log", "## Log (rewritten)"), encoding="utf-8")
+        failed = call("dispatch_driver.py", "finish", "--repo", str(self.coordinator), "--task-id", "T001")
+        self.assertNotEqual(failed.returncode, 0, failed.stdout)
+        task = self.coordinator / landing.TASK_FILE
+        task.write_text(task.read_text(encoding="utf-8") + "- parent: rejected T001, copy Log rewritten\n",
+                        encoding="utf-8")
+        git(self.coordinator, "commit", "-q", "-am", "build: record T001 rejection")
+        retired = self.retire("--force")
+        self.assertEqual(retired.returncode, 0, retired.stderr)
+        self.assertIn("append-only", json.loads(retired.stdout)["copy_rejected"])
+        self.assertFalse(Path(active["worktree"]).exists())
+        self.attempt("v2\n")
+        finished = run("dispatch_driver.py", "finish", "--repo", str(self.coordinator), "--task-id", "T001")
+        self.assertEqual(finished["landed"][0]["mode"], "member")
+        self.assertEqual(git(self.member, "show", "gsd-path/acme-M001:app.py"), "v2")
+        self.assertIn("parent: rejected T001", git(self.coordinator, "show", f"HEAD:{landing.TASK_FILE}"))
+
     def test_forced_retire_refuses_until_the_rejection_is_recorded(self) -> None:
         active = self.attempt("wrong\n")
         call("dispatch_driver.py", "finish", "--repo", str(self.coordinator), "--task-id", "T001")
