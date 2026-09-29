@@ -38,6 +38,7 @@ GROUPS = {
     'pr-integration': ['test_archive_milestone', 'test_pipeline_git'],
     'bootstrap': ['test_bootstrap_repository'],
     'guards': ['test_guard_hook', 'test_git_guard'],
+    'multi-repo': ['test_members', 'test_member_full_cycle', 'test_member_round', 'test_member_create'],
 }
 
 

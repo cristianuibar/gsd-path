@@ -57,7 +57,7 @@ def transcript_for(thread_id):
 def bind_child(run_root, child_id):
     run_root = Path(run_root)
     threads = set()
-    for events in run_root.glob("quick/run-*/events.jsonl"):
+    for events in run_root.glob("*/run-*/events.jsonl"):
         for line in events.read_text(encoding="utf-8").splitlines():
             try:
                 ev = json.loads(json.loads(line)["raw"])

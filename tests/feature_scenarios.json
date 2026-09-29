@@ -152,5 +152,24 @@
       "Prove a matching journal resumes and an unjournaled collision refuses adoption.",
       "Verify the default checkout stays clean and the pipeline runs from its linked milestone worktree."
     ]
+  },
+  "multi-repo": {
+    "features": [
+      "define",
+      "plan",
+      "build",
+      "lean-verification",
+      "ship",
+      "multi-repo"
+    ],
+    "fixture": "counter-member",
+    "request": "This program repo coordinates a second repository. Quick lane, one full wave, no panel. After initializing, join the existing repository at {member} as member `web` with direct integration through the router's member flow, then install its guard hooks with `node {plugin}/scripts/install.mjs --member-of {repo} --project {member}`. Then extend web's count.py in one member task: default prints 0 widgets, a signed integer prints that count, --json before or after the optional count prints exactly an object with integer widgets, default zero; invalid input fails with useful stderr. No new dependencies. PLAN.md's project Verify runs from this coordinator and exercises ../web/count.py.",
+    "steps": [
+      "Show the member join (MEMBERS.md and `members.py detect` on the member) before planning.",
+      "Show the member task with `repo: web`, its landing on the member bound branch, and the coordinator record commit.",
+      "Show project Verify reaching ../web from the coordinator sidecar and the final review naming the member reviewed HEAD.",
+      "Ship through canonical gates: preflight, close-members, record-shipment, the ship commit with close-members' body, validate, integrate, validate-integrated. Capture the member merge and tag on the member origin.",
+      "Run the external counter oracle against the member's integrated main."
+    ]
   }
 }
