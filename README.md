@@ -385,6 +385,35 @@ default checkout, `gsd-path/M001` branch, and sibling linked worktree. A
 journaled helper performs the approved creation and safely resumes a matching
 partial remote/clone/worktree transaction; the default checkout stays clean.
 
+## Multi-repo milestones
+
+One project can change several repositories in the same milestone. The
+**coordinator** repo holds `.project/` and runs the pipeline; each other repo
+is a **member** listed in `.project/MEMBERS.md`. A member needs a GitHub.com
+`origin` whose default is `main`. See
+[ADR 0002](docs/adr/0002-multi-repo-coordinator.md) for the design.
+
+- Add members at a milestone boundary: ask the router to add an existing repo
+  (`members.py add`) or to create a new one (`members.py add --create`, after
+  you approve the exact owner, name, visibility, and checkout). Then install
+  the member's guard hooks with
+  `npx @opengsd/gsd-path@latest --member-of <coordinator> --project <member>`.
+- The planner gives each member task `repo: <member>`; one task changes one
+  repo. Project Verify runs from the coordinator and reaches a member as
+  `../<member>`.
+- Build works in Path-owned member branches `gsd-path/<project>-M00N` and
+  records each member landing in the coordinator. The final review names each
+  member's reviewed HEAD.
+- Ship closes members in order before the coordinator: `close-members` merges
+  each member in its own `direct` or `pull-request` mode and tags it
+  `milestone/<project>-<archive>`, then the ship commit records each member.
+  A pull-request member waits for you to merge it. The next milestone retires
+  the member branches.
+- `members.py detect --checkout <path>` reports whether a repo is a member.
+
+Out of scope: submodules, one task across two repos, non-GitHub remotes, and
+an atomic close across repos.
+
 ## Handoff contract
 
 ```text

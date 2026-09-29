@@ -86,6 +86,14 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   this task's work is skipped. That command must name a path from `files`,
   and must not be PLAN.md's project Verify unless an SC this task owns names
   that command. Criteria and Verify are the contract; Approach is guidance.
+- In a multi-repo milestone (`.project/MEMBERS.md` lists members), each task
+  changes exactly one repo. Give a member task `repo: <member>`; its `files`
+  and Verify are relative to that member's root, and its Verify runs there.
+  Coordinator tasks omit `repo:`. Split work that spans repos into one task
+  per repo joined by an Interface contract. PLAN.md's project Verify runs
+  from the coordinator root and reaches a member as `../<member>`. Do not
+  plan a task for a member this milestone already closed at ship; plan it in
+  the next milestone.
 - Preserve every template field and its required initial value.
 
 Put the full-project build-and-test command in PLAN.md. Copy `Review panel:`
