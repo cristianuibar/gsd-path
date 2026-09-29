@@ -283,6 +283,7 @@ class MemberFullCycleTests(unittest.TestCase):
             start = isolation.checkpoint(repo, approval["commit"], "build: start", "Why: build started", [".project"])
             coordinator_base = start["commit"]
             isolated = isolation.isolate_member_task(repo, "web", "T001")
+            bound_checkout = Path(isolation.member_bound_checkout(repo, "web")["checkout"])
             isolation.activate_member_task(repo, "web", "T001", "cycle-coder", ".project/tasks/T001-raise.md",
                                            coordinator_base)
             self.write("lib.py", "value = 2\n", Path(isolated["worktree"]))
@@ -312,6 +313,11 @@ class MemberFullCycleTests(unittest.TestCase):
             self.gate("archive_milestone.py", "preflight", "--repo", str(repo))
             # The member keeps its GitHub origin; from here Git talks to a local bare remote.
             git(member, "config", f"url.{member_origin}.insteadOf", "https://github.com/acme/web.git")
+            bound_ref = "refs/heads/gsd-path/acme-M001"
+            denied_push = git(member, "push", "-q", "origin", f"{bound_ref}:{bound_ref}")
+            self.assertNotEqual(denied_push.returncode, 0)
+            self.assertIn("not authorized by acme", denied_push.stderr)
+            self.assertNotEqual(git(member_origin, "show-ref", "--verify", "--quiet", bound_ref).returncode, 0)
             closed = self.gate("archive_milestone.py", "close-members", "--repo", str(repo))
             self.assertEqual(closed["status"], "integrated")
             merge = closed["members"][0]["merge"]
@@ -331,11 +337,20 @@ class MemberFullCycleTests(unittest.TestCase):
             self.assertEqual(integrated["members"][0]["merge"], merge)
 
             # --- next milestone retires the member bound branch everywhere
+            denied_delete = git(member, "push", "-q", "origin", f":{bound_ref}")
+            self.assertNotEqual(denied_delete.returncode, 0)
+            self.assertIn("deletion is not authorized by acme", denied_delete.stderr)
+            self.assertEqual(git(member_origin, "rev-parse", "--verify", "--quiet", bound_ref).stdout.strip(),
+                             member_tip)
             self.gate("pipeline_git.py", "bind-next", "--repo", str(repo), "--branch", "gsd-path/M002",
                       "--previous-branch", BRANCH, "--ship", ship_sha, "--remote-default", "origin/main",
                       "--base", integrated["integrate"], "--landing", integrated["integrate"])
             self.assertEqual(git(member_origin, "rev-parse", "--verify", "--quiet",
                                  "refs/heads/gsd-path/acme-M001").stdout, "")
+            self.assertNotEqual(git(member, "show-ref", "--verify", "--quiet", bound_ref).returncode, 0)
+            self.assertFalse(bound_checkout.exists())
+            worktrees = git(member, "worktree", "list", "--porcelain").stdout.splitlines()
+            self.assertNotIn(f"worktree {bound_checkout}", worktrees)
             self.assertEqual(git(member, "for-each-ref", "refs/gsd-path/authorizations/").stdout, "")
             self.assertEqual(git(member_origin, "rev-parse", "main").stdout.strip(), merge)
             self.assertTrue(re.fullmatch(r"[0-9a-f]{40}", git(member_origin, "rev-parse",
