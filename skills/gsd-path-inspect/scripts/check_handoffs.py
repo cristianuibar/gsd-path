@@ -1268,7 +1268,7 @@ def _head_file(root: Path, relative: str) -> Optional[str]:
         ["git", "show", f"HEAD:{relative}"],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     return result.stdout if result.returncode == 0 else None
@@ -1668,7 +1668,7 @@ def validate_final(
     head_result = subprocess.run(
         ("git", "-C", str(root), "rev-parse", "--verify", "HEAD"),
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     if head_result.returncode != 0:

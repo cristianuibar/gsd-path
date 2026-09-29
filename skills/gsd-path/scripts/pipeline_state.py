@@ -196,7 +196,7 @@ def _run_git(
     result = subprocess.run(
         ["git", "-C", str(repo), *arguments],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
@@ -774,7 +774,7 @@ def _valid_patch_findings(repo: Path) -> bool:
             str(repo),
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     return result.returncode == 0
 

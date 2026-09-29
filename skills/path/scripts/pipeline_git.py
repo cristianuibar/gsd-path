@@ -203,7 +203,7 @@ def _run_git(
     result = subprocess.run(
         ["git", "-C", str(repo), *args],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
@@ -322,7 +322,7 @@ def _validated_shipped_state(repo: Path) -> dict[str, object]:
             str(repo),
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()

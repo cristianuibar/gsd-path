@@ -373,7 +373,7 @@ def snapshot_tree(primary: Path) -> str:
         env = dict(os.environ, GIT_INDEX_FILE=str(Path(temporary) / "index"))
         for arguments in (("read-tree", "HEAD"), ("add", "-A"), ("write-tree",)):
             completed = subprocess.run(("git", "-C", str(primary), *arguments), env=env,
-                                       text=True, capture_output=True)
+                                       encoding="utf-8", errors="replace", capture_output=True)
             if completed.returncode:
                 raise DriverStop(f"git {' '.join(arguments)} failed: {completed.stderr.strip()}")
         return completed.stdout.strip()
@@ -602,7 +602,7 @@ class Round:
         """Run the bundled token_budget.py against this milestone's ledger; blocked is a stop."""
         command = [sys.executable, "-B", str(Path(__file__).resolve().parent / "token_budget.py"),
                    action, "--ledger", str(budget_ledger(self.primary)), *arguments]
-        completed = subprocess.run(command, cwd=self.primary, capture_output=True, text=True)
+        completed = subprocess.run(command, cwd=self.primary, capture_output=True, encoding="utf-8", errors="replace")
         result = json.loads(completed.stdout) if completed.stdout.strip() else {}
         self.receipt["steps"].append({"script": f"token_budget.py {action}", "command": command,
                                       "exit_code": completed.returncode, "result": result,
@@ -1234,7 +1234,7 @@ class Review:
 def helper_json(receipt: Dict[str, object], script: str, *arguments: str, cwd: Path) -> Dict[str, object]:
     """Run a bundled helper and return its JSON stdout; a non-zero exit is a typed stop."""
     command = [sys.executable, "-B", str(Path(__file__).resolve().parent / script), *arguments]
-    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
     step = {"script": script, "command": command, "exit_code": completed.returncode,
             "stdout": completed.stdout, "stderr": completed.stderr}
     receipt["steps"].append(step)
@@ -1802,7 +1802,7 @@ Heavy: {'yes' if heavy else 'no'}
         receipt["plan_wave"] = fix_wave
         lint = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve().parent / "check_task_briefs.py"),
                                "--repo", str(primary), "--base", isolation.current_sha(primary),
-                               "--tasks-dir", f"{options.project_dir}/tasks"], capture_output=True, text=True)
+                               "--tasks-dir", f"{options.project_dir}/tasks"], capture_output=True, encoding="utf-8", errors="replace")
         receipt["steps"].append({"script": "check_task_briefs.py", "exit_code": lint.returncode,
                                  "stdout": lint.stdout, "stderr": lint.stderr})
         if lint.returncode:

@@ -89,7 +89,7 @@ def staged_entries():
     output = subprocess.run(
         ["git", "diff", "--cached", "--name-status", "-z", "--find-renames"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout
     tokens = output.split("\0")
@@ -144,7 +144,7 @@ def committed_archive_roots():
     head = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     if head.returncode == 1:
@@ -153,7 +153,7 @@ def committed_archive_roots():
     output = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", ARCHIVE_PREFIX],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout
     return {
@@ -167,7 +167,7 @@ def staged_file(path):
     return subprocess.run(
         ["git", "show", f":{path}"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout
 
@@ -181,7 +181,7 @@ def shown_file(revspec):
     shown = subprocess.run(
         ["git", "show", revspec],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     return shown.stdout if shown.returncode == 0 else None
@@ -192,7 +192,7 @@ def state_at(revision):
     subprocess.run(
         ["git", "cat-file", "-e", revision],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     )
     content = shown_file(f"{revision}:.project/STATE.md")
@@ -293,7 +293,7 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
     reviewed_head = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout.strip()
     expected_body = f"Archive: {archive}\nReviewed-HEAD: {reviewed_head}"
@@ -392,7 +392,7 @@ def current_branch():
     return subprocess.run(
         ["git", "branch", "--show-current"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout.strip()
 
@@ -403,7 +403,7 @@ def closed_milestone_reason():
         return None
     commits = subprocess.run(
         ["git", "log", "--format=%H", "--grep=^ship:", "HEAD"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, encoding="utf-8", errors="replace", check=True,
     ).stdout.splitlines()
     if any(ship_commit_at(sha, branch) for sha in commits):
         return (f"closed milestone {branch} accepts no new work; finish integration "
@@ -416,7 +416,7 @@ def head_descends_from(commit):
         subprocess.run(
             ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=False,
         ).returncode
         == 0
@@ -434,7 +434,7 @@ def repo_root():
         subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=True,
         ).stdout.strip()
     )
@@ -510,7 +510,7 @@ def ship_commit_at(sha, bound):
     shown = subprocess.run(
         ["git", "show", "--no-patch", "--format=%s", sha],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     )
     archive = state.get("archive") or ""
@@ -532,7 +532,7 @@ def _push_updates(lines):
 
 def _commits(*arguments):
     listed = subprocess.run(
-        ["git", "rev-list", *arguments], capture_output=True, text=True, check=True
+        ["git", "rev-list", *arguments], capture_output=True, encoding="utf-8", errors="replace", check=True
     )
     return set(listed.stdout.split())
 
@@ -562,7 +562,7 @@ def member_pre_push_violations(lines, role):
         if member_work is None:
             bound = [ref for ref in subprocess.run(
                 ["git", "for-each-ref", "--format=%(refname)", "refs/heads/gsd-path/"],
-                capture_output=True, text=True, check=True,
+                capture_output=True, encoding="utf-8", errors="replace", check=True,
             ).stdout.split() if ref.startswith(f"refs/heads/gsd-path/{project}-")]
             member_work = _commits(*bound, *exclude) if bound else set()
         if member_work & _commits(local_sha, *exclude):
@@ -627,7 +627,7 @@ def default_branch():
     origin_head = subprocess.run(
         ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     if origin_head.returncode == 0 and origin_head.stdout.strip().startswith("origin/"):
@@ -635,7 +635,7 @@ def default_branch():
     configured = subprocess.run(
         ["git", "config", "--get", "init.defaultBranch"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     if configured.returncode == 0 and configured.stdout.strip():
@@ -657,7 +657,7 @@ def is_integration_merge(subject):
     merge_head = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", "MERGE_HEAD^{commit}"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     bound_head = subprocess.run(
@@ -669,7 +669,7 @@ def is_integration_merge(subject):
             f"refs/heads/{match.group('branch')}^{{commit}}",
         ],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     return (
@@ -761,12 +761,20 @@ def report(found, action):
 
 
 def main(argv):
+    # Git reads hook output as UTF-8; a Windows pipe would default to cp1252.
+    # In-process callers may substitute text streams.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     if len(argv) > 1 and argv[1] == "closed-milestone":
         reason = closed_milestone_reason()
         return report([reason] if reason else [], "mutation")
     if len(argv) > 1 and argv[1] == "pre-push":
         try:
-            lines = sys.stdin.read().splitlines()
+            stdin = getattr(sys.stdin, "buffer", None)
+            text = (stdin.read().decode("utf-8", errors="surrogateescape")
+                    if stdin is not None else sys.stdin.read())
+            lines = text.splitlines()
             role = members.member_role(repo_root())
             found = member_pre_push_violations(lines, role) if role else pre_push_violations(lines)
         except Exception as error:

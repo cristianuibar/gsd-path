@@ -359,7 +359,7 @@ def _validate_shipped_state(
                 "--repo",
                 str(root),
             ],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -767,7 +767,7 @@ def _git(repo: Path, *arguments: str) -> str:
     result = subprocess.run(
         ["git", *arguments],
         cwd=repo,
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )
@@ -782,7 +782,7 @@ def _git_ref_exists(repo: Path, ref: str) -> bool:
     result = subprocess.run(
         ["git", "show-ref", "--verify", "--quiet", ref],
         cwd=repo,
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=False,
     )

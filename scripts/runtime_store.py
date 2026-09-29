@@ -41,7 +41,7 @@ def guard_launcher(name):
 
 
 def source_manifest(source):
-    version = json.loads((source / "package.json").read_text())["version"]
+    version = json.loads((source / "package.json").read_text(encoding="utf-8"))["version"]
     files = {}
     for name in (*RUNTIME_FILES, *GUARDS, "status_runtime.py"):
         path = source / "scripts" / name
@@ -167,7 +167,7 @@ def recover_migration(project):
         return
     if journal.is_symlink():
         raise ValueError(f"unsafe runtime migration journal: {journal}")
-    data = json.loads(journal.read_text())
+    data = json.loads(journal.read_text(encoding="utf-8"))
     recorded_project = data.get("project")
     if (data.get("schema") != "gsd-path/runtime-migration/v1"
             or not isinstance(recorded_project, str)

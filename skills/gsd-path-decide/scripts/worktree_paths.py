@@ -30,7 +30,10 @@ def _git(primary: Path, *args: str) -> str:
 
 
 def _identity(path: Path) -> str:
-    return hashlib.sha256(os.fsencode(path)).hexdigest()
+    digest = hashlib.sha256(os.fsencode(path)).hexdigest()
+    # Two identities nest in every managed path; full digests would use about
+    # 130 of Windows' 260-character MAX_PATH before any repository content.
+    return digest[:16] if os.name == "nt" else digest
 
 
 def _workspace(primary: Path, pin: bool) -> Path:
@@ -91,7 +94,9 @@ def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> 
     records = _git(primary, "worktree", "list", "--porcelain", "-z").split("\0\0")
     for record in records:
         fields = record.split("\0")
-        if f"worktree {legacy}" in fields and f"branch {branch}" in fields:
+        # Compare as paths: git prints forward slashes on Windows.
+        worktrees = [Path(field[len("worktree "):]) for field in fields if field.startswith("worktree ")]
+        if legacy in worktrees and f"branch {branch}" in fields:
             return legacy
     # Keep collision checks and missing-directory recovery at the old location.
     if os.path.lexists(legacy):

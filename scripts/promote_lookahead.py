@@ -205,7 +205,7 @@ def select_fetched_base(
     resolved = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--verify", f"{remote_default}^{{commit}}"],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=False,
     )
     if resolved.returncode != 0 or resolved.stdout.strip() != base:
