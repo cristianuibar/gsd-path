@@ -53,6 +53,8 @@ class TrustEvidenceTests(unittest.TestCase):
             json.dumps({"version": "1.2.3"}), encoding="utf-8"
         )
         self.git("init", "-q", "-b", "main")
+        # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
+        self.git("config", "gc.autoDetach", "false")
         self.git("config", "user.email", "trust@example.invalid")
         self.git("config", "user.name", "Trust")
         self.git("add", "-A")

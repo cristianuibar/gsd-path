@@ -44,6 +44,8 @@ class ArchiveMilestoneTests(unittest.TestCase):
 
     def make_repo(self, root: Path, branch: str = "gsd-path/M001", landing: str = "land", acceptance: str = "") -> None:
         self.git(root, "init", "-q", "-b", branch)
+        # Finish automatic housekeeping before TemporaryDirectory removes Git objects.
+        self.git(root, "config", "gc.autoDetach", "false")
         self.git(root, "config", "user.name", "Validation")
         self.git(root, "config", "user.email", "validation@example.invalid")
 
