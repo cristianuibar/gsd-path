@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 
 # Runtime helpers must not modify their immutable installation.
@@ -177,6 +179,24 @@ def member_role(checkout: Path) -> Optional[dict[str, object]]:
     raise stale
 
 
+def detect_member(checkout: Path) -> dict[str, object]:
+    """Whether a repo is a member: its coordinator, name, and whether its marker is current."""
+    checkout = Path(checkout).resolve()
+    try:
+        named = marker_coordinator(checkout)
+    except MembersError as error:
+        return {"member": True, "current": False, "checkout": str(checkout), "reason": str(error)}
+    if named is None:
+        return {"member": False, "checkout": str(checkout)}
+    try:
+        role = member_role(checkout)
+    except MembersError as error:
+        return {"member": True, "current": False, "checkout": str(checkout),
+                "coordinator": str(named), "reason": str(error)}
+    return {"member": True, "current": True, "checkout": str(checkout), "coordinator": str(role["coordinator"]),
+            "project": role["project"], "name": role["name"]}
+
+
 def read_members(coordinator: Path) -> list[dict[str, str]]:
     """Parse MEMBERS.md; an absent file means a single-repo project."""
     path = coordinator / ".project" / MEMBERS_FILE
@@ -254,7 +274,8 @@ def check_member(
         raise MembersError("the coordinator cannot be its own member")
     if _git(checkout, "status", "--porcelain", "--untracked-files=all"):
         raise MembersError(f"member has uncommitted changes: {checkout}")
-    remote = _git(checkout, "remote", "get-url", "origin")
+    # The configured URL, not `get-url`, which expands local insteadOf rewrites.
+    remote = _git(checkout, "config", "--get", "remote.origin.url")
     if not GITHUB_REMOTE_RE.fullmatch(remote):
         raise MembersError(f"member requires a GitHub.com origin: {remote}")
     if recorded_remote is not None and remote != recorded_remote:
@@ -418,7 +439,7 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
         if role is None or role["coordinator"] != root or role["name"] != member["name"]:
             raise MembersError(f"member marker for {member['name']} is missing or stale; "
                                f"run members.py repair --repo {root}")
-        remote = _git(checkout, "remote", "get-url", "origin")
+        remote = _git(checkout, "config", "--get", "remote.origin.url")
         if remote != member["remote"]:
             raise MembersError(f"member origin changed: {member['remote']} -> {remote}")
         require_origin_main(checkout)
@@ -483,6 +504,117 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
     return members
 
 
+MEMBER_CREATE_SCHEMA = "gsd-path/member-create/v1"
+VISIBILITIES = ("public", "private", "internal")
+
+
+def _gh(*arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *arguments], capture_output=True, text=True, check=False,
+                          env={**os.environ, "GH_HOST": "github.com"})
+
+
+def create_member(repo: Path, name: str, checkout: Path, integration: str, github: str,
+                  visibility: str) -> list[dict[str, str]]:
+    """Greenfield member: create the approved GitHub repo, clone it, then join it.
+
+    A journal in the coordinator Git directory keeps the approved target before any
+    external action; a rerun resumes each step and never creates a second repo."""
+    root, state = _coordinator(repo)
+    if state.phase in {"build", "ship"}:
+        raise MembersError("members change only at a milestone boundary, not during build or ship")
+    if not NAME_RE.fullmatch(name) or not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", github):
+        raise MembersError(f"invalid member name or GitHub repository: {name!r} {github!r}")
+    if visibility not in VISIBILITIES:
+        raise MembersError(f"visibility must be one of {', '.join(VISIBILITIES)}")
+    if checkout.is_symlink():
+        raise MembersError(f"member checkout path is a symlink: {checkout}")
+    resolved = checkout.resolve()
+    if resolved == root or root in resolved.parents or resolved in root.parents:
+        raise MembersError(f"member checkout is nested with the coordinator: {resolved}")
+    if not resolved.parent.is_dir():
+        raise MembersError(f"member checkout parent does not exist: {resolved.parent}")
+    target = {"schema": MEMBER_CREATE_SCHEMA, "name": name, "github": github, "visibility": visibility,
+              "checkout": str(resolved), "integration": integration}
+    common = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+    journal = common / "gsd-path" / "member-create" / f"{name}.json"
+    url = f"https://github.com/{github}.git"
+    if journal.is_file():
+        recorded = json.loads(journal.read_text(encoding="utf-8"))
+        if {key: recorded.get(key) for key in target} != target or recorded.get("step") not in {"create", "clone", "join"}:
+            raise MembersError(f"member-create journal for {name} holds a different approved target: {journal}")
+    else:
+        if any(member["name"] == name for member in read_members(root)):
+            raise MembersError(f"member already recorded: {name}")
+    if resolved.is_symlink() or (resolved.exists() and not resolved.is_dir()):
+        raise MembersError(f"member checkout path is occupied: {resolved}")
+    occupied = resolved.exists() and any(resolved.iterdir())
+    if occupied and Path(_common.run_git(resolved, "rev-parse", "--show-toplevel").stdout.strip()).resolve() != resolved:
+        raise MembersError(f"member checkout path is occupied: {resolved}")
+    if occupied and _git(resolved, "config", "--get", "remote.origin.url") != url:
+        raise MembersError(f"member checkout {resolved} is not a clone of {url}")
+    if not journal.is_file():
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        recorded = {**target, "step": "create"}
+        _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+    listed = [member for member in read_members(root) if member["name"] == name]
+    if listed:
+        if (len(listed) != 1 or listed[0] != {"name": name, "checkout": str(resolved), "remote": url,
+                                            "integration": integration}
+                or member_role(resolved) != {"coordinator": root, "project": state.project, "name": name}):
+            raise MembersError(f"member already recorded with a different checkout or marker: {name}")
+        journal.unlink()
+        return read_members(root)
+    viewed = _gh("repo", "view", github, "--json", "visibility")
+    if viewed.returncode != 0:
+        if "Could not resolve to a Repository" not in f"{viewed.stdout}\n{viewed.stderr}":
+            raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
+        if recorded["step"] != "create":
+            raise MembersError(f"GitHub repository {github} disappeared after creation; refusing to create it again")
+        if occupied:
+            raise MembersError(f"member checkout {resolved} is a clone of a missing repository: {github}")
+        created = _gh("repo", "create", github, f"--{visibility}", "--add-readme")
+        if created.returncode != 0:
+            raise MembersError(f"could not create {github}: {(created.stderr or created.stdout).strip()}")
+        recorded["step"] = "clone"
+        _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+        viewed = _gh("repo", "view", github, "--json", "visibility")
+    if viewed.returncode != 0:
+        raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
+    try:
+        actual_visibility = json.loads(viewed.stdout)["visibility"].lower()
+    except (ValueError, KeyError, AttributeError) as error:
+        raise MembersError(f"could not read {github} visibility") from error
+    if actual_visibility != visibility:
+        raise MembersError(f"GitHub repository visibility is {actual_visibility}, not {visibility}")
+    recorded["step"] = "clone"
+    _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+    if occupied:
+        fetched = _common.run_git(resolved, "fetch", "-q", "--prune", "origin")
+        if fetched.returncode != 0:
+            raise MembersError(f"could not fetch member checkout {resolved}: {(fetched.stderr or fetched.stdout).strip()}")
+        default = _common.run_git(resolved, "remote", "set-head", "origin", "--auto")
+        if default.returncode != 0 or _git(resolved, "symbolic-ref", "--short", "refs/remotes/origin/HEAD") != "origin/main":
+            raise MembersError(f"member remote default must be main: {resolved}")
+        baseline = _common.run_git(resolved, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+        if baseline.returncode != 0:
+            raise MembersError(f"member checkout {resolved} has no current origin/main")
+        head = _common.run_git(resolved, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+        if head.returncode == 0:
+            if _common.run_git(resolved, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode != 0:
+                raise MembersError(f"member checkout {resolved} has history unrelated to current origin/main")
+        else:
+            _git(resolved, "checkout", "-B", "main", "origin/main")
+    else:
+        cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))
+        if cloned.returncode != 0:
+            raise MembersError(f"could not clone {url}: {(cloned.stderr or cloned.stdout).strip()}")
+    recorded["step"] = "join"
+    _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+    joined = add_member(root, name, resolved, integration)
+    journal.unlink()
+    return joined
+
+
 def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
@@ -528,8 +660,13 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--name", required=True)
     add.add_argument("--checkout", required=True, type=Path)
     add.add_argument("--integration", choices=INTEGRATIONS, default="default")
+    add.add_argument("--create", metavar="OWNER/NAME",
+                     help="greenfield: create this GitHub repo and clone it to --checkout first")
+    add.add_argument("--visibility", choices=VISIBILITIES, help="visibility for --create")
     validate = commands.add_parser("validate", help="check MEMBERS.md and every member")
     validate.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    detect = commands.add_parser("detect", help="report whether a repo is a member, and of which coordinator")
+    detect.add_argument("--checkout", required=True, type=Path, help="repository to inspect")
     repair = commands.add_parser("repair", help="rewrite missing or stale member markers")
     repair.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
     return result
@@ -538,7 +675,17 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.command == "add":
+        if arguments.command == "detect":
+            print(json.dumps(detect_member(arguments.checkout), sort_keys=True))
+            return 0
+        if arguments.command == "add" and arguments.create:
+            if arguments.visibility is None:
+                raise MembersError("--create requires --visibility")
+            members = create_member(arguments.repo, arguments.name, arguments.checkout,
+                                    arguments.integration, arguments.create, arguments.visibility)
+        elif arguments.command == "add":
+            if arguments.visibility is not None:
+                raise MembersError("--visibility requires --create")
             members = add_member(
                 arguments.repo, arguments.name, arguments.checkout, arguments.integration
             )

@@ -557,8 +557,8 @@ def ensure_integration_tag(
 
 def github_repository(project: Path) -> str:
     remote = archive_milestone.require_git_success(
-        run_git(project, "remote", "get-url", "origin"),
-        "resolve origin URL",
+        run_git(project, "config", "--get", "remote.origin.url"),
+        "read configured origin URL",
     )
     patterns = (
         r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?$",

@@ -7,8 +7,9 @@ One milestone may change several Git repositories. One **coordinator** holds
 `.project/MEMBERS.md` lists the **members**; `members add` creates the file for
 new or existing Git repositories. The fixed `REPOSITORY.md` format stays
 unchanged.
-Every CLI keeps one `--repo` (the coordinator). Without `MEMBERS.md`, Path keeps
-its single-repo behavior and output.
+Coordinator operations keep one `--repo`; the checkout-local detection command
+is specified in the [work plan](../multi-repo-work.md). Without `MEMBERS.md`,
+Path keeps its single-repo behavior and output.
 
 One task changes one repo (`repo:` defaults to the coordinator). A member task
 lands a product commit in the member and a record commit in the coordinator;
