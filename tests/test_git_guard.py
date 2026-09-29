@@ -1,4 +1,3 @@
-import json
 import re
 import json
 import subprocess
@@ -221,6 +220,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.git("add", "-A")
+        (archived / "build" / "members.json").unlink()
         base = f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}"
         row = {"name": "web", "mode": "direct", "reviewed_head": "b" * 40, "status": "pending",
                "merge": None, "tag": None}

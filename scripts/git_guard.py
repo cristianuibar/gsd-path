@@ -297,9 +297,14 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
         text=True,
         check=True,
     ).stdout.strip()
-    root = Path(git_output("rev-parse", "--show-toplevel"))
-    lock = root / archive / "build" / "members.json"
-    locked = [entry["name"] for entry in json.loads(lock.read_text(encoding="utf-8"))["members"]] if lock.is_file() else []
+    lock = f"{archive}/build/members.json"
+    staged_lock = subprocess.run(
+        ["git", "ls-files", "--cached", "--", lock],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    locked = [entry["name"] for entry in json.loads(staged_file(lock))["members"]] if staged_lock else []
     rows = members.read_member_close(
         Path(git_output("rev-parse", "--path-format=absolute", "--git-common-dir")), Path(archive).name
     ) if locked else []
