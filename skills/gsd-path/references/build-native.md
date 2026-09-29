@@ -193,12 +193,14 @@ dispatch contract and perform steps 1–5 by hand.
    the base. Then isolate each ready task with
    `python3 <absolute workflow_run.py> prepare-task --repo <absolute primary>
    --expected-head <recorded base> --task-id <id> --round-size <N>` where N is the
-   number of tasks in this dispatch round. Serial (`N=1`) returns the primary
-   worktree and `task_branch: null` — the coder works on the bound branch.
+   number of tasks in this dispatch round. For a coordinator task, serial
+   (`N=1`) returns the primary worktree and `task_branch: null` — the coder
+   works on the bound branch.
    The runner also creates a named verification sidecar at this clean base
    before dispatch. Retain both helper results in the dispatch evidence.
-   Parallel (`N>=2`) creates a named `gsd-path-task/<id>` branch and linked
-   worktree at that base; never a detached HEAD. Record dispatch through
+   For a coordinator task, parallel (`N>=2`) creates a named
+   `gsd-path-task/<id>` branch and linked worktree at that base; never a
+   detached HEAD. Record dispatch through
    `python3 <absolute isolation.py> activate-task --repo <returned worktree>
    --base <recorded base> --task-id <id> --agent build_<id> --task-file
    <exact selected task-file path> [--task-branch <returned task_branch>]`.

@@ -9,10 +9,8 @@ both new (greenfield) and existing (brownfield). One task changes one repo.
 Coordinator operations take one `--repo`; `members detect` inspects a checkout
 without it. Joining a member adds no new tracked Path files there and leaves
 an existing member `.project/` untouched.
-Without `.project/MEMBERS.md`, behavior and output stay single-repo. Member task
-execution stays disabled for users through S3c3b1; that slice proves gated
-dispatch in a two-repo build. S5 removes the gate and activates the full
-multi-repo workflow.
+Without `.project/MEMBERS.md`, behavior and output stay single-repo. See S5c
+below for member task activation.
 
 ## Where Path assumes one repo
 
@@ -23,7 +21,7 @@ Function names, not line numbers, because main moves.
 | Root and binding | `pipeline_state._repo_root`, `build_state._repo_root`, `pipeline_git._require_worktree_root`, and `isolation.worktree_root` use one Git root. `REPOSITORY.md` has a fixed single-repo format. |
 | Strict STATE parsers | `pipeline_state._state_from_text`, `git_guard.strict_ship_state`, `guard_hook.valid_status_state`, and `install._valid_status_state` reject unknown fields. Do not add STATE `repos:`. |
 | Branch pattern | `_common.BOUND_BRANCH_RE` accepts only `gsd-path/M00N`. Its remaining users include `pipeline_state`, `pipeline_git`, `isolation.require_bound`, `dispatch_driver.milestone_slug` and its budget ledger, `integration.is_bound_branch`, `pipeline_undo.classify_undo`, `guard_hook`, `install`, `archive_milestone`, and `bootstrap_repository`. Member `git_guard` dispatch handles coordinator-named refs separately. |
-| Tasks and dispatch | `build_state._validate_ready_metadata` checks a base in the coordinator; `dispatch_driver.finish_task` reads the task file in the product worktree. See S3c3b1 for member dispatch. |
+| Tasks and dispatch | See S3c3b1 for member dispatch and S5c–S5d for native activation and host proof. |
 | Landing proof | `git_guard.product_commit_violations` enforces the single-repo landing shape; see S3c2a–S3c2b for member landing proof. |
 | Verify ledger | See S3d for member and coordinator keys. |
 | Sidecar placement | `worktree_paths._workspace` gives each repo a separate hashed root; `../<member>` does not resolve across them. |

@@ -123,12 +123,15 @@ Or directly:
 python3 tests/dogfood.py --host claude --evidence /tmp/gsd-path-dogfood
 ```
 
-### Release host evaluation
+### Host evaluation
 
 ```bash
 python3 -B tests/evaluate_host.py prepare --host claude --directory /tmp/eval --candidate .
-# follow evaluate_host.py module docstring for run/child steps
 ```
+
+The default quick scenario is for release evidence. See the
+[`evaluate_host.py` docstring](tests/evaluate_host.py) for the two-repo scenario
+and run/child steps.
 
 ### Daemon UI acceptance
 

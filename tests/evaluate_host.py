@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive a host with a headless command through the quick scenario for release evidence.
+"""Drive a host through the quick release scenario or a two-repo milestone.
 
     python3 -B tests/evaluate_host.py prepare --host claude --directory /abs/new --candidate . [--scenario multi-repo]
     python3 -B tests/evaluate_host.py run --host claude --directory /abs/new [--resume ID --prompt-file F]
@@ -10,8 +10,8 @@ in tests/hosts/<host>.py SPEC and its docstrings.
 
 Live execution is explicit and opt-in; tests/test_host_*.py never invokes a host.
 The evaluator answers owner gates with follow-up prompts via --prompt-file. Nothing here grades
-the run or assembles the complete release receipt: the evaluator supplies guard
-evidence and the archive JSON files requested by RELEASE_ADDENDUM.
+the run or assembles the complete release receipt. Only the quick scenario
+includes RELEASE_ADDENDUM and its guard and archive evidence requests.
 """
 
 import argparse

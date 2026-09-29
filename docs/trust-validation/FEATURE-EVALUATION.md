@@ -57,9 +57,11 @@ owner instructions. Preserve the thread and evidence directory between sessions.
 | pull-request | PR integration | Approved GitHub target, same-PR reuse, required checks, owner merge commit, tag and canonical integration validation |
 | bootstrap | New GitHub repository transaction | Exact target preview/approval, real journaled creation/resume, collision rejection and correct linked worktree |
 
-The executable catalog is `tests/feature_scenarios.json`. Each prepared scenario
-has its own prompt and `STEPS.md`. A native command failure or unavailable model
-is evidence to classify, not permission to edit pipeline state by hand.
+The feature evaluator selects from `tests/feature_scenarios.json`; the host-only
+multi-repo scenario runs through `tests/evaluate_host.py`. Each prepared feature
+scenario has its own prompt and `STEPS.md`. A native command failure or
+unavailable model is evidence to classify, not permission to edit pipeline
+state by hand.
 
 The `reviews` scenario does not guarantee a natural finding. If none occurs,
 record patch/skeptics as unverifiable. A controlled native fault needs a reviewed,
