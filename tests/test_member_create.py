@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -145,6 +144,23 @@ class MemberCreateTests(unittest.TestCase):
             self.create()
         self.assertEqual(self.calls, [])
 
+    def test_existing_clone_accepts_equivalent_git_root_path(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.base, "clone", "-q", URL, str(self.checkout))
+        run_git = members._common.run_git
+
+        def git_with_equivalent_root(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
+            result = run_git(repo, *arguments)
+            if repo == self.checkout and arguments == ("rev-parse", "--show-toplevel"):
+                return subprocess.CompletedProcess(result.args, result.returncode,
+                                                   f"{self.checkout}/.\n", result.stderr)
+            return result
+
+        with mock.patch.object(members._common, "run_git", side_effect=git_with_equivalent_root):
+            listed = self.create()
+        self.assertEqual(listed[0]["checkout"], str(self.checkout))
+        self.assertEqual(members.member_role(self.checkout)["name"], "web")
+
     def test_visibility_without_create_is_rejected(self) -> None:
         with mock.patch.object(members, "_gh", side_effect=AssertionError("unexpected gh call")):
             with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
@@ -168,7 +184,7 @@ class MemberCreateTests(unittest.TestCase):
     def test_missing_remote_does_not_reuse_occupied_clone(self) -> None:
         self.gh("repo", "create", "acme/web", "--private", "--add-readme")
         git(self.base, "clone", "-q", URL, str(self.checkout))
-        shutil.rmtree(self.remote)
+        self.remote.rename(self.base / "deleted-web.git")
         self.calls.clear()
         with self.assertRaisesRegex(members.MembersError, "clone of a missing repository"):
             self.create()
@@ -182,7 +198,7 @@ class MemberCreateTests(unittest.TestCase):
         self.journal().write_text(json.dumps({
             "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
             "checkout": str(self.checkout), "integration": "default", "step": "clone"}), encoding="utf-8")
-        shutil.rmtree(self.remote)
+        self.remote.rename(self.base / "deleted-web.git")
         self.calls.clear()
         with self.assertRaisesRegex(members.MembersError, "refusing to create it again"):
             self.create()
@@ -240,7 +256,7 @@ class MemberCreateTests(unittest.TestCase):
     def test_recreated_remote_does_not_adopt_unrelated_clone(self) -> None:
         self.gh("repo", "create", "acme/web", "--private", "--add-readme")
         git(self.base, "clone", "-q", URL, str(self.checkout))
-        shutil.rmtree(self.remote)
+        self.remote.rename(self.base / "deleted-web.git")
         git(self.base, "init", "-q", "--bare", "-b", "main", str(self.remote))
         replacement = self.base / "replacement"
         git(self.base, "init", "-q", "-b", "main", str(replacement))

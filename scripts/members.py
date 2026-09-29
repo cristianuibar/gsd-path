@@ -548,7 +548,7 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     if resolved.is_symlink() or (resolved.exists() and not resolved.is_dir()):
         raise MembersError(f"member checkout path is occupied: {resolved}")
     occupied = resolved.exists() and any(resolved.iterdir())
-    if occupied and _common.run_git(resolved, "rev-parse", "--show-toplevel").stdout.strip() != str(resolved):
+    if occupied and Path(_common.run_git(resolved, "rev-parse", "--show-toplevel").stdout.strip()).resolve() != resolved:
         raise MembersError(f"member checkout path is occupied: {resolved}")
     if occupied and _git(resolved, "config", "--get", "remote.origin.url") != url:
         raise MembersError(f"member checkout {resolved} is not a clone of {url}")
