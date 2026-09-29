@@ -487,9 +487,57 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
         validate_task_briefs(
             repo, head.stdout.strip(), f"{project_dir}/tasks",
             dependency_files=dependency_files, landed_bases=landed_bases,
+            member_base=member_base,
         )
+        if project_dir == ".project/next":
+            # Promotion checks lookahead member tasks from the bases their briefs were checked at.
+            named = {
+                str(check_handoffs._strict_frontmatter(text, task_id).get("repo"))
+                for task_id, text in tasks.items()
+                if check_handoffs._strict_frontmatter(text, task_id).get("repo")
+                and check_handoffs._task_scalar(text, task_id, "status") != "done"
+            }
+            if named:
+                bases = {name: member_base(name)[1] for name in sorted(named)}
+                milestone = pipeline_state.load_state(repo, project_dir)[0].milestone
+                path = _lookahead_member_bases_path(repo, str(milestone))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                pipeline_state._common.atomic_write(path, json.dumps(
+                    {"schema": LOOKAHEAD_MEMBER_BASES_SCHEMA, "milestone": milestone, "bases": bases},
+                    indent=2, sort_keys=True) + "\n")
     except (BriefError, check_handoffs.HandoffError) as error:
         raise PipelineStateError(f"task brief validation failed: {error}") from error
+
+
+LOOKAHEAD_MEMBER_BASES_SCHEMA = "gsd-path/lookahead-member-bases/v1"
+
+
+def _lookahead_member_bases_path(repo: Path, milestone: str) -> Path:
+    common = pipeline_state._run_git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+    return Path(common) / "gsd-path" / "lookahead-member-bases" / f"{milestone}.json"
+
+
+def _lookahead_member_bases(repo: Path, milestone: str) -> Optional[dict]:
+    path = _lookahead_member_bases_path(repo, milestone)
+    if not path.is_file():
+        return None
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if value.get("schema") != LOOKAHEAD_MEMBER_BASES_SCHEMA or value.get("milestone") != milestone:
+        return None
+    return value.get("bases")
+
+
+def _shipped_member_merges(repo: Path, landing: str) -> dict:
+    """Member merges named by the ship commit the integration landing merged."""
+    if __package__:
+        from .pipeline_git import ship_member_rows
+    else:
+        from pipeline_git import ship_member_rows
+    ship = pipeline_state._run_git(repo, "rev-parse", "--verify", "--quiet", f"{landing}^2", check=False)
+    if ship.returncode != 0:
+        return {}
+    message = pipeline_state._run_git(repo, "show", "-s", "--format=%B", ship.stdout.strip()).stdout
+    return {row["name"]: row["merge"] for row in ship_member_rows(message)}
 
 
 def checkpoint_approval(
@@ -1045,24 +1093,46 @@ def _classify_plan_drift(
         }
     approved = _approved_task_contracts(repo, checkpoint)
     current = _task_contracts_at(repo, revision)
-    # Member task paths live in member repos; this check sees only the coordinator.
     if __package__:
         from . import check_handoffs
     else:
         import check_handoffs
-    if any(check_handoffs._strict_frontmatter(contract.text, contract.path).get("repo")
-           for contract in approved.values()) or any(
-               check_handoffs._strict_frontmatter(text, path).get("repo")
-               for path, text in current.values()):
-        return {
-            "class": "unverifiable",
-            "checkpoint": checkpoint,
-            "task_ids": [],
-            "changed_paths": [],
-            "contract_paths": [],
-            "member_tasks": True,
-            "reason": "member task drift is not checked yet",
-        }
+    # Member task paths live in member repos: compare each member from the base its brief
+    # was checked at to the member merge the shipped milestone made (both fixed commits).
+    task_repos = {
+        task_id: str(check_handoffs._strict_frontmatter(contract.text, contract.path).get("repo") or "")
+        for task_id, contract in approved.items()
+    }
+    active_member_tasks = {
+        task_id for task_id, name in task_repos.items()
+        if name and check_handoffs._task_scalar(approved[task_id].text, task_id, "status") != "done"
+    }
+    active_members = {task_repos[task_id] for task_id in active_member_tasks}
+    member_changes: dict[str, list] = {}
+    if active_members:
+        bases = _lookahead_member_bases(repo, str(state.milestone)) or {}
+        if any(name not in bases for name in active_members):
+            return {
+                "class": "unverifiable",
+                "checkpoint": checkpoint,
+                "task_ids": [],
+                "changed_paths": [],
+                "contract_paths": [],
+                "member_tasks": True,
+                "reason": "member bases were not recorded at plan approval",
+            }
+        if __package__:
+            from . import members
+        else:
+            import members
+        checkouts = {item["name"]: Path(item["checkout"]) for item in members.read_members(repo)}
+        merges = _shipped_member_merges(repo, landing or revision)
+        for name in active_members:
+            member_changes[name] = [
+                item for item in pipeline_state._run_git(
+                    checkouts[name], "diff", "--no-renames", "--name-only", "-z", bases[name], merges[name]
+                ).stdout.split("\0") if item
+            ] if name in merges else []
 
     contract_paths: set[str] = set()
     flagged_ids: set[str] = set()
@@ -1086,9 +1156,12 @@ def _classify_plan_drift(
 
     product_paths: set[str] = set()
     for task_id, contract in approved.items():
+        member = task_repos.get(task_id)
+        if member and task_id not in active_member_tasks:
+            continue
         matches = sorted(
-            changed_path
-            for changed_path in changed
+            (f"{member}:{changed_path}" if member else changed_path)
+            for changed_path in (member_changes[member] if member else changed)
             if any(
                 changed_path == path
                 or changed_path.startswith(f"{path.rstrip('/')}/")

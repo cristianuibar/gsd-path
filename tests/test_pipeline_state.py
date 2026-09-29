@@ -2352,15 +2352,15 @@ class PipelineStateTests(unittest.TestCase):
             self.assertEqual((state.phase, state.status), ("plan", "active"))
             self.assertIn("plan drift flagged tasks T002", text)
 
-    def test_promote_next_reopens_a_lookahead_with_member_tasks(self) -> None:
+    def test_promote_next_flags_a_task_that_became_a_member_task_after_approval(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, integrate = self._promotion_repo(tmp, drift=False, member_task=True)
             result = state_promote.promote_next(repo, "second", "gsd-path/M002", integrate)
-            self.assertEqual(result["drift"]["class"], "unverifiable")
-            self.assertIn("member", result["drift"]["reason"])
+            self.assertEqual(result["drift"]["class"], "changed")
+            self.assertEqual(result["drift"]["task_ids"], ["T002"])
             state, text, _ = pipeline_state.load_state(repo)
             self.assertEqual((state.phase, state.status), ("plan", "active"))
-            self.assertIn("member task drift is not checked yet", text)
+            self.assertIn("plan drift flagged tasks T002", text)
 
     def test_promote_next_keeps_coordinator_task_with_repo_context_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

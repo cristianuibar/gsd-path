@@ -333,6 +333,7 @@ def validate_task_briefs(
     root: Path, base: str, tasks_dir: str = DEFAULT_TASKS_DIR,
     *, dependency_files: Optional[Dict[str, Set[str]]] = None,
     landed_bases: Optional[Dict[str, str]] = None,
+    member_base=None,
 ) -> Dict[str, object]:
     """Lint task briefs using the caller's validation bases.
 
@@ -354,7 +355,8 @@ def validate_task_briefs(
     task_files = sorted(tasks_path.glob("*.md"))
     if not task_files:
         raise BriefError(f"no task briefs found in {tasks_dir}")
-    member_base = _member_bases(root)
+    if member_base is None:
+        member_base = _member_bases(root)
     for path in task_files:
         task_id, task_problems, contract, task_checked = _lint_task(
             root, resolved_base, path, dependency_files, landed_bases, member_base
