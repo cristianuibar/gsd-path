@@ -301,7 +301,7 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
     staged_lock = subprocess.run(
         ["git", "ls-files", "--cached", "--", lock],
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
         check=True,
     ).stdout
     locked = [entry["name"] for entry in json.loads(staged_file(lock))["members"]] if staged_lock else []
@@ -403,7 +403,7 @@ def staged_abandon_target(new_archives, state):
 
 @lru_cache(maxsize=None)
 def git_output(*arguments):
-    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(["git", *arguments], capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
 
 
 def current_branch():

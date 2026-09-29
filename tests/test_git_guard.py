@@ -210,15 +210,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archived = self.repo / ".project" / "archive" / "002-next"
         (archived / "build").mkdir(parents=True)
-        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (archived / "build" / "members.json").write_text(json.dumps(
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (archived / "build" / "members.json").write_bytes(json.dumps(
             {"schema": "gsd-path/member-lock/v1",
-             "members": [{"name": "web", "branch": "gsd-path/demo-M002", "base": "a" * 40}]}), encoding="utf-8")
-        (self.repo / ".project" / "STATE.md").write_text(
+             "members": [{"name": "web", "branch": "gsd-path/demo-M002", "base": "a" * 40}]}).encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n",
-            encoding="utf-8",
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         (archived / "build" / "members.json").unlink()
@@ -232,10 +231,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
         unclosed = self.run_guard("ship: M002 — next", base)
         self.assertEqual(1, unclosed.returncode)
         self.assertIn("close-members", unclosed.stderr)
-        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        journal.write_bytes(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}).encode("utf-8"))
         self.assertIn("close-members", self.run_guard("ship: M002 — next", members_body).stderr)
         row.update(status="integrated", merge="c" * 40, tag="milestone/demo-002-next")
-        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        journal.write_bytes(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}).encode("utf-8"))
         self.assertEqual(1, self.run_guard("ship: M002 — next", base).returncode)
         closed = self.run_guard("ship: M002 — next", members_body)
         self.assertEqual(0, closed.returncode, closed.stderr)
