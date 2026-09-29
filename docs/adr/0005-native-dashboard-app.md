@@ -15,13 +15,13 @@ the plugin and the app, and see project stats.
 - **Shell.** Tauri gives a tray icon, a window, and notifications. The window
   shows the daemon's existing dashboard in the OS web view (WKWebView,
   WebView2, WebKitGTK), so one UI serves every OS. The app starts the daemon
-  when needed. It checks the daemon version in `/status` before reuse. An older
-  daemon, or one without a version, is stopped and replaced by an app-owned
-  process. A current daemon stays running on quit; the app stops only a process
-  it launched. On first launch, the app uses the daemon's existing
-  uninstall cleanup to retire the old LaunchAgent, Startup shortcut, systemd
-  unit, and Swift app login item. It checks that each old registration is gone
-  before enabling Tauri autostart and shows a manual fix if cleanup fails.
+  when needed. On first launch, it uses the daemon's existing uninstall cleanup
+  to retire the old LaunchAgent, Startup shortcut, systemd unit, and Swift app
+  login item before replacing a daemon. It checks that each old registration is
+  gone before enabling Tauri autostart and shows a manual fix if cleanup fails.
+  It then checks the daemon version in `/status` before reuse. An older daemon,
+  or one without a version, is stopped and replaced by an app-owned process. A
+  current daemon stays running on quit; the app stops only a process it launched.
 - **Backend.** The Python daemon stays the backend. The app creates
   `~/.gsd-path/venv` with the user's Python 3.9+ and installs the bundled
   daemon package into it, as `gsd_daemon install` does today. It does not
@@ -29,7 +29,8 @@ the plugin and the app, and see project stats.
   `install.py` and each project's `status_runtime.py` with `sys.executable`,
   which is not a Python interpreter in a frozen binary. When Python or Git is
   missing, the app shows a static setup page with the fix, before any daemon
-  starts.
+  starts. Each app build with changed daemon code bumps the daemon package
+  version so the reuse check can detect the change.
 - **One source of logic.** The app and dashboard show state and call the
   installer and the bundled helpers (`install.py`, `members.py`). They never
   copy a helper's rules. The existing copy of the guard-command check in
