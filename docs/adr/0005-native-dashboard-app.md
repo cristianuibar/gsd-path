@@ -16,8 +16,9 @@ the plugin and the app, and see project stats.
   shows the daemon's existing dashboard in the OS web view (WKWebView,
   WebView2, WebKitGTK), so one UI serves every OS. The app starts the daemon
   when needed and stops only a process it launched. A daemon it reuses stays
-  running on quit. Tauri autostart replaces the LaunchAgent, Startup shortcut,
-  and systemd unit.
+  running on quit. On first launch, the app uses the daemon's existing
+  uninstall cleanup to retire the old LaunchAgent, Startup shortcut, systemd
+  unit, and Swift app login item. Tauri autostart then takes over.
 - **Backend.** The Python daemon stays the backend. The app creates
   `~/.gsd-path/venv` with the user's Python 3.9+ and installs the bundled
   daemon package into it, as `gsd_daemon install` does today. It does not

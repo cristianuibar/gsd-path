@@ -27,7 +27,7 @@ they write through the existing installer and helpers.
 | A3 Self-update | The Tauri updater reads a static `latest.json` from GitHub Releases. CI signs update artifacts with the owner's updater key, stored as a repository secret. The app checks on launch and from the tray, and asks before installing. |
 | A4 Install view | One page: hosts × installed skill version × latest, with Install and Update. Per project: runtime version, guard hooks present, and Update. For a coordinator with `.project/MEMBERS.md`: each member's marker, member hooks, and `origin/main`, with **Install hooks** (`install.py --member-of`) and **Repair** (`members.py repair`). Each failed check shows the exact fix. All data comes from installer and helper output; the daemon adds no rule of its own. |
 | A5 Stats | Charts from data the daemon already records: tokens and cost over time, time per phase, task throughput per wave, verify pass and fail history. Missing data shows as missing, never as zero. |
-| A6 Retire Swift | Remove `daemon/macos` and the autostart code in `gsd_daemon install` that the app replaces. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
+| A6 Retire Swift | Remove `daemon/macos` and the autostart code in `gsd_daemon install` that the app replaces. On first launch, reuse `gsd_daemon uninstall` cleanup to retire old LaunchAgent, Startup shortcut, systemd unit, and Swift app login item registrations; keep this cleanup after removing the old install path. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
 
 A0 and A1 come first. A2 needs A1. A3 needs A2. A4 and A5 need only A1 and
 can run in parallel. A6 comes last.
@@ -53,10 +53,12 @@ can run in parallel. A6 comes last.
   marker and **Repair** fixes it.
 - A5: a sample project renders every chart; a project without a usage ledger
   shows the missing state.
-- A6: after retirement, install and launch the new app; run
-  `gsd_daemon install` and confirm it does not register autostart. Separately
-  review active docs and install messages for correct app download and startup
-  instructions.
+- A6: upgrade from an old daemon install on each OS, including the Swift app
+  on macOS. On first launch, the new app removes the old startup registration
+  and Swift login item, then starts the dashboard; only the new app starts at
+  login. Run `gsd_daemon install` and confirm it no longer registers autostart.
+  Separately review active docs and install messages for correct app download
+  and startup instructions.
 
 ## Decisions
 
