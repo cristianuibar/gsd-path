@@ -1411,6 +1411,12 @@ def validate_integrated(
                 raise ArchiveError(f"published {ref} differs from local integration evidence")
     if pull_request is not None:
         result["pull_request"] = pull_request
+    for row in shipped.get("members", []):
+        proven = validate_member_integrated(project, row["name"], configured, row["reviewed_head"], refresh=refresh)
+        if (proven["merge"], proven["tag"]) != (row["merge"], row["tag"]):
+            raise ArchiveError(f"member {row['name']} integration differs from the ship commit")
+    if "members" in shipped:
+        result["members"] = shipped["members"]
     return result
 
 
@@ -1692,16 +1698,22 @@ def integrate_member_pull_request(coordinator: Path, member: str, archive_path: 
     return validate_member_integrated(coordinator, member, archive_path, reviewed_head)
 
 
-def validate_member_integrated(coordinator: Path, member: str, archive_path: str, reviewed_head: str) -> dict:
+def validate_member_integrated(
+    coordinator: Path, member: str, archive_path: str, reviewed_head: str, *, refresh: bool = True
+) -> dict:
     """Prove the member merge is on origin/main and its published tag points at it."""
     checkout, _, bound, subject, tag_name = _member_names(coordinator, member, archive_path)
-    refresh_origin(checkout)
     tracking = f"refs/remotes/origin/tags/{tag_name}"
-    published = live_remote_ref(checkout, f"refs/tags/{tag_name}")
+    if refresh:
+        refresh_origin(checkout)
+        published = live_remote_ref(checkout, f"refs/tags/{tag_name}")
+    else:
+        published = optional_ref(checkout, tracking)
     contents = ""
-    if published is not None:
+    if refresh and published is not None:
         archive_milestone.require_git_success(
             run_git(checkout, "update-ref", tracking, published), "refresh member milestone-tag ref")
+    if published is not None:
         contents = run_git(checkout, "for-each-ref", "--format=%(contents)", tracking).stdout
     if "Mode: pull-request" in contents.splitlines():
         metadata = member_pull_request_tag_metadata(contents)

@@ -126,6 +126,17 @@ def is_integrate_subject(subject: str, archive_name: str, default_branch: str) -
     }
 
 
+MEMBER_SHIP_ROW = re.compile(
+    r"(?m)^Member-Reviewed-HEAD: (?P<name>[^@\s]+)@(?P<reviewed_head>[0-9a-f]{40})\n"
+    r"Member: (?P=name) (?P<merge>[0-9a-f]{40}) (?P<tag>\S+)$"
+)
+
+
+def ship_member_rows(body: str) -> list:
+    """Closed-member rows named by a ship body; callers compare the rebuilt body exactly."""
+    return [match.groupdict() for match in MEMBER_SHIP_ROW.finditer(body)]
+
+
 def ship_commit_body(archive_path: str, reviewed_head: str, members: Sequence[dict] = ()) -> str:
     """The ship body; a multi-repo milestone adds each closed member in lock order."""
     return f"Archive: {archive_path}\nReviewed-HEAD: {reviewed_head}\n" + "".join(

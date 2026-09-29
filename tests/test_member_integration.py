@@ -161,6 +161,18 @@ class MemberIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArchiveError, TAG):
             integration.validate_member_integrated(self.root, "web", ARCHIVE, self.member_tip)
 
+    def test_read_only_validation_keeps_member_refs_unchanged(self) -> None:
+        result = self.integrate()
+        refs = ("refs/remotes/origin/main", f"refs/remotes/origin/tags/{TAG}")
+        before = [git(self.member, "rev-parse", "--verify", ref) for ref in refs]
+        git(self.remote, "update-ref", "refs/heads/main", self.main)
+        git(self.remote, "tag", "-d", TAG)
+
+        self.assertEqual(
+            integration.validate_member_integrated(
+                self.root, "web", ARCHIVE, self.member_tip, refresh=False), result)
+        self.assertEqual([git(self.member, "rev-parse", "--verify", ref) for ref in refs], before)
+
 
 if __name__ == "__main__":
     unittest.main()

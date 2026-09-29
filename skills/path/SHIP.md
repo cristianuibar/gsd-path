@@ -83,10 +83,13 @@ so the position is unchanged. Then:
    This owns pending-discussion and landing checks, project Verify isolation,
    execution, output recording, collection, cleanup, and final-review reuse.
    Keep its JSON receipt; do not reconstruct those operations in shell calls.
-   Exact stdout/stderr live once in `.project/build/verify-ledger.jsonl`;
-   `final-gap-1.md` is the generated view referencing that entry. Re-entry at
-   the same command and commit reuses the execution, including a failed one,
-   and finishes interrupted collection without running the command again.
+   For a single-repo milestone, exact stdout/stderr live once in
+   `.project/build/verify-ledger.jsonl`; `final-gap-1.md` is the generated view
+   referencing that entry. For a member milestone, the gap records each member
+   head and holds the exact output; there is no reusable ledger entry.
+   Single-repo re-entry at the same command and commit reuses the execution,
+   including a failed one, and finishes interrupted collection without running
+   the command again.
    Missing legacy output requires evidence reconciliation, not a blind rerun.
    Any non-zero result stops this step; preserve its stderr and diagnose through
    the bundled forensics contract. Do not launch reviewers while project Verify
@@ -122,9 +125,10 @@ so the position is unchanged. Then:
    step 3 or create a fresh sidecar with `isolate-verify --name review-final`
    and dispatch the integration reviewer under logical task name
    `review_final`, assigning only
-   `.project/review/FINAL.md`. Its complete brief includes the exact recorded
-   project Verify ledger entry, every collected gap verdict so Overall verdict is
-   consistent with them, and PLAN.md's `## Surface contract` when INTENT.md
+   `.project/review/FINAL.md`. Its complete brief includes the project Verify
+   evidence from the ledger or the member milestone's gap output, every
+   collected gap verdict so Overall verdict is consistent with them, and
+   PLAN.md's `## Surface contract` when INTENT.md
    names surfaces — that reviewer performs each Walkthrough and records the
    surface and what it showed on every criterion the contract lists. Collect FINAL.md and retire its sidecar through the
    same helper flow.
@@ -254,6 +258,14 @@ The persisted `STATE.archive` field is the transaction identity.
    at the current HEAD is the only artifact-producing remedy. The archive helper independently binds every FINAL.md
    `SCn` heading id and normalized text to the archived INTENT.md; a renamed or
    easier criterion blocks even if the earlier handoff gate was bypassed.
+   For a multi-repo milestone (the archive holds `build/members.json`), run
+   `python3 <absolute archive_milestone.py> close-members --repo <root>`
+   after preflight passes and before recording shipment. It closes each
+   locked member in lock order in that member's integration mode and
+   journals each one. When it returns `awaiting-merge`, report the member PR
+   link, stop, and rerun the same command after the user merges it; never
+   merge a member PR yourself. When it returns `integrated`, keep its `body`
+   for the ship commit below.
 5. Only after preflight passes, record shipment through the journaled helper;
    for a program it atomically replaces both ROADMAP.md and STATE.md, setting
    the current entry to `Status: shipped` with the exact `Archive:` pointer:
@@ -271,10 +283,14 @@ The persisted `STATE.archive` field is the transaction identity.
    idempotent after completion. Stage only
    `.project/` paths, inspect the staged path list against the transaction and
    create the ship phase's one commit with exact subject
-   `ship: M00N — <milestone-slug>` and a body of exactly two consecutive lines,
+   `ship: M00N — <milestone-slug>`. For a single-repo milestone, its body has
+   exactly two consecutive lines,
    `Archive: .project/archive/<NNN>-<slug>` then
    `Reviewed-HEAD: <reviewed SHA>`, with no comment lines or blank line between them.
-   Write the subject, a blank line, and the two body lines to a message file,
+   A multi-repo milestone's body is exactly the `body` that `close-members`
+   returned: those two lines, then one `Member-Reviewed-HEAD:` and one
+   `Member:` line per member.
+   Write the subject, a blank line, and the body lines to a message file,
    then use `git commit -F <message-file>`. M00N and NNN come from STATE.archive.
    There is no untracked-project exception and no product or older-archive
    path may enter this commit.

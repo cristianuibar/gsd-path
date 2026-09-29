@@ -1971,6 +1971,28 @@ def validate_shipped_roadmap(text: str, state: PipelineState, archive: str) -> N
         raise ArchiveError("ROADMAP.md must record Status: shipped and the exact Archive")
 
 
+def member_ship_rows(project: Path, archive: Path, ship_commit: str) -> list:
+    """Ship body member lines, bound to the archived lock order and FINAL.md member heads."""
+    if __package__:
+        from . import check_handoffs
+        from .pipeline_git import ship_member_rows
+    else:
+        import check_handoffs
+        from pipeline_git import ship_member_rows
+    message = require_git_success(run_git(project, "show", "-s", "--format=%B", ship_commit), "inspect ship body")
+    rows = ship_member_rows(message)
+    lock = archive / "build" / "members.json"
+    locked = [entry["name"] for entry in json.loads(lock.read_text(encoding="utf-8"))["members"]] if lock.is_file() else []
+    try:
+        heads = check_handoffs.member_reviewed_heads((archive / "review" / "FINAL.md").read_text(encoding="utf-8"),
+                                                     "FINAL.md")
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
+    if [row["name"] for row in rows] != locked or {row["name"]: row["reviewed_head"] for row in rows} != heads:
+        raise ArchiveError("ship commit member lines must name each locked member at its FINAL.md reviewed HEAD")
+    return rows
+
+
 def validate(repo: Path, *, historical: bool = False) -> dict:
     project, _, state, configured, archive, archived_files, reviewed_head = prepared_transaction(
         repo,
@@ -2064,6 +2086,7 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
         )
     require_committed_carry_forward(project, configured, archive, ship_commit)
 
+    members = member_ship_rows(project, archive, ship_commit)
     ship_parent = require_git_success(run_git(project, "rev-parse", f"{ship_commit}^"), "resolve ship parent")
     if reviewed_head != ship_parent:
         raise ArchiveError(
@@ -2073,7 +2096,7 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
         project,
         ship_commit,
         ship_subject(archive.name),
-        ship_commit_body(configured, reviewed_head),
+        ship_commit_body(configured, reviewed_head, members),
         "ship",
     )
 
@@ -2111,7 +2134,10 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
             + f"; run: git -C {project} revert <commits after {ship_commit[:12]} that touch .project>"
         )
 
-    return {"archive": configured, "commit": ship_commit}
+    result = {"archive": configured, "commit": ship_commit}
+    if members:
+        result["members"] = members
+    return result
 
 
 def parser() -> argparse.ArgumentParser:
