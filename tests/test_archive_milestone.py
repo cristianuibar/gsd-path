@@ -19,6 +19,7 @@ from scripts import (
     pipeline_git,
     review_panel,
 )
+from tests._platform import requires_symlink
 
 if sys.platform != "win32":
     import fcntl
@@ -34,7 +35,8 @@ class ArchiveMilestoneTests(unittest.TestCase):
         return subprocess.run(
             args,
             cwd=cwd,
-            text=True,
+            # git and the scripts speak UTF-8; text=True alone decodes cp1252 on Windows.
+            encoding="utf-8",
             capture_output=True,
             check=False,
         )
@@ -1273,6 +1275,7 @@ refuted
             self.assertFalse(discussion.exists())
             self.assertIn("Answer A002", (archive / "discuss" / "ANSWERS.md").read_text(encoding="utf-8"))
 
+    @requires_symlink
     def test_discussion_recovery_rejects_symlinked_archive_destination(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -1314,6 +1317,7 @@ refuted
                 before,
             )
 
+    @requires_symlink
     def test_discussion_recovery_does_not_follow_temporary_symlinks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)
@@ -1607,6 +1611,7 @@ refuted
             self.assertIn("phase", prepare.stderr)
             self.assertTrue((repo / ".project" / "intent" / "INTENT.md").is_file())
 
+    @requires_symlink
     def test_prepare_rejects_symlinked_archive_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -2199,6 +2204,7 @@ refuted
             self.assertNotEqual(retry.returncode, 0)
             self.assertIn("archive does not match milestone", retry.stderr)
 
+    @requires_symlink
     def test_prepare_rejects_symlinked_canonical_files_and_malformed_wave_names(self) -> None:
         cases = ("singleton", "task", "malformed-wave")
         for case in cases:
@@ -2797,6 +2803,7 @@ Tasks reviewed: 1
                     expected = "placeholder"
                 self.assertIn(expected, preflight.stderr.lower())
 
+    @requires_symlink
     def test_preflight_requires_contiguous_passing_gap_reviews_at_the_reviewed_head(self) -> None:
         for case in (
             "missing",
@@ -5457,7 +5464,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                     ("git", "commit", "-q", "-m", message),
                     cwd=repo,
                     env=env,
-                    text=True,
+                    encoding="utf-8",
                     capture_output=True,
                     check=False,
                 )
@@ -5479,7 +5486,7 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
                 ("git", "merge", "--no-ff", "-m", "merge side", "side"),
                 cwd=repo,
                 env=env,
-                text=True,
+                encoding="utf-8",
                 capture_output=True,
                 check=False,
             )

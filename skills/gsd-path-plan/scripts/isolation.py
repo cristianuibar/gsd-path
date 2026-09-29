@@ -267,6 +267,9 @@ def verify_branch_name(name: str) -> str:
 
 
 def relative_posix(path: str) -> str:
+    if os.name == "nt":
+        # A native Windows relative path; backslash cannot occur in a name there.
+        path = path.replace("\\", "/")
     parsed = PurePosixPath(path)
     if parsed.is_absolute() or ".." in parsed.parts:
         raise IsolationError(f"path must be relative without '..': {path}")

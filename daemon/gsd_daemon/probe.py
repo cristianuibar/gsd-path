@@ -4,6 +4,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -113,9 +115,22 @@ def _scalar(raw: str) -> object:
     return raw
 
 
+def _read_state_text(path: Path) -> str:
+    """Windows refuses to open STATE.md for the instant a writer replaces it,
+    which would read as "not a project" and churn removed/added events."""
+    for attempt in range(5):
+        try:
+            return path.read_text(encoding="utf-8")
+        except PermissionError:
+            if os.name != "nt" or attempt == 4:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+    raise AssertionError("unreachable")
+
+
 def parse_state_file(path: Union[str, Path]) -> dict:
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        text = _read_state_text(Path(path))
     except OSError:
         return {}
     fields = parse_frontmatter(text)
@@ -613,11 +628,14 @@ def _runtime_status(root: str) -> Optional[dict]:
     if not runtime.is_file():
         return None
     try:
+        # The daemon's own interpreter: python3 is usually absent on Windows,
+        # where process start and git are also slow enough to need the margin.
         result = subprocess.run(
-            ["python3", "-B", str(runtime), "status", "--repo", root],
+            [sys.executable, "-B", str(runtime), "status", "--repo", root],
             capture_output=True,
-            text=True,
-            timeout=3,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):

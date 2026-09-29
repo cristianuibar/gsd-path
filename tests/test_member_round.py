@@ -17,7 +17,7 @@ T002 = ".project/tasks/T002-demo-task-t002.md"
 
 def git(repo: Path, *arguments: str, check: bool = True) -> str:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments], cwd=repo,
-                          text=True, capture_output=True, check=check).stdout.strip()
+                          encoding="utf-8", errors="replace", capture_output=True, check=check).stdout.strip()
 
 
 class MemberRoundTests(unittest.TestCase):
@@ -47,10 +47,9 @@ class MemberRoundTests(unittest.TestCase):
         git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         joined = subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.root), "--name", "web",
-                                 "--checkout", str(self.member)], text=True, capture_output=True)
+                                 "--checkout", str(self.member)], encoding="utf-8", errors="replace", capture_output=True)
         self.assertEqual(joined.returncode, 0, joined.stderr)
-        task_path.write_text(task_path.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
-                             encoding="utf-8")
+        task_path.write_bytes(task_path.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "plan: T002 changes the web member")
 
@@ -64,7 +63,7 @@ class MemberRoundTests(unittest.TestCase):
             [sys.executable, "-B", str(SCRIPT), "round", "--wave", "1", "--child-command",
              f"{sys.executable} {self.root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
              "--task-template", str(TASK_TEMPLATE), "--wait", "60", "--repo", str(self.root)],
-            capture_output=True, text=True, env=env)
+            capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -76,7 +75,7 @@ class MemberRoundTests(unittest.TestCase):
         self.assertEqual(landed["T002"]["mode"], "member")
         self.assertTrue(landed["T002"]["ledger"])
         rows = [json.loads(line) for line in
-                (self.root / ".project" / "build" / "verify-ledger.jsonl").read_text().splitlines()]
+                (self.root / ".project" / "build" / "verify-ledger.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertIn(("web", landed["T002"]["landing"]), [(row.get("repo"), row["commit"]) for row in rows])
         bound = "gsd-path/demo-M001"
         self.assertEqual(git(self.member, "show", f"{bound}:tests/test_app.py"), "print('hello')")
@@ -109,7 +108,7 @@ class MemberRoundTests(unittest.TestCase):
             [sys.executable, "-B", str(SCRIPT), "round", "--wave", "1", "--child-command",
              f"{sys.executable} {self.root / 'fake_coder.py'}", "--role-brief", str(ROLE_BRIEF),
              "--task-template", str(TASK_TEMPLATE), "--wait", "60", "--repo", str(self.root)],
-            capture_output=True, text=True, env=env)
+            capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -130,7 +129,7 @@ class MemberRoundTests(unittest.TestCase):
             isolation.activate_member_task(self.root, "web", "T002", "build_t002", self.task_file, head)
             target = Path(isolated["worktree"]) / "tests" / "test_app.py"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("print('hello')\n")
+            target.write_bytes("print('hello')\n".encode("utf-8"))
             with mock.patch.object(isolation, "_write_member_record", side_effect=RuntimeError("crash")):
                 with self.assertRaises(RuntimeError):
                     isolation.land_member(self.root, "web", "T002", "Demo task T002", self.task_file,
@@ -159,7 +158,7 @@ class MemberRoundTests(unittest.TestCase):
             isolation.activate_member_task(self.root, "web", "T002", "build_t002", self.task_file, head)
             target = Path(isolated["worktree"]) / "tests" / "test_app.py"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("print('hello')\n", encoding="utf-8")
+            target.write_bytes("print('hello')\n".encode("utf-8"))
             landed = isolation.land_member(self.root, "web", "T002", "Demo task T002", self.task_file,
                                            head, isolated["member_base"])
         self.assertTrue(Path(isolated["worktree"]).exists())
@@ -246,8 +245,7 @@ class MemberRoundTests(unittest.TestCase):
         from unittest import mock
         first_file = ".project/tasks/T001-demo.md"
         first_task = self.root / first_file
-        first_task.write_text(first_task.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
-                              encoding="utf-8")
+        first_task.write_bytes(first_task.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
         with mock.patch.dict(os.environ, {"GSD_PATH_WORKTREE_ROOT": str(self.workspace),
                                           "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                                           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}):
@@ -263,7 +261,7 @@ class MemberRoundTests(unittest.TestCase):
             isolation.activate_member_task(self.root, "web", "T001", "build_t001", first_file, head)
             first_product = Path(first["worktree"]) / "src/app.py"
             first_product.parent.mkdir(parents=True, exist_ok=True)
-            first_product.write_text("print('first')\n", encoding="utf-8")
+            first_product.write_bytes("print('first')\n".encode("utf-8"))
             landed = isolation.land_member(self.root, "web", "T001", "Demo task T001", first_file,
                                            head, first["member_base"])
             isolation.retire_member_task(self.root, "web", "T001")
@@ -276,8 +274,7 @@ class MemberRoundTests(unittest.TestCase):
 
     def test_second_member_landing_on_a_moved_tip_gets_no_ledger_row(self) -> None:
         t001 = next((self.root / ".project" / "tasks").glob("T001-*.md"))
-        t001.write_text(t001.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1),
-                        encoding="utf-8")
+        t001.write_bytes(t001.read_text(encoding="utf-8").replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "plan: T001 also changes the web member")
         receipt = self.round()

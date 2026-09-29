@@ -3,7 +3,10 @@ hands off to the installer. Drives the wizard through a pty, then asserts the
 dry-run output and exit code. Unix only (pty)."""
 
 import os
-import pty
+try:
+    import pty
+except ImportError:  # Windows has no pseudo-terminals; the tests skip.
+    pty = None
 import re
 import select
 import subprocess

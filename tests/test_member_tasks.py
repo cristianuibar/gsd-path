@@ -19,7 +19,7 @@ STATE = (
 
 def git(repo: Path, *arguments: str) -> str:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                          cwd=repo, text=True, capture_output=True, check=True).stdout.strip()
+                          cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=True).stdout.strip()
 
 
 def member_task(task_id: str, files: str, context: str, repo: str = "web",
@@ -56,7 +56,7 @@ class MemberTaskBriefTests(unittest.TestCase):
         git(self.member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                         "--name", "web", "--checkout", str(self.member)],
-                       text=True, capture_output=True, check=True)
+                       encoding="utf-8", errors="replace", capture_output=True, check=True)
         self.head = git(self.coordinator, "rev-parse", "HEAD")
 
     def tearDown(self) -> None:
@@ -128,7 +128,7 @@ class MemberTaskBriefTests(unittest.TestCase):
 
     def test_member_brief_during_build_resolves_at_the_bound_branch_tip(self) -> None:
         git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
-        (self.member / "src" / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        (self.member / "src" / "landed.py").write_bytes("earlier landing\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "earlier landing")
         git(self.member, "checkout", "-q", "main")
@@ -137,27 +137,27 @@ class MemberTaskBriefTests(unittest.TestCase):
         self.assertIn("path missing at the layer base: src/landed.py", self.problems())
         lock = self.coordinator / ".project" / "build" / "members.json"
         lock.parent.mkdir(parents=True)
-        lock.write_text('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
-                        '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
+        lock.write_bytes('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
+                        '"branch": "gsd-path/acme-M001", "base": "x"}]}'.encode("utf-8"))
         self.assertEqual(self.problems(), "")
 
     def test_plan_recovery_brief_uses_the_existing_build_lock(self) -> None:
         git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
-        (self.member / "src" / "landed.py").write_text("earlier landing\n", encoding="utf-8")
+        (self.member / "src" / "landed.py").write_bytes("earlier landing\n".encode("utf-8"))
         git(self.member, "add", "-A")
         git(self.member, "commit", "-q", "-m", "earlier landing")
         git(self.member, "checkout", "-q", "main")
         (self.coordinator / ".project" / "plan").mkdir()
-        (self.coordinator / ".project" / "plan" / "PLAN.md").write_text(
-            PLAN_WAVE.format(title="demo"), encoding="utf-8")
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="demo").encode("utf-8"))
         self.write("T001", member_task("T001", "src/new.py", "Follow `src/landed.py`.",
                                        verify="test -f src/landed.py"))
         with self.assertRaisesRegex(pipeline_state.PipelineStateError, "src/landed.py"):
             state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
         lock = self.coordinator / ".project" / "build" / "members.json"
         lock.parent.mkdir(parents=True)
-        lock.write_text('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
-                        '"branch": "gsd-path/acme-M001", "base": "x"}]}', encoding="utf-8")
+        lock.write_bytes('{"schema": "gsd-path/member-lock/v1", "members": [{"name": "web", '
+                        '"branch": "gsd-path/acme-M001", "base": "x"}]}'.encode("utf-8"))
         state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
 
     def test_repo_must_name_a_member(self) -> None:
@@ -177,13 +177,13 @@ class MemberTaskReadyTests(unittest.TestCase):
             run_git(repo, "switch", "-q", "-c", BRANCH)
             (repo / ".project" / "plan").mkdir(parents=True)
             (repo / ".project" / "tasks").mkdir()
-            (repo / ".project" / "STATE.md").write_text(STATE.format(phase="build", branch=BRANCH), encoding="utf-8")
-            (repo / ".project" / "plan" / "PLAN.md").write_text(plan_text(((
-                ("T001", "One", (), ("app.py",)), ("T002", "Two", (), ("app.py",))),)), encoding="utf-8")
-            (repo / ".project" / "tasks" / "T001-task.md").write_text(
-                task_text("T001", "One", 1, (), ("app.py",)), encoding="utf-8")
-            (repo / ".project" / "tasks" / "T002-task.md").write_text(
-                task_text("T002", "Two", 1, (), ("app.py",)).replace("files:", "repo: web\nfiles:", 1), encoding="utf-8")
+            (repo / ".project" / "STATE.md").write_bytes(STATE.format(phase="build", branch=BRANCH).encode("utf-8"))
+            (repo / ".project" / "plan" / "PLAN.md").write_bytes(plan_text(((
+                ("T001", "One", (), ("app.py",)), ("T002", "Two", (), ("app.py",))),)).encode("utf-8"))
+            (repo / ".project" / "tasks" / "T001-task.md").write_bytes(
+                task_text("T001", "One", 1, (), ("app.py",)).encode("utf-8"))
+            (repo / ".project" / "tasks" / "T002-task.md").write_bytes(
+                task_text("T002", "Two", 1, (), ("app.py",)).replace("files:", "repo: web\nfiles:", 1).encode("utf-8"))
             run_git(repo, "add", "-A")
             run_git(repo, "commit", "-q", "-m", "plan")
             ready = build_state.ready(str(repo))

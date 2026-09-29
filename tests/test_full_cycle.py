@@ -27,12 +27,12 @@ SLUG = "demo"
 
 
 def git(repo, *args):
-    return subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
+    return subprocess.run(["git", *args], cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=False)
 
 
 def script(name, *args):
     return subprocess.run(
-        [sys.executable, str(SCRIPTS / name), *args], cwd=ROOT, text=True, capture_output=True, check=False
+        [sys.executable, str(SCRIPTS / name), *args], cwd=ROOT, encoding="utf-8", errors="replace", capture_output=True, check=False
     )
 
 
@@ -335,7 +335,7 @@ class FullCycleTests(unittest.TestCase):
     def install_hooks(self):
         result = subprocess.run(
             ["node", str(SCRIPTS / "install.mjs"), "--claude", "--local", "--project", str(self.repo), "--hooks", "--no-color"],
-            cwd=self.repo, text=True, capture_output=True,
+            cwd=self.repo, encoding="utf-8", errors="replace", capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -494,7 +494,7 @@ class FullCycleTests(unittest.TestCase):
             )
             self.assertEqual(landed["subject"], "T001: render greeting")
             self.assertEqual(git(repo, "branch", "--show-current").stdout.strip(), BRANCH)
-            verify = subprocess.run([sys.executable, "-B", "tests/test_app.py"], cwd=repo, capture_output=True, text=True)
+            verify = subprocess.run([sys.executable, "-B", "tests/test_app.py"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(verify.returncode, 0, verify.stderr)
             self.write(".project/review/wave-1.cycle1.md", WAVE_REVIEW)
             wave = self.gate(

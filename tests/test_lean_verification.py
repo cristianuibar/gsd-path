@@ -24,7 +24,7 @@ suite = unittest.defaultTestLoader.loadTestsFromNames([
 raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
 """
         result = subprocess.run([sys.executable, '-B', '-c', program], cwd=root,
-                                capture_output=True, text=True)
+                                capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_ship_bundle_returns_final_gate_without_review_dispatch(self):
@@ -34,7 +34,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
             head, _ = self.fixture(root)
             command = [sys.executable, "-B", str(script), "--repo", str(root), "--expected-head", head]
             for reused in (False, True):
-                result = subprocess.run(command, capture_output=True, text=True)
+                result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 receipt = json.loads(result.stdout)
                 self.assertIn("Ran 1 test", receipt["verification"]["execution"]["stderr"])
@@ -111,7 +111,7 @@ raise SystemExit(not unittest.TextTestRunner().run(suite).wasSuccessful())
                     before = ledger.read_bytes()
                     run = subprocess.run
                     def no_replay(command, *args, **kwargs):
-                        if command[:2] == ["bash", "-c"]:
+                        if len(command) == 3 and command[1] == "-c":  # bash_argv, any bash path
                             self.fail("project command replayed")
                         return run(command, *args, **kwargs)
                     with patch.object(subprocess, "run", side_effect=no_replay):

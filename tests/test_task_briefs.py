@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
 from scripts import check_task_briefs
+from tests._platform import requires_symlink
 
 
 CONTRACT = "- `render(name: str) -> str` in `src/app.py` returns the greeting."
@@ -70,7 +71,7 @@ files:
 def git(root: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     )
@@ -281,6 +282,7 @@ class TaskBriefTests(unittest.TestCase):
             self.assertEqual(exit_code, 0, stderr)
             self.assertFalse((root / "newpkg").exists())
 
+    @requires_symlink
     def test_new_path_rejects_non_directory_ancestors(self) -> None:
         for kind in ("file", "symlink", "git"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:

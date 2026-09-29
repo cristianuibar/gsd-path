@@ -14,7 +14,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from scripts import dispatch_driver, pipeline_state
+from scripts import _common, dispatch_driver, pipeline_state
+
+# Git for Windows bash, never the System32 WSL launcher CreateProcess finds first.
+BASH = _common.find_bash()
 from tests import test_handoffs
 from tests.test_pipeline_state import run_git
 
@@ -29,17 +32,17 @@ FAKE_CODER = textwrap.dedent(
     """
     import os, re, sys, time
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     worktree = Path(re.search(r"^Work only in this worktree root: (.+)$", brief, re.M).group(1))
     task_path = Path(re.search(r"^Task file: (.+)$", brief, re.M).group(1))
     task_id = re.search(r"task (T\\d+)\\.", brief).group(1)
-    text = task_path.read_text()
+    text = task_path.read_bytes().decode("utf-8")
     declared = re.search(r"^files:\\n  - (.+)$", text, re.M).group(1)
     mode = os.environ.get("FAKE_MODE", "ready")
     if mode == "slow":
         time.sleep(3)
     if mode in ("question", "questionjson") and "Orchestrator answer:" not in text:
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which greeting? — readings: hi, hello\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which greeting? — readings: hi, hello\\n").encode("utf-8"))
         if mode == "questionjson":
             import json
             print(json.dumps({"result": f"RESULT: {task_id} blocked", "usage": {"output_tokens": 3}}))
@@ -47,16 +50,16 @@ FAKE_CODER = textwrap.dedent(
             print(f"RESULT: {task_id} blocked")
         sys.exit(0)
     if mode == "question2" and "which file?" not in text:
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n").encode("utf-8"))
         print(f"RESULT: {task_id} blocked")
         sys.exit(0)
     if mode == "questioncrash":
-        task_path.write_text(text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n")
+        task_path.write_bytes((text + "- 2026-09-07 — NEEDS-ORCHESTRATOR: which file? — readings: a, b\\n").encode("utf-8"))
         sys.exit(2)
     target = worktree / declared
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n")
-    task_path.write_text(text + f"- 2026-09-07 — implemented {declared}; Verify pass\\n")
+    target.write_bytes(("raise SystemExit(1)\\n" if mode == "badverify" else "print('hello')\\n").encode("utf-8"))
+    task_path.write_bytes((text + f"- 2026-09-07 — implemented {declared}; Verify pass\\n").encode("utf-8"))
     if mode == "claudejson":
         import json
         print(json.dumps({"result": f"RESULT: {task_id} ready", "usage": {"output_tokens": 3}}))
@@ -70,7 +73,7 @@ FAKE_REVIEWER = textwrap.dedent(
     """
     import os, re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     name = re.search(r"logical task name (\\S+)\\.", brief).group(1)
     wave, cycle = re.search(r"wave (\\d+), cycle (\\d+)", brief).groups()
@@ -97,7 +100,7 @@ FAKE_REVIEWER = textwrap.dedent(
         lines += [f"### {sc} — {criterion}: " + ("fail" if failed else "pass"),
                   ("- ❌ " if failed else "- ✅ ") + criterion + (" — found: wrong output, src/app.py:1\\n  fix: print hello" if failed else " — recorded Verify")]
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text("\\n".join(lines) + "\\n")
+    staged.write_bytes(("\\n".join(lines) + "\\n").encode("utf-8"))
     print(f"RESULT: {name} {verdict}")
     """
 )
@@ -107,7 +110,7 @@ FAKE_SKEPTIC = textwrap.dedent(
     """
     import os, re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     locator = re.search(r"^Criterion locator: (\\S+)$", brief, re.M).group(1)
     observations = re.findall(r"^- \\[(\\w+)\\] (.+)$", brief, re.M)
@@ -120,7 +123,7 @@ FAKE_SKEPTIC = textwrap.dedent(
         lines += [f"### Observation {n}: {verdict}", "", "checked", ""]
     lines += ["## Verdict", "", verdict, "", "## Evidence", "", "Re-ran Verify in the sidecar.", ""]
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text("\\n".join(lines))
+    staged.write_bytes(("\\n".join(lines)).encode("utf-8"))
     print(f"Verdict: {verdict}")
     """
 )
@@ -130,15 +133,15 @@ FAKE_PANELIST = textwrap.dedent(
     """
     import re, sys
     from pathlib import Path
-    brief = sys.stdin.read()
+    brief = sys.stdin.buffer.read().decode("utf-8")  # hosts read the brief as UTF-8
     staged = Path(re.search(r"^Write exactly this output file: (.+)$", brief, re.M).group(1))
     family = re.search(r"Family: (\\w+)\\.", brief).group(1)
     model = re.search(r"Model: (\\S+)\\.", brief).group(1)
     depth = re.search(r"Depth for this brief: (\\w+)\\.", brief).group(1)
     wave, cycle = re.search(r"wave (\\d+), cycle (\\d+)", brief).groups()
     staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text(f"# Panel — wave {wave}, cycle {cycle}\\n\\n- Family: {family}\\n- Model: {model}\\n"
-                      f"- Depth: {depth}\\n\\n## Findings\\n\\n- none\\n\\n## Summary\\n\\nNo findings.\\n")
+    staged.write_bytes((f"# Panel — wave {wave}, cycle {cycle}\\n\\n- Family: {family}\\n- Model: {model}\\n"
+                        f"- Depth: {depth}\\n\\n## Findings\\n\\n- none\\n\\n## Summary\\n\\nNo findings.\\n").encode("utf-8"))
     print("0 findings")
     """
 )
@@ -188,7 +191,7 @@ class DispatchDriverTests(unittest.TestCase):
         env = dict(os.environ, FAKE_MODE=mode, **fake)
         completed = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), *args, "--repo", str(root)],
-            capture_output=True, text=True, env=env,
+            capture_output=True, encoding="utf-8", errors="replace", env=env,
         )
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
@@ -206,7 +209,7 @@ class DispatchDriverTests(unittest.TestCase):
              "--child-command", f"{sys.executable} {root / 'fake_reviewer.py'}",
              "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
              "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md"),
-             *extra, "--repo", str(root)], capture_output=True, text=True, env=env)
+             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace", env=env)
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -217,7 +220,7 @@ class DispatchDriverTests(unittest.TestCase):
              "--advertised", advertised, "--parent-slug", "claude-opus",
              "--role-brief", str(PROJECT_ROOT / "skills/gsd-path-build/references/reviewer.md"),
              "--template", str(PROJECT_ROOT / "skills/gsd-path-build/templates/wave-panel.md"),
-             *extra, "--repo", str(root)], capture_output=True, text=True)
+             *extra, "--repo", str(root)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertTrue(completed.stdout.strip(), completed.stderr)
         return json.loads(completed.stdout)
 
@@ -494,7 +497,7 @@ class DispatchDriverTests(unittest.TestCase):
             prepared = subprocess.run(
                 [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
                  "--repo", str(root), "--expected-head", head, "--task-id", task_id, "--round-size", "2"],
-                check=True, capture_output=True, text=True)
+                check=True, capture_output=True, encoding="utf-8", errors="replace")
             isolate = json.loads(prepared.stdout)["steps"][0]["result"]
             worktree = Path(isolate["worktree"])
             subprocess.run([sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py"),
@@ -521,7 +524,7 @@ class DispatchDriverTests(unittest.TestCase):
         prepared = subprocess.run(
             [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "prepare-task",
              "--repo", str(root), "--expected-head", head, "--task-id", "T001", "--round-size", "2"],
-            check=True, capture_output=True, text=True)
+            check=True, capture_output=True, encoding="utf-8", errors="replace")
         isolate = json.loads(prepared.stdout)["steps"][0]["result"]
         worktree = Path(isolate["worktree"])
         isolation_cli = [sys.executable, "-B", str(PROJECT_ROOT / "scripts/isolation.py")]
@@ -599,7 +602,8 @@ class DispatchDriverTests(unittest.TestCase):
         task.unlink()
         self.assertFalse(current.classify(state))
         self.assertEqual(current.receipt["blocked"][0]["task_id"], "T001")
-        self.assertIn(str(task), current.receipt["blocked"][0]["reason"])
+        # The OSError text shows the path repr, which doubles Windows backslashes.
+        self.assertIn(repr(str(task))[1:-1], current.receipt["blocked"][0]["reason"])
         self.assertEqual(dispatch_driver.latest_states(current.root)[0]["outcome"], "blocked")
 
     def test_finish_refuses_a_running_child_and_a_recovered_landing_is_recorded(self) -> None:
@@ -723,7 +727,7 @@ class DispatchDriverTests(unittest.TestCase):
             self.assertEqual(self.branches(root), ["gsd-path/M001"])
             worktrees = run_git(root, "worktree", "list", "--porcelain").stdout.splitlines()
             self.assertEqual([line for line in worktrees if line.startswith("worktree ")],
-                             [f"worktree {root.resolve()}"])
+                             [f"worktree {root.resolve().as_posix()}"])  # git prints /
 
     def test_budget_stops_when_child_output_cannot_prove_usage(self) -> None:
         root = self.root.parent / "plain"
@@ -814,7 +818,7 @@ class DispatchDriverTests(unittest.TestCase):
         head = self.head(root)
         completed = subprocess.run(
             [sys.executable, "-B", str(PROJECT_ROOT / "scripts/workflow_run.py"), "build-evidence",
-             "--repo", str(root), "--expected-head", head], capture_output=True, text=True)
+             "--repo", str(root), "--expected-head", head], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         receipt = json.loads(completed.stdout)
         evidence = root / ".project/build/evidence.json"
@@ -1437,10 +1441,10 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(command.splitlines(), ["set -e", *[line for source in ("T001", "T002") for line in
             ("(", dispatch_driver._common.task_verify_command(texts[source]), ")")]])
         # A source Verify ending in `exit 0` ends only its own subshell; the next one still runs.
-        probe = subprocess.run(["bash", "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
+        probe = subprocess.run([BASH, "-c", "set -e\n(\ntrue; exit 0\n)\n(\nexit 7\n)"], capture_output=True)
         self.assertEqual(probe.returncode, 7)
         (root / "tests/test_app.py").write_bytes("raise SystemExit(7)\n".encode("utf-8"))
-        result = subprocess.run(["bash", "-c", command], cwd=root, capture_output=True, text=True)
+        result = subprocess.run([BASH, "-c", command], cwd=root, capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 7, result)
         options.cycle = 2
         plan = (root / ".project/plan/PLAN.md").read_bytes()

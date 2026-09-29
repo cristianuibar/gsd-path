@@ -32,7 +32,7 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         ["git", "-C", str(repo), *args],
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
 
 
@@ -48,7 +48,7 @@ def diagnose_installed(repo: Path) -> dict[str, object]:
         [sys.executable, str(script), "diagnose", "--repo", str(repo)],
         check=True,
         capture_output=True,
-        text=True,
+        encoding="utf-8", errors="replace",
     )
     return json.loads(completed.stdout)
 
@@ -520,7 +520,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                         cwd=PROJECT_ROOT,
                         env=environment,
                         capture_output=True,
-                        text=True,
+                        encoding="utf-8", errors="replace",
                     )
                     self.assertNotEqual(completed.returncode, 0)
                     self.assertIn("missing_helper_dependency", completed.stderr)
@@ -552,7 +552,7 @@ class PipelineDiagnoseTests(unittest.TestCase):
                     str(repo),
                 ],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 check=False,
             )
             self.assertEqual(completed.returncode, 0, completed.stderr)

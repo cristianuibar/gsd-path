@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import install
 import members
+from tests._platform import requires_symlink
 
 INSTALL = ROOT / "scripts" / "install.py"
 MEMBERS = ROOT / "scripts" / "members.py"
@@ -28,7 +29,7 @@ GUARD_LAUNCHER = (
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-        cwd=repo, text=True, capture_output=True, check=check,
+        cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=check,
     )
 
 
@@ -80,7 +81,7 @@ class MemberInstallTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
              "--name", "web", "--checkout", str(self.member)],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -88,7 +89,7 @@ class MemberInstallTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(INSTALL), "--member-of", str(coordinator or self.coordinator),
              "--project", str(member or self.member)],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
 
     def installed(self) -> None:
@@ -153,7 +154,7 @@ class MemberInstallTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(INSTALL), "--member-of", str(self.coordinator),
              "--project", str(self.member), "--dry-run"],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("dry run", result.stdout)
@@ -181,7 +182,7 @@ class MemberInstallTests(unittest.TestCase):
         self.assertNotEqual(self.change().returncode, 0)
         git(self.member, "reset", "-q", "--hard")
         repaired = subprocess.run([sys.executable, str(MEMBERS), "repair", "--repo", str(moved)],
-                                  text=True, capture_output=True, check=False)
+                                  encoding="utf-8", errors="replace", capture_output=True, check=False)
         self.assertEqual(repaired.returncode, 0, repaired.stderr)
         committed = self.change()
         self.assertEqual(committed.returncode, 0, committed.stderr)
@@ -218,6 +219,7 @@ class MemberInstallTests(unittest.TestCase):
         self.assertIn("coordinator guard is not installed", result.stderr)
         self.assertEqual(list(self.hooks.iterdir()), [])
 
+    @requires_symlink
     def test_existing_temporary_symlink_refuses_without_changing_hooks(self) -> None:
         self.join()
         executable(self.hooks / "pre-commit", "#!/bin/sh\nexit 0\n")

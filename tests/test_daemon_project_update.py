@@ -15,6 +15,7 @@ from gsd_daemon.model import ProjectStatus
 from gsd_daemon.plugin import PluginManager
 from gsd_daemon.serve import serve_in_thread
 from tests import test_daemon_board_ui as board_ui
+from tests._platform import requires_symlink
 
 SOURCE = Path(__file__).resolve().parents[1]
 
@@ -23,6 +24,7 @@ class ProjectUpdateTests(unittest.TestCase):
     orca = board_ui.BoardUITests.orca
     js = board_ui.BoardUITests.js
 
+    @requires_symlink
     def test_real_update_and_dark_menu(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
@@ -35,7 +37,7 @@ class ProjectUpdateTests(unittest.TestCase):
                 subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True)
             (home / 'src').symlink_to(SOURCE, target_is_directory=True)
             def runner(argv, cwd=None):
-                result = subprocess.run(argv, cwd=cwd, env={**os.environ, 'HOME': str(home)}, capture_output=True, text=True)
+                result = subprocess.run(argv, cwd=cwd, env={**os.environ, 'HOME': str(home)}, capture_output=True, encoding="utf-8", errors="replace")
                 return result.returncode, result.stdout, result.stderr
             manager = PluginManager(home=home, user_home=home, runner=runner,
                                     git_runner=lambda argv, **kw: (0, ' M daemon/gsd_daemon/serve.py\n', '') if 'status' in argv else (1, '', 'Your local changes would be overwritten by merge'), environ={})

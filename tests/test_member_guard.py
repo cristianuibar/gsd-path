@@ -22,7 +22,7 @@ STATE = (
 
 def git(repo: Path, *arguments: str) -> str:
     return subprocess.run(
-        ["git", *arguments], cwd=repo, text=True, capture_output=True, check=True
+        ["git", *arguments], cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=True
     ).stdout.strip()
 
 
@@ -67,14 +67,14 @@ class MemberGuardTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
              "--name", "web", "--checkout", str(self.member)],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def guard(self, *arguments: str, stdin: str = ""):
         return subprocess.run(
             [sys.executable, str(SCRIPT), *arguments], cwd=self.member,
-            text=True, capture_output=True, input=stdin, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, input=stdin, check=False,
         )
 
     def stage_product_commit(self):
@@ -119,7 +119,7 @@ class MemberGuardTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
              "--name", "web", "--checkout", str(self.member)],
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("refs/remotes/origin/main", result.stderr)

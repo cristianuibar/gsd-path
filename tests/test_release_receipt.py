@@ -1,9 +1,11 @@
 import hashlib
 import importlib.util
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from tests._platform import posix_permissions_only
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +74,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         result = self.check_hooks(self.reference)
         self.assertEqual("pass", result["git_hooks"])
 
+    @posix_permissions_only
     def test_nonexecutable_fixture_pre_commit_fails(self):
         (self.fixture / self.hook).chmod(0o644)
         result = self.check_hooks(self.fixture, self.reference)
@@ -84,12 +87,15 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         hook.write_bytes("#!/bin/sh\nexit 0\n".encode("utf-8"))
         for mode, executable, verdict in ((0o644, False, "fail"), (0o755, True, "pass")):
             with self.subTest(mode=mode):
+                if not executable and os.name == "nt":
+                    self.skipTest("POSIX permission bits are not enforced on Windows")
                 hook.chmod(mode)
                 result = self.check_hooks(self.fixture, self.reference)
                 self.assertEqual(verdict, result["git_hooks"])
                 self.assertEqual({"pre-commit": True, "commit-msg": executable},
                                  result["fixture_hook_executable"])
 
+    @posix_permissions_only
     def test_nonexecutable_reference_pre_commit_stays_inert(self):
         (self.reference / self.hook).chmod(0o644)
         result = release_receipt.git_hook_check(self.fixture, self.archive, self.reference)
@@ -98,6 +104,7 @@ class ReleaseReceiptHookTests(unittest.TestCase):
         self.assertEqual(0, result["steps"][0]["exit_code"])
         self.assertEqual(0, result["steps"][1]["exit_code"])
 
+    @posix_permissions_only
     def test_nonexecutable_commit_msg_stays_inert(self):
         hook = self.reference / ".git/hooks/commit-msg"
         hook.write_bytes("#!/bin/sh\nexit 1\n".encode("utf-8"))

@@ -1,5 +1,6 @@
-import re
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import git_guard
+from tests._platform import can_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "git_guard.py"
 TASK_FILE = (
@@ -162,7 +164,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ["git", "rev-parse", "HEAD"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             check=True,
         ).stdout.strip()
 
@@ -176,7 +178,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), str(message)],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
     def test_blocks_staged_archive_tamper_and_allows_clean_commit(self):
@@ -208,15 +210,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.git("branch", "-m", "gsd-path/M002")
         archived = self.repo / ".project" / "archive" / "002-next"
         (archived / "build").mkdir(parents=True)
-        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
-        (archived / "build" / "members.json").write_text(json.dumps(
+        (archived / "MANIFEST.md").write_bytes("manifest\n".encode("utf-8"))
+        (archived / "build" / "members.json").write_bytes(json.dumps(
             {"schema": "gsd-path/member-lock/v1",
-             "members": [{"name": "web", "branch": "gsd-path/demo-M002", "base": "a" * 40}]}), encoding="utf-8")
-        (self.repo / ".project" / "STATE.md").write_text(
+             "members": [{"name": "web", "branch": "gsd-path/demo-M002", "base": "a" * 40}]}).encode("utf-8"))
+        (self.repo / ".project" / "STATE.md").write_bytes(
             "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
             "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
-            "archive: .project/archive/002-next\n---\n",
-            encoding="utf-8",
+            "archive: .project/archive/002-next\n---\n".encode("utf-8"),
         )
         self.git("add", "-A")
         (archived / "build" / "members.json").unlink()
@@ -230,10 +231,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
         unclosed = self.run_guard("ship: M002 — next", base)
         self.assertEqual(1, unclosed.returncode)
         self.assertIn("close-members", unclosed.stderr)
-        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        journal.write_bytes(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}).encode("utf-8"))
         self.assertIn("close-members", self.run_guard("ship: M002 — next", members_body).stderr)
         row.update(status="integrated", merge="c" * 40, tag="milestone/demo-002-next")
-        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        journal.write_bytes(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}).encode("utf-8"))
         self.assertEqual(1, self.run_guard("ship: M002 — next", base).returncode)
         closed = self.run_guard("ship: M002 — next", members_body)
         self.assertEqual(0, closed.returncode, closed.stderr)
@@ -259,7 +260,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, pre_commit.returncode, pre_commit.stderr)
         self.assertEqual(
@@ -286,7 +287,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         refused = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
              "commit", "-q", "-F", str(malformed_message)],
-            cwd=self.repo, capture_output=True, text=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(1, refused.returncode, refused.stderr)
         self.assertIn("ship commit subject must be", refused.stderr)
@@ -296,7 +297,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 refused = subprocess.run(
                     ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
                      "commit", "-q", "-m", "ship: M002 — next", "-m", invalid_body],
-                    cwd=self.repo, capture_output=True, text=True,
+                    cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
                 )
                 self.assertEqual(1, refused.returncode, refused.stderr)
                 self.assertIn("ship commit body does not match", refused.stderr)
@@ -304,12 +305,12 @@ class GitGuardEndToEndTests(unittest.TestCase):
         accepted = subprocess.run(
             ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
              "commit", "-q", "-m", "ship: M002 — next", "-m", body],
-            cwd=self.repo, capture_output=True, text=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, accepted.returncode, accepted.stderr)
         stored = subprocess.run(
             ["git", "show", "-s", "--format=%b", "HEAD"],
-            cwd=self.repo, capture_output=True, text=True, check=True,
+            cwd=self.repo, capture_output=True, encoding="utf-8", errors="replace", check=True,
         ).stdout
         self.assertEqual(body + "\n\n", stored)
 
@@ -393,7 +394,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("read-only", result.stderr)
@@ -428,7 +429,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "feat: change app"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -440,7 +441,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "ship: 002-next"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("only touch .project/", result.stderr)
@@ -462,7 +463,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
              "commit", "-q", "-m", "chore: first commit"],
             cwd=repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -514,7 +515,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -566,7 +567,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -593,7 +594,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-push", "origin", "https://example.invalid/r.git"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             input="".join(line + "\n" for line in lines),
         )
 
@@ -738,7 +739,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             [sys.executable, str(SCRIPT), "pre-commit"],
             cwd=self.repo,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertIn("STATE is ship", result.stderr)
@@ -775,13 +776,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
         hooks = self.repo / ".gsd-path"
         installed = subprocess.run(
             [*installer, "--hooks-init", "--claude", "--project", str(self.repo)],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, installed.returncode, installed.stderr)
         runtime = Path(subprocess.check_output(
             [sys.executable, "-B", str(hooks / "status_runtime.py"),
              "--repo", str(self.repo), "--runtime-path"],
-            text=True,
+            encoding="utf-8", errors="replace",
         ).strip())
         # Fixture history includes deliberate out-of-band STATE rewrites.
         self.git("config", "core.hooksPath", "/dev/null")
@@ -799,7 +800,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
         selected = subprocess.run(
             [sys.executable, "-B", str(runtime / "promote_lookahead.py"), "select-base",
              "--repo", str(self.repo), "--base", base, "--remote-default", "origin/main"],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(0, selected.returncode, selected.stderr)
         self.assertEqual("gsd-path/M003", json.loads(selected.stdout)["branch"])
@@ -834,7 +835,7 @@ class GitGuardEndToEndTests(unittest.TestCase):
             ):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")],
-                    cwd=self.repo, input=json.dumps(event), capture_output=True, text=True,
+                    cwd=self.repo, input=json.dumps(event), capture_output=True, encoding="utf-8", errors="replace",
                 )
                 with self.subTest(rewritten=rewritten, event=event):
                     self.assertEqual(2, result.returncode, result.stderr)
@@ -865,11 +866,13 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
                     input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
-                    capture_output=True, text=True,
+                    capture_output=True, encoding="utf-8", errors="replace",
                 )
                 with self.subTest(allowed=command):
                     self.assertEqual(0, result.returncode, result.stderr)
 
+        if not can_symlink():
+            return  # The cross-worktree link cases below need symlink privilege.
         with tempfile.TemporaryDirectory() as directory:
             sibling = Path(directory) / "feature"
             self.git("worktree", "add", "-q", "-b", "feature/next", str(sibling))
@@ -885,52 +888,54 @@ class GitGuardEndToEndTests(unittest.TestCase):
             (sibling / "dest/src").mkdir()
             (sibling / "dest/src/app.py").symlink_to(self.repo / "app.py")
             other_hooks = sibling / ".gsd-path"
+            # Commands are typed in Git Bash on Windows: POSIX paths, not backslashes.
+            sib, rep = sibling.as_posix(), self.repo.as_posix()
             for guard in (hooks / "guard_hook.py", other_hooks / "guard_hook.py"):
                 for command, cwd, expected in (
-                    (f"echo new > {sibling}/app.py", self.repo, 0),
-                    (f"echo new > {self.repo}/app.py", sibling, 2),
+                    (f"echo new > {sib}/app.py", self.repo, 0),
+                    (f"echo new > {rep}/app.py", sibling, 2),
                     ("echo new > app.py", sibling, 0),
                     ("echo new > app.py", self.repo, 2),
-                    (f"cd {sibling} && echo new > app.py", self.repo, 0),
-                    (f"cd {self.repo} && echo new > app.py", sibling, 2),
-                    (f"git -C {self.repo} restore --source=HEAD~1 -- app.py", sibling, 2),
-                    (f"git -C {self.repo} switch feature/next", sibling, 2),
-                    (f"git -C{self.repo} switch feature/next", sibling, 2),
+                    (f"cd {sib} && echo new > app.py", self.repo, 0),
+                    (f"cd {rep} && echo new > app.py", sibling, 2),
+                    (f"git -C {rep} restore --source=HEAD~1 -- app.py", sibling, 2),
+                    (f"git -C {rep} switch feature/next", sibling, 2),
+                    (f"git -C{rep} switch feature/next", sibling, 2),
                     (f"git -C {self.repo.parent} -C {self.repo.name} switch feature/next", sibling, 2),
-                    (f"git -C {self.repo} status --short", sibling, 0),
-                    (f"git -C {self.repo} --work-tree={sibling} switch feature/next", sibling, 2),
-                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} switch feature/next", sibling, 2),
-                    (f"git --git-dir {self.repo}/.git --work-tree {sibling} restore --source=HEAD -- app.py", sibling, 2),
-                    (f"git -C {self.repo} --work-tree={sibling} status --short", sibling, 0),
-                    (f"git --git-dir={self.repo}/.git --work-tree={sibling} log -1", sibling, 0),
-                    (f"git -C {sibling} --work-tree={self.repo} restore --source=HEAD -- app.py", sibling, 2),
+                    (f"git -C {rep} status --short", sibling, 0),
+                    (f"git -C {rep} --work-tree={sib} switch feature/next", sibling, 2),
+                    (f"git --git-dir={rep}/.git --work-tree={sib} switch feature/next", sibling, 2),
+                    (f"git --git-dir {rep}/.git --work-tree {sib} restore --source=HEAD -- app.py", sibling, 2),
+                    (f"git -C {rep} --work-tree={sib} status --short", sibling, 0),
+                    (f"git --git-dir={rep}/.git --work-tree={sib} log -1", sibling, 0),
+                    (f"git -C {sib} --work-tree={rep} restore --source=HEAD -- app.py", sibling, 2),
 
-                    (f"git -C {sibling} restore --source=HEAD -- app.py", self.repo, 0),
-                    (f"rm {self.repo}/link", sibling, 2),
-                    (f"rm {self.repo}/dir-link", sibling, 2),
-                    (f"cp {self.repo}/app.py {sibling}/copy.py", sibling, 0),
-                    (f"cp {self.repo}/app.py {sibling}", sibling, 0),
-                    (f"cp -t {sibling} {self.repo}/app.py", sibling, 0),
-                    (f"cp --target-directory={sibling} {self.repo}/app.py", sibling, 0),
-                    (f"cp {sibling}/app.py {self.repo}/app.py", sibling, 2),
-                    (f"cp {sibling}/app.py {self.repo}/link", sibling, 2),
-                    (f'D={sibling}/dest; cp {sibling}/app.py "$D"', sibling, 2),
-                    (f'S={sibling}/app.py; D={sibling}/dest; cp "$S" "$D"', sibling, 2),
-                    (f'D={sibling}/safe; cp {self.repo}/app.py "$D"', sibling, 0),
-                    (f'D={self.repo}; cp {sibling}/app.py "$D"; D={sibling}', sibling, 2),
-                    (f"cp -R {sibling}/src {sibling}/dest", sibling, 2),
-                    (f"cp -R {sibling}/src {sibling}/safe", sibling, 0),
-                    (f"cp -R {sibling}/src/. {sibling}/contents", sibling, 2),
-                    (f"cp -R {sibling}/src/. {sibling}/safe", sibling, 0),
-                    (f"cp -R {sibling}/src/ {sibling}/contents", sibling, 2),
-                    (f"cp -R {sibling}/src/ {sibling}/safe", sibling, 0),
-                    (f'export D={sibling}/dest; bash -c \'cp {sibling}/app.py "$D"\'', sibling, 2),
+                    (f"git -C {sib} restore --source=HEAD -- app.py", self.repo, 0),
+                    (f"rm {rep}/link", sibling, 2),
+                    (f"rm {rep}/dir-link", sibling, 2),
+                    (f"cp {rep}/app.py {sib}/copy.py", sibling, 0),
+                    (f"cp {rep}/app.py {sib}", sibling, 0),
+                    (f"cp -t {sib} {rep}/app.py", sibling, 0),
+                    (f"cp --target-directory={sib} {rep}/app.py", sibling, 0),
+                    (f"cp {sib}/app.py {rep}/app.py", sibling, 2),
+                    (f"cp {sib}/app.py {rep}/link", sibling, 2),
+                    (f'D={sib}/dest; cp {sib}/app.py "$D"', sibling, 2),
+                    (f'S={sib}/app.py; D={sib}/dest; cp "$S" "$D"', sibling, 2),
+                    (f'D={sib}/safe; cp {rep}/app.py "$D"', sibling, 0),
+                    (f'D={rep}; cp {sib}/app.py "$D"; D={sib}', sibling, 2),
+                    (f"cp -R {sib}/src {sib}/dest", sibling, 2),
+                    (f"cp -R {sib}/src {sib}/safe", sibling, 0),
+                    (f"cp -R {sib}/src/. {sib}/contents", sibling, 2),
+                    (f"cp -R {sib}/src/. {sib}/safe", sibling, 0),
+                    (f"cp -R {sib}/src/ {sib}/contents", sibling, 2),
+                    (f"cp -R {sib}/src/ {sib}/safe", sibling, 0),
+                    (f'export D={sib}/dest; bash -c \'cp {sib}/app.py "$D"\'', sibling, 2),
 
-                    (f"cp -- {sibling}/app.py {self.repo}/app.py > {sibling}/copy.log", sibling, 2),
-                    (f"cp -- {sibling}/app.py {self.repo}/app.py 2> {sibling}/copy.log", sibling, 2),
-                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {sibling}/copy.log", sibling, 0),
-                    (f"cp -- {self.repo}/app.py {sibling}/copy.py > {self.repo}/copy.log", sibling, 2),
-                    (f"cp -- {sibling}/app.py > {sibling}/copy.log {self.repo}/app.py", sibling, 2),
+                    (f"cp -- {sib}/app.py {rep}/app.py > {sib}/copy.log", sibling, 2),
+                    (f"cp -- {sib}/app.py {rep}/app.py 2> {sib}/copy.log", sibling, 2),
+                    (f"cp -- {rep}/app.py {sib}/copy.py > {sib}/copy.log", sibling, 0),
+                    (f"cp -- {rep}/app.py {sib}/copy.py > {rep}/copy.log", sibling, 2),
+                    (f"cp -- {sib}/app.py > {sib}/copy.log {rep}/app.py", sibling, 2),
 
                     ("python3 -c 'print(1)'", self.repo, 2),
                     ("git switch feature/next", self.repo, 2),
@@ -943,14 +948,14 @@ class GitGuardEndToEndTests(unittest.TestCase):
                                 [sys.executable, str(guard)], cwd=cwd,
                                 input=json.dumps({"tool_name": "Bash", "tool_input": {
                                     "command": command, **({"cwd": str(cwd)} if supplied else {}),
-                                }}), capture_output=True, text=True,
+                                }}), capture_output=True, encoding="utf-8", errors="replace",
                             )
                             self.assertEqual(expected, result.returncode, result.stderr)
             for target in (sibling / "app.py", Path(directory) / "note.md"):
                 result = subprocess.run(
                     [sys.executable, str(hooks / "guard_hook.py")], cwd=self.repo,
                     input=json.dumps({"tool_name": "Edit", "tool_input": {"file_path": str(target)}}),
-                    capture_output=True, text=True,
+                    capture_output=True, encoding="utf-8", errors="replace",
                 )
                 self.assertEqual(0, result.returncode, result.stderr)
 
@@ -1027,8 +1032,10 @@ class GitGuardEndToEndTests(unittest.TestCase):
                 [sys.executable, str(SCRIPT), str(message)],
                 cwd=empty,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
+                # Windows Python cannot start without SYSTEMROOT.
                 env={"PATH": "/usr/bin:/bin", "HOME": empty,
+                     **({"SYSTEMROOT": os.environ["SYSTEMROOT"]} if os.name == "nt" else {}),
                      "GIT_CONFIG_GLOBAL": str(Path(empty) / "nogitconfig"),
                      "GIT_CONFIG_SYSTEM": str(Path(empty) / "nogitconfig")},
             )

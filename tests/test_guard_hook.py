@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import guard_hook
 from install import PROJECT_RUNTIME_SCRIPTS
 import status_runtime
+from tests._platform import requires_symlink
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "guard_hook.py"
 
@@ -138,7 +139,8 @@ class GuardHookTests(unittest.TestCase):
         command = (
             command.replace(
                 "<absolute pipeline_state.py>",
-                shlex.quote(str(SCRIPT.parent / "pipeline_state.py")),
+                # Agents type POSIX paths in Git Bash; backslashes are shell escapes.
+                shlex.quote((SCRIPT.parent / "pipeline_state.py").as_posix()),
             )
             .replace("<root>", ".")
             .replace("<STATE.archive>", ".project/archive/001-x")
@@ -262,6 +264,10 @@ class GuardHookTests(unittest.TestCase):
     def test_bundled_helper_allows_spaces_and_quotes_in_runtime_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             for directory in ("My Project", "Owner's Project", 'A "quoted" project'):
+                if os.name == "nt" and '"' in directory:
+                    with self.subTest(directory=directory):
+                        self.skipTest("Windows file names cannot contain a double quote")
+                    continue
                 root = Path(temporary) / directory
                 runtime = root / ".gsd-path" / "runtime"
                 runtime.mkdir(parents=True)
@@ -273,7 +279,7 @@ class GuardHookTests(unittest.TestCase):
                             self.assert_allowed({
                                 "tool_name": "Bash",
                                 "tool_input": {
-                                    "command": f"python3 -B {shlex.quote(str(helper))} --archive .project/archive/001-x",
+                                    "command": f"python3 -B {shlex.quote(helper.as_posix())} --archive .project/archive/001-x",
                                     "workdir": str(root),
                                 },
                             })
@@ -571,6 +577,7 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    @requires_symlink
     def test_plain_prompt_denies_pipeline_control_writes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
@@ -644,7 +651,7 @@ class GuardHookTests(unittest.TestCase):
                 subprocess.run(
                     ["git", "rev-parse", "--git-common-dir"],
                     cwd=linked,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     capture_output=True,
                     check=True,
                 ).stdout.strip()
@@ -667,6 +674,7 @@ class GuardHookTests(unittest.TestCase):
                     }
                 )
 
+    @requires_symlink
     def test_project_alias_symlink_does_not_spoof_case_behavior(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -883,7 +891,7 @@ class GuardHookTests(unittest.TestCase):
                         "tool_input": {"file_path": "src/app.py"},
                     }
                 ),
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )
@@ -1450,11 +1458,11 @@ class GuardHookTests(unittest.TestCase):
             (repository / ".project" / "archive" / "001-mvp").mkdir(parents=True)
             (repository / "scratch").mkdir()
             (repository / "scratch" / "disposable.txt").touch()
-            root = shlex.quote(str(repository))
+            root = shlex.quote(repository.as_posix())
             denied = (
                 f'ROOT={root}; rm -rf "$ROOT"',
                 f'ROOT={root}; ROOT=scratch rm -rf "$ROOT"',
-                f"TARGET='scratch {repository}'; rm -rf $TARGET",
+                f"TARGET='scratch {repository.as_posix()}'; rm -rf $TARGET",
                 'TARGET=scratch; rm -rf "$TARGET"',
                 'rm -f scratch/*.txt',
                 'rm -rf .project',
@@ -1500,7 +1508,9 @@ class GuardHookTests(unittest.TestCase):
                 'rm -rf scratch_123',
                 'rm -rf "scratch"',
             )
-            with mock.patch.dict(os.environ, {}, clear=True):
+            # Windows needs PATH (to find git) and SYSTEMROOT to start any process.
+            kept = {name: os.environ[name] for name in ("PATH", "SYSTEMROOT") if os.name == "nt" and name in os.environ}
+            with mock.patch.dict(os.environ, kept, clear=True):
                 for commands, assertion in ((denied, self.assert_denied), (allowed, self.assert_allowed)):
                     for command in commands:
                         with self.subTest(command=command):
@@ -1621,6 +1631,7 @@ class GuardHookTests(unittest.TestCase):
             }
         )
 
+    @requires_symlink
     def test_denies_archive_path_through_symlink(self):
         previous = Path.cwd()
         with tempfile.TemporaryDirectory() as temporary:
@@ -2094,7 +2105,7 @@ class GuardHookTests(unittest.TestCase):
                 {"tool_name": "Bash", "tool_input": {"command": "git reset --hard"}}
             ),
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")
@@ -2111,7 +2122,7 @@ class GuardHookTests(unittest.TestCase):
                 }
             ),
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 2)
         self.assertEqual(json.loads(result.stdout)["permissionDecision"], "deny")

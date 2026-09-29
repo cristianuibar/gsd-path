@@ -382,16 +382,21 @@ else:  # standalone script or sibling import
 @contextmanager
 def discussion_lock(active_root: Path) -> Iterator[None]:
     if sys.platform == "win32":
-        lock_value = require_git_success(
-            run_git(
-                active_root.parent,
-                "rev-parse",
-                "--git-path",
-                "gsd-path-discussion.lock",
-            ),
-            "resolve discussion lock",
+        # Windows cannot flock a directory, so lock a file in the git dir,
+        # where it never shows up as an untracked project file.
+        resolved = run_git(
+            active_root.parent,
+            "rev-parse",
+            "--git-path",
+            "gsd-path-discussion.lock",
         )
-        lock_path = Path(lock_value)
+        if resolved.returncode != 0 or not resolved.stdout.strip():
+            # Outside git, which the POSIX directory lock allows: the same
+            # named kernel mutex pipeline_state holds for this directory.
+            with _common.directory_mutex(active_root):
+                yield
+            return
+        lock_path = Path(resolved.stdout.strip())
         if not lock_path.is_absolute():
             lock_path = active_root.parent / lock_path
         with _common.exclusive_lock(lock_path):

@@ -1115,7 +1115,7 @@ def archive_file_inventory(archive: Path) -> Sequence[str]:
                 continue
             original = archive.parent.parent / relative
             project = archive.parent.parent.parent
-            if run_git(project, "check-ignore", "-q", "--", str(original.relative_to(project))).returncode == 0:
+            if run_git(project, "check-ignore", "-q", "--", original.relative_to(project).as_posix()).returncode == 0:
                 continue
         contents.append(relative.as_posix())
     return sorted(contents)

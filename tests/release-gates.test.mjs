@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import test from 'node:test';
+import nodeTest from 'node:test';
+
+// These tests run release workflow steps, which execute only on ubuntu-latest.
+const test = process.platform === 'win32' ? nodeTest.skip : nodeTest;
 import { parse } from 'yaml';
 
 const root = new URL('../', import.meta.url);

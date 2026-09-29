@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import discussion_records
+from tests._platform import requires_symlink
 
 
 SCRIPT = ROOT / "scripts" / "discussion_records.py"
@@ -41,7 +42,7 @@ class DiscussionRecordTests(unittest.TestCase):
             )
         if input_path is not None:
             arguments.extend(("--input", str(input_path)))
-        return subprocess.run(arguments, text=True, capture_output=True, check=False)
+        return subprocess.run(arguments, encoding="utf-8", errors="replace", capture_output=True, check=False)
 
     def make_repo(self, root: Path) -> None:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
@@ -354,6 +355,7 @@ archive: null
                         ).exists()
                     )
 
+    @requires_symlink
     def test_append_recovery_rejects_symlinked_discussion_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = Path(temporary_directory)

@@ -81,7 +81,10 @@ Use the [router and phase invocation table](README.md#install-summary) for your 
 ### Requirements
 
 - **Node 18.17+** for `scripts/install.mjs` (recommended; also the npm `gsd-path` bin)
-- **Python 3.9+** required for project installs, project refresh, and project-state
+- **Windows:** runs natively (no WSL). Needs Git for Windows, whose Git Bash runs
+  git hooks and task Verify commands, and long paths enabled for deep worktrees.
+- **Python 3.9+** found as `python3`, `python`, or `py -3`; required for project
+  installs, project refresh, and project-state
   doctor checks; optional for global-only Node installs. `scripts/install.py`
   mirrors global and `--local` install transactions and `--update`; it does not
   provide the interactive wizard

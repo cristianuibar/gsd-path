@@ -172,30 +172,39 @@ def parse_verify_ledger(text: str) -> list:
     return entries
 
 
-def run_command(
-    *arguments: str, cwd: Optional[Path] = None
+def _run_exact(
+    argv: Sequence[str], *, cwd: Optional[Path] = None, input: Optional[str] = None
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        resolve_argv(arguments),
+    """subprocess.run with UTF-8 text and no newline translation.
+
+    Text-mode pipes on Windows turn "\\n" into "\\r\\n" on the way in, so text
+    handed to git hash-object would no longer match the committed blob.
+    """
+    completed = subprocess.run(
+        argv,
         cwd=cwd,
-        encoding="utf-8",
-        errors="surrogateescape",
+        input=None if input is None else input.encode("utf-8", "surrogateescape"),
         capture_output=True,
         check=False,
     )
+    return subprocess.CompletedProcess(
+        completed.args,
+        completed.returncode,
+        completed.stdout.decode("utf-8", "surrogateescape"),
+        completed.stderr.decode("utf-8", "surrogateescape"),
+    )
+
+
+def run_command(
+    *arguments: str, cwd: Optional[Path] = None
+) -> subprocess.CompletedProcess[str]:
+    return _run_exact(resolve_argv(arguments), cwd=cwd)
 
 
 def run_git(
     repo: Path, *arguments: str, input: Optional[str] = None
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ("git", "-C", str(repo), *arguments),
-        input=input,
-        encoding="utf-8",
-        errors="surrogateescape",
-        capture_output=True,
-        check=False,
-    )
+    return _run_exact(("git", "-C", str(repo), *arguments), input=input)
 
 
 # OS files that are never pipeline artifacts when git ignores them.

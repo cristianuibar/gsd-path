@@ -14,6 +14,8 @@ from pathlib import Path
 from unittest import mock
 
 from scripts import install
+from tests._platform import posix_permissions_only
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -162,9 +164,10 @@ class InstallerTests(unittest.TestCase):
         claude = install.default_root("claude", {"CLAUDE_CONFIG_DIR": "/tmp/c"})
         grok = install.default_root("grok", {"GROK_HOME": "/tmp/g"})
         xdg = install.default_root("opencode", {"XDG_CONFIG_HOME": "/tmp/x"})
-        self.assertEqual(Path("/tmp/c/skills"), claude)
-        self.assertEqual(Path("/tmp/g/skills"), grok)
-        self.assertEqual(Path("/tmp/x/opencode/skills"), xdg)
+        # Roots are made absolute, which adds the current drive on Windows.
+        self.assertEqual(Path(os.path.abspath("/tmp/c/skills")), claude)
+        self.assertEqual(Path(os.path.abspath("/tmp/g/skills")), grok)
+        self.assertEqual(Path(os.path.abspath("/tmp/x/opencode/skills")), xdg)
         config = self.root / "opencode.json"
         config.write_bytes("{}".encode("utf-8"))
         self.assertEqual(
@@ -185,19 +188,19 @@ class InstallerTests(unittest.TestCase):
             Path.home() / ".agents" / "skills", install.default_root("zed", {})
         )
         self.assertEqual(
-            Path("/tmp/copilot/skills"),
+            Path(os.path.abspath("/tmp/copilot/skills")),
             install.default_root("copilot", {"COPILOT_HOME": "/tmp/copilot"}),
         )
         self.assertEqual(
-            Path("/tmp/qwen/skills"),
+            Path(os.path.abspath("/tmp/qwen/skills")),
             install.default_root("qwen", {"QWEN_HOME": "/tmp/qwen"}),
         )
         self.assertEqual(
-            Path("/tmp/kiro/skills"),
+            Path(os.path.abspath("/tmp/kiro/skills")),
             install.default_root("kiro", {"KIRO_HOME": "/tmp/kiro"}),
         )
         self.assertEqual(
-            Path("/tmp/kimi-code/skills"),
+            Path(os.path.abspath("/tmp/kimi-code/skills")),
             install.default_root("kimi", {"KIMI_CODE_HOME": "/tmp/kimi-code"}),
         )
         self.assertEqual(
@@ -255,7 +258,7 @@ class InstallerTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, "-B", str(runtime / "pipeline_state.py"), "approve",
              "--repo", str(repo), "--kind", "plan", "--expected-head", head],
-            cwd=repo, capture_output=True, text=True,
+            cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["status"], "approved")
@@ -270,7 +273,7 @@ class InstallerTests(unittest.TestCase):
                 shutil.copy2(PROJECT_ROOT / "scripts" / name, runtime / name)
         subprocess.run(
             ["git", "init", "-b", "main", str(project)],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=True,
         )
@@ -303,7 +306,7 @@ class InstallerTests(unittest.TestCase):
                 "--repo",
                 str(project),
             ],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -846,6 +849,7 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue(hasattr(parsed, target))
             self.assertTrue(hasattr(parsed, f"{target}_root"))
 
+    @requires_symlink
     def test_existing_managed_entries_are_backed_up_and_unrelated_preserved(self):
         target = self.root / "codex" / "skills"
         target.mkdir(parents=True)
@@ -1455,6 +1459,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("source resources are stale", error)
         self.assertEqual(before, runtime.read_bytes())
 
+    @requires_symlink
     def test_target_root_must_not_contain_or_descend_from_source(self):
         parent_alias = self.root / "parent-alias"
         parent_alias.symlink_to(self.root.parent, target_is_directory=True)
@@ -2176,17 +2181,19 @@ class InstallerTests(unittest.TestCase):
         codex = json.loads(
             (project / ".codex" / "hooks.json").read_text(encoding="utf-8")
         )
-        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        # Codex runs commandWindows on Windows; the POSIX command needs sh.
+        codex_key = "commandWindows" if os.name == "nt" else "command"
+        codex_command = codex["hooks"]["PreToolUse"][0]["hooks"][0][codex_key]
         cursor = json.loads(
             (project / ".cursor" / "hooks.json").read_text(encoding="utf-8")
         )
         cursor_command = cursor["hooks"]["preToolUse"][0]["command"]
 
         codex_result = subprocess.run(
-            codex_command, cwd=subdirectory, shell=True, text=True, capture_output=True
+            codex_command, cwd=subdirectory, shell=True, encoding="utf-8", errors="replace", capture_output=True
         )
         cursor_result = subprocess.run(
-            cursor_command, cwd=project, shell=True, text=True, capture_output=True
+            cursor_command, cwd=project, shell=True, encoding="utf-8", errors="replace", capture_output=True
         )
 
         self.assertEqual(0, codex_result.returncode, codex_result.stderr)
@@ -2194,6 +2201,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(0, cursor_result.returncode, cursor_result.stderr)
         self.assertEqual("guard-ran", cursor_result.stdout.strip())
 
+    @requires_symlink
     def test_native_hook_install_rejects_unsafe_project_directories(self):
         for host in ("codex", "cursor"):
             with self.subTest(host=host):
@@ -2811,6 +2819,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("unreadable runtime", error)
         self.assertNotIn("Traceback", error)
 
+    @requires_symlink
     def test_hooks_refresh_rejects_symlinked_project_runtime(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -2842,6 +2851,7 @@ class InstallerTests(unittest.TestCase):
             outside.read_text(encoding="utf-8"),
         )
 
+    @requires_symlink
     def test_project_install_rejects_symlinked_runtime_directory(self):
         project = self.root / "symlinked-runtime-project"
         outside = self.root / "outside-runtime"
@@ -2869,6 +2879,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([], list(outside.iterdir()))
         self.assertFalse(target.exists())
 
+    @requires_symlink
     def test_project_install_rejects_symlinked_runtime_parent(self):
         project = self.root / "symlinked-runtime-parent-project"
         outside = self.root / "outside-runtime-parent"
@@ -2896,6 +2907,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual([], list((outside / "runtime").iterdir()))
         self.assertFalse(target.exists())
 
+    @requires_symlink
     def test_hooks_refresh_rejects_symlinked_runtime_directory(self):
         project = self.root / "refresh-symlinked-runtime-project"
         (project / ".git").mkdir(parents=True)
@@ -3029,6 +3041,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(1, status)
         self.assertIn("incomplete install", error)
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_project_runtime(self):
         project = self.root / "doctor-symlinked-runtime"
         runtime_parent = project / install.HOOKS_DIRECTORY
@@ -3055,6 +3068,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_project_contracts(self):
         project = self.root / "doctor-symlinked-contracts"
         project.mkdir()
@@ -3134,6 +3148,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @requires_symlink
     def test_doctor_rejects_symlinked_native_and_git_wiring(self):
         project = self.root / "doctor-symlinked-wiring"
         project.mkdir()
@@ -3171,6 +3186,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_effective_git_hooks(self):
         project = self.root / "doctor-unreadable-git-wiring"
         project.mkdir()
@@ -3204,6 +3220,8 @@ class InstallerTests(unittest.TestCase):
                 )
             )
 
+    @requires_symlink
+    @posix_permissions_only
     def test_doctor_rejects_symlinked_and_unreadable_project_scripts(self):
         project = self.root / "doctor-unsafe-scripts"
         managed = project / install.HOOKS_DIRECTORY
@@ -3269,6 +3287,7 @@ class InstallerTests(unittest.TestCase):
             {"level": "fail", "text": "package: version cannot be read"}, findings
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_skills_root(self):
         root = self.root / "unreadable-skills"
         root.mkdir()
@@ -3288,6 +3307,7 @@ class InstallerTests(unittest.TestCase):
             )
         )
 
+    @posix_permissions_only
     def test_doctor_reports_unreadable_bridge_and_git_hooks(self):
         project = self.root / "doctor-unreadable-contracts"
         (project / ".git").mkdir(parents=True)
@@ -3332,7 +3352,7 @@ class InstallerTests(unittest.TestCase):
             ["git", "init", "-q", str(project)],
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         (project / "AGENTS.md").write_bytes("agents\n".encode("utf-8"))
         (project / "WORKFLOW.md").write_bytes("workflow\n".encode("utf-8"))
@@ -3353,6 +3373,8 @@ class InstallerTests(unittest.TestCase):
         )
         self.assertFalse((self.source / "scripts" / "__pycache__").exists())
 
+    @unittest.skipIf(os.name == "nt", "Windows CreateProcess also searches the calling "
+                     "program's directory, so an empty PATH still finds python")
     def test_doctor_uses_the_reentry_interpreter_probe(self):
         project = self.root / "doctor-without-path-python"
         state = project / ".project" / "STATE.md"
@@ -3393,7 +3415,7 @@ class InstallerTests(unittest.TestCase):
                 str(self.source),
             ],
             env=environment,
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3603,6 +3625,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("not a managed GSD Path hook settings file", error)
         self.assertEqual(original, settings.read_text(encoding="utf-8"))
 
+    @requires_symlink
     def test_hooks_refresh_full_does_not_follow_legacy_temporary_symlink(self):
         project = self.root / "temporary-symlink-project"
         (project / ".git").mkdir(parents=True)
@@ -3627,6 +3650,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual("outside\n", outside.read_text(encoding="utf-8"))
         self.assertTrue(legacy_temporary.is_symlink())
 
+    @requires_symlink
     def test_hooks_refresh_full_rejects_symlinked_native_parent(self):
         project = self.root / "symlink-parent-project"
         (project / ".git").mkdir(parents=True)
@@ -3662,6 +3686,7 @@ class InstallerTests(unittest.TestCase):
             "{ guard_hook.py .gsd-path\n", settings_path.read_text(encoding="utf-8")
         )
 
+    @posix_permissions_only
     def test_hooks_refresh_full_recreates_missing_git_hooks_and_modes(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -3679,6 +3704,7 @@ class InstallerTests(unittest.TestCase):
         self.assertTrue(os.access(pre_commit, os.X_OK))
         self.assertTrue(os.access(commit_msg, os.X_OK))
 
+    @requires_symlink
     def test_hooks_refresh_full_rejects_symlinked_settings(self):
         project = self.root / "project"
         (project / ".git").mkdir(parents=True)
@@ -3696,7 +3722,7 @@ class InstallerTests(unittest.TestCase):
 
     def run_git(self, *args):
         result = subprocess.run(
-            ["git", *args], capture_output=True, text=True, check=False
+            ["git", *args], capture_output=True, encoding="utf-8", errors="replace", check=False
         )
         self.assertEqual(0, result.returncode, result.stderr)
 
@@ -3945,9 +3971,11 @@ class InstallerParityTests(unittest.TestCase):
             result = subprocess.run(
                 self.INSTALLERS[kind] + step,
                 cwd=project,
-                text=True,
+                # Node always writes UTF-8; make Python match so glyphs decode
+                # identically instead of through the Windows code page.
+                encoding="utf-8",
                 capture_output=True,
-                env={**os.environ, "NO_COLOR": "1"},
+                env={**os.environ, "NO_COLOR": "1", "PYTHONIOENCODING": "utf-8"},
             )
             outputs.append((result.returncode, self.result_lines(result, project)))
         return outputs, self.snapshot(project)

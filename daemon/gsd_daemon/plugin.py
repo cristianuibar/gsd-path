@@ -238,7 +238,9 @@ class PluginManager:
         self._remove_dir = remove_dir or (lambda path: shutil.rmtree(path))
         self._remove_file = remove_file or (lambda path: os.unlink(path))
         self._write_file = write_file or (
-            lambda path, text: Path(path).write_text(text, encoding="utf-8")
+            # Bytes, not write_text: text mode turns "\n" into CRLF on
+            # Windows and would rewrite the owner's line endings.
+            lambda path, text: Path(path).write_bytes(text.encode("utf-8"))
         )
         self.repo = repo or self._config_repo() or DEFAULT_REPO
 

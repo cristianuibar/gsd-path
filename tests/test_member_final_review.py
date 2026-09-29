@@ -24,10 +24,9 @@ class MemberFinalReviewTests(unittest.TestCase):
         for path in (review / "FINAL.md", review / "final-gap-1.md"):
             text = path.read_text(encoding="utf-8")
             end = text.index("\n", text.index("Reviewed HEAD:"))
-            path.write_text(text[:end] + "".join(f"\n{line}" for line in member_lines) + text[end:],
-                            encoding="utf-8")
+            path.write_bytes((text[:end] + "".join(f"\n{line}" for line in member_lines) + text[end:]).encode("utf-8"))
         if kept is not None:
-            (review / "final-gap-1.md").write_text(kept, encoding="utf-8")
+            (review / "final-gap-1.md").write_bytes(kept.encode("utf-8"))
         return review / "FINAL.md"
 
     def test_final_review_must_name_each_locked_member_head(self) -> None:
@@ -54,15 +53,14 @@ class MemberFinalReviewTests(unittest.TestCase):
         self.write_final(f"Member reviewed HEAD: web {self.member_tip}", keep_gap=True)
         self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
         gap = self.root / ".project/review/final-gap-1.md"
-        gap.write_text(gap.read_text(encoding="utf-8").replace(
-            f"Member reviewed HEAD: web {self.member_tip}\n", ""), encoding="utf-8")
+        gap.write_bytes(gap.read_text(encoding="utf-8").replace(
+            f"Member reviewed HEAD: web {self.member_tip}\n", "").encode("utf-8"))
         with self.assertRaisesRegex(contracts.HandoffError, "final-gap-1.md Member reviewed HEAD"):
             contracts.validate_final(self.root)
 
     def test_member_head_in_quoted_output_does_not_bind(self) -> None:
         final = self.write_final(f"Member reviewed HEAD: web {self.member_tip}")
-        final.write_text(final.read_text(encoding="utf-8") + "\n## Output\n\nMember reviewed HEAD: api " + "0" * 40 + "\n",
-                         encoding="utf-8")
+        final.write_bytes((final.read_text(encoding="utf-8") + "\n## Output\n\nMember reviewed HEAD: api " + "0" * 40 + "\n").encode("utf-8"))
         self.assertEqual(contracts.validate_final(self.root)["verdict"], "pass")
 
     def test_member_head_in_header_comment_does_not_bind(self) -> None:
@@ -82,7 +80,7 @@ class MemberFinalReviewTests(unittest.TestCase):
         (archive / "build").mkdir(parents=True)
         shutil.copytree(self.root / ".project/review", archive / "review")
         shutil.copy(self.root / ".project/build/members.json", archive / "build/members.json")
-        (archive / "review/FINAL.md").write_text("# Final Review\n", encoding="utf-8")
+        (archive / "review/FINAL.md").write_bytes("# Final Review\n".encode("utf-8"))
         return archive
 
     def test_archived_final_review_names_each_locked_member(self) -> None:
@@ -90,19 +88,19 @@ class MemberFinalReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(archive_milestone.ArchiveError, "Member reviewed HEAD"):
             discussion_validate.validate_gap_reviews(archive, self.head)
         final = archive / "review/FINAL.md"
-        final.write_text(f"Member reviewed HEAD: web {self.member_tip}\n", encoding="utf-8")
+        final.write_bytes(f"Member reviewed HEAD: web {self.member_tip}\n".encode("utf-8"))
         discussion_validate.validate_gap_reviews(archive, self.head)
         lock = archive / "build/members.json"
-        lock.write_text(json.dumps({"schema": "gsd-path/member-lock/v1", "members": []}), encoding="utf-8")
+        lock.write_bytes(json.dumps({"schema": "gsd-path/member-lock/v1", "members": []}).encode("utf-8"))
         with self.assertRaisesRegex(archive_milestone.ArchiveError, "Member reviewed HEAD"):
             discussion_validate.validate_gap_reviews(archive, self.head)
 
     def test_archived_gap_must_repeat_final_member_heads(self) -> None:
         archive = self.archive()
-        (archive / "review/FINAL.md").write_text(
-            f"Member reviewed HEAD: web {self.member_tip}\n", encoding="utf-8")
+        (archive / "review/FINAL.md").write_bytes(
+            f"Member reviewed HEAD: web {self.member_tip}\n".encode("utf-8"))
         gap = archive / "review/final-gap-1.md"
-        gap.write_text(gap.read_text(encoding="utf-8").replace(self.member_tip, "0" * 40), encoding="utf-8")
+        gap.write_bytes(gap.read_text(encoding="utf-8").replace(self.member_tip, "0" * 40).encode("utf-8"))
         with self.assertRaisesRegex(archive_milestone.ArchiveError, "final-gap-1.md Member reviewed HEAD"):
             discussion_validate.validate_gap_reviews(archive, self.head)
 

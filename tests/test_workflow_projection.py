@@ -2,6 +2,7 @@
 import json
 import contextlib
 import io
+import os
 from pathlib import Path
 import subprocess
 import shutil
@@ -29,7 +30,7 @@ class WorkflowProjectionTests(unittest.TestCase):
 
     def status(self, repo):
         result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/pipeline_state.py'),
-                                 'status', '--repo', str(repo)], capture_output=True, text=True)
+                                 'status', '--repo', str(repo)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
@@ -99,7 +100,9 @@ class WorkflowProjectionTests(unittest.TestCase):
             payload = json.loads(output.getvalue())
             self.assertEqual(payload["completion"]["status"], "unverified")
             self.assertEqual(payload["handoff"]["outcome"], "Unverified: shipped/done")
-            self.assertIn(str(missing_gh), payload["completion"]["reason"])
+            # A Windows CreateProcess error names no file, only the WinError.
+            expected = "[WinError 2]" if os.name == "nt" else str(missing_gh)
+            self.assertIn(expected, payload["completion"]["reason"])
             self.assertEqual(payload["state"]["phase"], "shipped")
             self.assertEqual(payload["route"]["action"], "run-phase")
             self.assertEqual(payload["route"]["phase"], "ship")

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from scripts import detect_project, model_policy
 from tests.test_pipeline_state import state_text
+from tests._platform import requires_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / 'scripts/path_config.py'
@@ -40,7 +41,7 @@ class PathConfigTests(unittest.TestCase):
 
     def cli(self, *args, ok=True):
         result = subprocess.run([sys.executable, '-B', str(HELPER), *args,
-                                 '--repo', str(self.repo)], capture_output=True, text=True)
+                                 '--repo', str(self.repo)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode == 0, ok, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
@@ -94,6 +95,7 @@ class PathConfigTests(unittest.TestCase):
         self.cli('reset', 'models.roles.coder.effort')
         self.assertEqual(model_policy.resolve(self.repo, '.project', 'coder', CAPS, {})['selected']['effort'], 'high')
 
+    @requires_symlink
     def test_invalid_and_unsafe_writes_leave_files_unchanged(self):
         path = self.profile({'review_panel': 'off'})
         before = path.read_bytes()
@@ -148,7 +150,7 @@ class PathConfigTests(unittest.TestCase):
                        check=True, capture_output=True)
         helper = ROOT / 'skills/path/scripts/path_config.py'
         result = subprocess.run([sys.executable, '-B', str(helper), 'set', 'review_panel',
-                                 'detected', '--repo', str(self.repo)], capture_output=True, text=True)
+                                 'detected', '--repo', str(self.repo)], capture_output=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads((self.repo / '.project/config.json').read_text(encoding="utf-8"))['review_panel'], 'detected')
 

@@ -148,7 +148,7 @@ class BindChildTests(unittest.TestCase):
 class CommandTests(unittest.TestCase):
     def test_headless_and_resume_argv(self):
         fresh = grok.command(Path("/tmp/p.txt"), None)
-        self.assertIn("--prompt-file", fresh); self.assertIn("/tmp/p.txt", fresh)
+        self.assertIn("--prompt-file", fresh); self.assertIn(str(Path("/tmp/p.txt")), fresh)
         self.assertIn("streaming-json", fresh); self.assertNotIn("--resume", fresh)
         resumed = grok.command(Path("/tmp/p.txt"), SESSION)
         self.assertEqual(resumed[-2:], ["--resume", SESSION])

@@ -462,12 +462,17 @@ function materializedResourceBytes(source, destination) {
   return Buffer.from(rewriteRouterAliasSkill(data.toString("utf8"), alias, canonical));
 }
 
+// The JavaScript realpath keeps Windows 8.3 short names (C:\Users\LONGNA~1);
+// Python's resolve() expands them, and both installers must hash one lock
+// identity per target, so Windows asks the OS for the final path as Python does.
+const realpath = process.platform === "win32" ? fs.realpathSync.native : fs.realpathSync;
+
 function resolveNonStrict(value) {
   let prefix = path.resolve(value);
   const suffix = [];
   for (;;) {
     try {
-      return path.join(fs.realpathSync(prefix), ...suffix);
+      return path.join(realpath(prefix), ...suffix);
     } catch {
       const parent = path.dirname(prefix);
       if (parent === prefix) return path.join(prefix, ...suffix);
@@ -1077,7 +1082,7 @@ function rollbackTarget(transaction) {
     removePath(destination);
   }
   for (const [original, stored] of [...transaction.moved].reverse()) {
-    if (lexists(stored)) fs.renameSync(stored, original);
+    if (lexists(stored)) renameRetrying(stored, original);
   }
   if (transaction.backup !== null) {
     try {
@@ -1301,13 +1306,34 @@ function plannedBackupRoots(legacyRoot, deployments) {
   return planned;
 }
 
+// Access denied and busy: on Windows a scanner or indexer that briefly opens a
+// freshly written file blocks moving it or the directory holding it.
+const WINDOWS_BUSY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_ATTEMPTS = 20;
+
+function renameRetrying(from, to) {
+  if (process.platform !== "win32") return fs.renameSync(from, to);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return fs.renameSync(from, to);
+    } catch (error) {
+      // A directory moved onto an existing directory also reports EPERM; that
+      // is not transient, so never retry it.
+      if (!WINDOWS_BUSY_CODES.has(error.code)
+          || fs.lstatSync(to, { throwIfNoEntry: false })?.isDirectory()
+          || attempt === RENAME_ATTEMPTS - 1) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(10 * 2 ** attempt, 250));
+    }
+  }
+}
+
 // Test-injection points; production callers never touch these.
 export const hooks = {
   mismatches,
   applyTarget,
-  rename: fs.renameSync.bind(fs),
+  rename: renameRetrying,
   renameInstallLock: fs.renameSync.bind(fs),
-  renameInstallStage: fs.renameSync.bind(fs),
+  renameInstallStage: renameRetrying,
   processIdentity,
   reserveDirectory,
   reserveFile,

@@ -87,11 +87,13 @@ manual activation is complete, Codex's guaranteed manifest tier is `git-only`;
 changing the hook requires review again.
 
 **Windows / interpreter caveat:** hooks and native host settings invoke a
-Python interpreter that the installer probes at install time — `python3` first,
-then `python` (plain `python3` usually does not exist on Windows). If neither
-runs, hook installation stops before writing instead of pinning a missing
-interpreter. The `sh` hook scripts themselves need a POSIX shell (Git for
-Windows provides one).
+Python interpreter that the installer probes at install time: `python3` first,
+then `python`, then the `py -3` launcher (plain `python3` usually does not
+exist on Windows). If none runs, hook installation stops before writing
+instead of pinning a missing interpreter. The `sh` hook scripts themselves need
+a POSIX shell, which Git for Windows provides. Claude Code runs Windows hook
+commands in Git Bash, so wrapped Core hooks are bash-quoted and their original
+command runs through Git Bash, not cmd.exe.
 
 ### Updating after package upgrade
 

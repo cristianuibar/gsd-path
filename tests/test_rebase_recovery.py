@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from scripts import build_state, integration, isolation, lean_verification, pipeline_git
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +24,7 @@ RULING = "Adopt this rebase; preserve original evidence."
 def git(root: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     )
@@ -86,7 +87,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "adopt-rebase", "--repo", str(self.repo),
              "--original-head", self.original, "--head", self.head, "--ruling", RULING),
-            text=True, capture_output=True, check=False,
+            encoding="utf-8", errors="replace", capture_output=True, check=False,
         )
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result
@@ -164,6 +165,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.assertIn("rebased landing changes different bytes, paths or modes", result.stderr)
         self.assertFalse((self.repo / RECEIPT).exists())
 
+    @requires_symlink
     def test_receipt_symlink_loop_blocks_without_traceback(self) -> None:
         self.adopt()
         path = self.repo / RECEIPT
@@ -174,7 +176,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.assertTrue(task["reason"].startswith("rebase adoption receipt is invalid: "))
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo),
-             "--tasks-dir", ".project/tasks"), text=True, capture_output=True)
+             "--tasks-dir", ".project/tasks"), encoding="utf-8", errors="replace", capture_output=True)
         self.assertNotIn("Traceback", result.stderr)
         report = json.loads(result.stdout)
         self.assertEqual(report["verdict"], "block")
@@ -307,7 +309,7 @@ class RebaseRecoveryTests(unittest.TestCase):
         self.assertEqual(self.recover_task()["verdict"], "block")
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo),
-             "--tasks-dir", ".project/tasks"), text=True, capture_output=True)
+             "--tasks-dir", ".project/tasks"), encoding="utf-8", errors="replace", capture_output=True)
         self.assertNotIn("Traceback", result.stderr)
         self.assertTrue(result.returncode != 0 or json.loads(result.stdout)["verdict"] == "block")
 
@@ -419,7 +421,7 @@ class RebaseRecoveryTests(unittest.TestCase):
     def guard_pre_push(self, local_sha: str, remote_sha: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             (sys.executable, str(GUARD_SCRIPT), "pre-push", "origin", self.remote),
-            cwd=self.repo, text=True, capture_output=True, check=False,
+            cwd=self.repo, encoding="utf-8", errors="replace", capture_output=True, check=False,
             input=f"{BOUND_REF} {local_sha} {BOUND_REF} {remote_sha}\n",
         )
 

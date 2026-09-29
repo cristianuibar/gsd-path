@@ -206,9 +206,15 @@ function writeGithubOutput(filePath, values) {
 }
 
 function applyVersion(version) {
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error(`refusing to apply an invalid version: ${version}`);
+  }
+  // npm is npm.cmd on Windows, which only a shell can start; the version is
+  // validated above, so the command line needs no quoting.
   execFileSync("npm", ["version", version, "--no-git-tag-version", "--allow-same-version"], {
     cwd: root,
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 }
 

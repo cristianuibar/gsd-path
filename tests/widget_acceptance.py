@@ -15,7 +15,7 @@ def evaluate(repo: Path) -> dict:
         (["--json", "-2"], {"widgets": -2}, True),
     ]:
         result = subprocess.run([sys.executable, str(repo / "count.py"), *arguments],
-                                capture_output=True, text=True)
+                                capture_output=True, encoding="utf-8", errors="replace")
         actual = result.stdout.strip()
         if structured:
             try:
@@ -28,7 +28,7 @@ def evaluate(repo: Path) -> dict:
         checks.append({"arguments": arguments, "pass": passed, "exit_code": result.returncode,
                        "stdout": result.stdout, "stderr": result.stderr})
     result = subprocess.run([sys.executable, str(repo / "count.py"), "invalid"],
-                            capture_output=True, text=True)
+                            capture_output=True, encoding="utf-8", errors="replace")
     checks.append({"arguments": ["invalid"], "pass": result.returncode != 0 and bool(result.stderr.strip()),
                    "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
     return {"verdict": "pass" if all(check["pass"] for check in checks) else "fail", "checks": checks}

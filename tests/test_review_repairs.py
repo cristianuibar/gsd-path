@@ -76,7 +76,7 @@ Prints good — found: prints bad, count.py:1 fix: print good
         isolation.activate_task(self.repo, base, task_id, "coder", task_file, None)
         (self.repo / "count.py").write_bytes(f"print({output!r})\n".encode("utf-8"))
         result = subprocess.run([sys.executable, "-B", "count.py"], cwd=self.repo,
-                                capture_output=True, text=True, check=True)
+                                capture_output=True, encoding="utf-8", errors="replace", check=True)
         commit = isolation.land(self.repo, self.repo, base, task_id, title,
                                 task_file, ["count.py"])["commit"]
         build_state.verify_record(str(self.repo), "python3 -B count.py", commit, "pass",
@@ -92,7 +92,7 @@ Prints good — found: prints bad, count.py:1 fix: print good
         result = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "repair-evidence", "--repo", str(self.repo),
              "--wave", "1", "--cycle", "1", "--task", "T002"],
-            capture_output=True, text=True,
+            capture_output=True, encoding="utf-8", errors="replace",
         )
         return result, json.loads(result.stdout) if result.stdout else {}
 

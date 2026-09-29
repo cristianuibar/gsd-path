@@ -190,7 +190,7 @@ class Fixture:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--repo", str(self.root),
              "--wave", "1", "--cycle", str(cycle), *extra],
-            capture_output=True, text=True, check=False,
+            capture_output=True, encoding="utf-8", errors="replace", check=False,
         )
         return result.returncode, json.loads(result.stdout)
 

@@ -105,7 +105,7 @@ archive: null
 
 def run(cmd, cwd, timeout=None, env=None):
     proc = subprocess.run(
-        cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
+        cmd, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout, env=env
     )
     return proc.returncode, (proc.stdout + proc.stderr)
 

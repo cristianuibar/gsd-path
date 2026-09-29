@@ -8,6 +8,8 @@
 // python3, python, or the `py -3` launcher (GSD_PATH_PYTHON overrides) and
 // prepends each --path directory, relative to the repository, to PYTHONPATH.
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,6 +43,31 @@ function main(argv) {
   if (paths.length) {
     env.PYTHONPATH = [...paths, env.PYTHONPATH].filter(Boolean).join(path.delimiter);
   }
+  // Tests compare checked-out bytes. A developer's global core.autocrlf=true
+  // (the Git for Windows default) would check fixtures out as CRLF; CI runs
+  // with it off, so match that without touching any git config file.
+  // Git also detaches automatic gc and maintenance after commits and pushes;
+  // a detached child still writing objects races every temporary repository's
+  // cleanup ("Directory not empty"), so run them in the foreground.
+  const settings = [
+    ["core.autocrlf", "false"],
+    ["gc.autoDetach", "false"],
+    ["maintenance.autoDetach", "false"],
+  ];
+  let count = Number(env.GIT_CONFIG_COUNT || 0);
+  for (const [key, value] of settings) {
+    env[`GIT_CONFIG_KEY_${count}`] = key;
+    env[`GIT_CONFIG_VALUE_${count}`] = value;
+    count += 1;
+  }
+  env.GIT_CONFIG_COUNT = String(count);
+  // No repository script run here may reach a real GitHub account: tests fake
+  // gh, and a fake that fails to shadow the real one must fail unauthenticated.
+  // (On Windows an extensionless fake was once skipped for the real gh.exe.)
+  for (const name of ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]) {
+    delete env[name];
+  }
+  env.GH_CONFIG_DIR = mkdtempSync(path.join(tmpdir(), "gsd-path-no-gh-"));
   const [command, ...args] = python;
   const result = spawnSync(command, [...args, ...argv], { stdio: "inherit", env });
   if (result.error) {

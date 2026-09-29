@@ -129,8 +129,8 @@ def divergence_warning(source: Path, destination: Path, root: Path) -> Optional[
     if destination.stat().st_mtime > source.stat().st_mtime:
         return (
             f"generated resource diverges from canonical and is newer "
-            f"(possible wrong-direction edit; edit {source.relative_to(root)} "
-            f"instead): {destination.relative_to(root)}"
+            f"(possible wrong-direction edit; edit {source.relative_to(root).as_posix()} "
+            f"instead): {destination.relative_to(root).as_posix()}"
         )
     return None
 
@@ -166,9 +166,9 @@ def mismatches(root: Path) -> Sequence[str]:
         problems.append("package.json files do not match manifest package_files")
     for source, destination in resource_pairs(root):
         if not source.is_file():
-            problems.append(f"missing canonical resource: {source.relative_to(root)}")
+            problems.append(f"missing canonical resource: {source.relative_to(root).as_posix()}")
         elif not destination.is_file():
-            problems.append(f"missing generated resource: {destination.relative_to(root)}")
+            problems.append(f"missing generated resource: {destination.relative_to(root).as_posix()}")
         else:
             try:
                 expected = materialized_resource_bytes(source, destination)
@@ -181,10 +181,10 @@ def mismatches(root: Path) -> Sequence[str]:
                     problems.append(warning)
                 else:
                     problems.append(
-                        f"stale generated resource: {destination.relative_to(root)}"
+                        f"stale generated resource: {destination.relative_to(root).as_posix()}"
                     )
     for path in package_metadata(root):
-        problems.append(f"unexpected package metadata: {path.relative_to(root)}")
+        problems.append(f"unexpected package metadata: {path.relative_to(root).as_posix()}")
     return problems
 
 

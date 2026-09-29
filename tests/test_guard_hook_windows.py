@@ -59,6 +59,12 @@ class WindowsGuardPathTests(unittest.TestCase):
         self.assertTrue(guard_hook.is_link_like(link))
         self.assertFalse(guard_hook.is_link_like(self.repo))
 
+    def test_bundled_helper_named_by_git_bash_path_is_recognized(self) -> None:
+        helper = ROOT / "scripts" / "pipeline_state.py"
+        command = f"python3 -B {msys(helper)} --archive .project/archive/001-demo"
+        tokens = guard_hook.shell_tokens(command)
+        self.assertTrue(guard_hook.bundled_helper_invocation(command, tokens, [str(self.repo)]))
+
     def test_non_ascii_event_is_read_as_utf8(self) -> None:
         event = {"cwd": str(self.repo), "tool_name": "Bash",
                  "tool_input": {"command": "echo café ✅"}}

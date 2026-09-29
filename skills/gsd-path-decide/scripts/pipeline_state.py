@@ -2096,7 +2096,8 @@ def _commit_message(subject: str, body_fields: Mapping[str, str]) -> str:
 def _validate_next_layout(next_root: Path, state: PipelineState) -> None:
     phase_index = LOOKAHEAD_PHASES.index(state.phase)
     for path in next_root.rglob("*"):
-        relative = path.relative_to(next_root)
+        # POSIX form: a WindowsPath never equals the PurePosixPath layout below.
+        relative = PurePosixPath(path.relative_to(next_root).as_posix())
         if path.is_symlink():
             raise PipelineStateError(f"lookahead artifacts must not be symlinks: {path}")
         if path.is_dir():

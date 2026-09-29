@@ -50,7 +50,7 @@ class DetectProjectTests(unittest.TestCase):
     def command(self, repo: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(SCRIPT), "classify", "--repo", str(repo)],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -65,7 +65,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
                  "--template", str(ROOT / "skills/gsd-path/templates/state.md"),
-                 "--require-git"], cwd=repo, capture_output=True, text=True,
+                 "--require-git"], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
@@ -218,7 +218,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 ['node', str(ROOT / 'scripts/install.mjs'), '--codex', '--local',
                  '--project', str(repo), '--hooks', '--no-color'],
-                cwd=repo, capture_output=True, text=True)
+                cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.git(repo, 'add', '.')
             payload = self.classify(repo)
@@ -423,7 +423,7 @@ class DetectProjectTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "initialize", "--repo", str(repo),
                  "--template", str(ROOT / "skills/gsd-path/templates/state.md")],
-                cwd=repo, capture_output=True, text=True,
+                cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(json.loads(result.stdout)["wrote_state"])
@@ -765,6 +765,7 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "git", "path": "app.py"}],
             )
 
+    @requires_symlink
     def test_symlinked_git_metadata_fails_classification(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -1035,6 +1036,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_markdown_symlink_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1052,6 +1054,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_markdown_below_symlinked_directory_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1076,6 +1079,7 @@ class DetectProjectTests(unittest.TestCase):
             ):
                 self.classify(repo)
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_markdown_symlink_replacement_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1117,6 +1121,7 @@ class DetectProjectTests(unittest.TestCase):
                 ):
                     self.classify(repo)
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
     def test_markdown_parent_replacement_stays_anchored(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1171,7 +1176,7 @@ class DetectProjectTests(unittest.TestCase):
     def test_cli_help_distinguishes_classify_and_initialize(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--help"],
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -1270,6 +1275,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_nonregular_staged_skill_marker_does_not_verify_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1293,6 +1299,7 @@ class DetectProjectTests(unittest.TestCase):
                 [{"kind": "git", "path": "tools/gsd-path-helper/helper.py"}],
             )
 
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_tracked_source_under_linked_bundle_is_brownfield(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1543,6 +1550,7 @@ class DetectProjectTests(unittest.TestCase):
             )
             self.assertFalse((repo / ".project").exists())
 
+    @requires_symlink
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",
@@ -1580,6 +1588,7 @@ class DetectProjectTests(unittest.TestCase):
                     detect_project.initialize(repo, template)
             self.assertFalse((target / "STATE.md").exists())
 
+    @requires_symlink
     @unittest.skipUnless(
         ANCHORED_STATE_CREATE_AVAILABLE,
         "anchored state creation is unavailable",
@@ -1921,7 +1930,7 @@ detect_project.initialize(Path(sys.argv[1]), Path(sys.argv[2]))
                 env=environment,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                encoding="utf-8", errors="replace",
             )
             try:
                 self.assertEqual("ready\n", process.stdout.readline())
@@ -2170,7 +2179,7 @@ class PromoteLookaheadTests(unittest.TestCase):
             cwd=repo,
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
         )
         return result.stdout.strip()
 
@@ -2343,7 +2352,7 @@ Integrated: null
                     "--active-milestone",
                     "first",
                 ],
-                text=True,
+                encoding="utf-8", errors="replace",
                 capture_output=True,
                 check=False,
             )

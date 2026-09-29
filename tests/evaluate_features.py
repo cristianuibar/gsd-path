@@ -155,7 +155,7 @@ def evaluate_program(repo):
         store = Path(tmp) / 'ledger.json'
         def call(script, args, expected=None, kind='text', error=False):
             p = subprocess.run([sys.executable, '-B', str(repo / script), str(store), *args],
-                               cwd=tmp, capture_output=True, text=True)
+                               cwd=tmp, capture_output=True, encoding="utf-8", errors="replace")
             actual = p.stdout
             try:
                 if kind == 'json': actual = json.loads(actual)
@@ -244,7 +244,7 @@ def check(directory):
         return saved
     # Execute the pinned test code, not an importing session's checkout.
     result = subprocess.run([sys.executable, '-B', str(plugin / 'tests/evaluate_features.py'),
-                             '_check', '--directory', str(directory)], cwd=plugin, capture_output=True, text=True)
+                             '_check', '--directory', str(directory)], cwd=plugin, capture_output=True, encoding="utf-8", errors="replace")
     (directory / 'automated-command.log').write_bytes((result.stdout + result.stderr).encode("utf-8"))
     if not receipt.exists(): raise ValueError('automated runner did not produce its receipt; see automated-command.log')
     return json.loads(receipt.read_text(encoding="utf-8"))
@@ -256,9 +256,9 @@ def check_candidate(directory):
     suite = unittest.defaultTestLoader.loadTestsFromNames(['tests.' + name for name in modules])
     started = stamp()
     result = run_tests(suite)
-    node = subprocess.run(['npm', 'test'], cwd=ROOT, capture_output=True, text=True)
+    node = subprocess.run(['npm', 'test'], cwd=ROOT, capture_output=True, encoding="utf-8", errors="replace")
     sync = subprocess.run([sys.executable, '-B', 'scripts/sync_skill_resources.py', '--check'],
-                          cwd=ROOT, capture_output=True, text=True)
+                          cwd=ROOT, capture_output=True, encoding="utf-8", errors="replace")
     result.update(candidate=git(ROOT, 'rev-parse', 'HEAD'), started_at=started, ended_at=stamp(),
                   modules=modules, node={'exit_code': node.returncode, 'output': node.stdout + node.stderr},
                   sync={'exit_code': sync.returncode, 'output': sync.stdout + sync.stderr})

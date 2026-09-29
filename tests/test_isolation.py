@@ -11,6 +11,7 @@ from typing import Optional
 from unittest import mock
 
 from scripts import build_state, isolation, pipeline_git
+from tests._platform import requires_symlink
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ BUNDLED_ISOLATION_SCRIPTS = tuple(
 def git(root: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(root), *arguments),
-        text=True,
+        encoding="utf-8", errors="replace",
         capture_output=True,
         check=True,
     )
@@ -61,11 +62,12 @@ class IsolationTests(unittest.TestCase):
     def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), *arguments),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
 
+    @requires_symlink
     def test_prune_host_scratch_removes_only_file_free_claude_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / ".project"
@@ -776,6 +778,7 @@ class IsolationTests(unittest.TestCase):
                 ],
             )
 
+    @requires_symlink
     def test_parallel_land_rejects_a_symlink_task_in_a_clean_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary) / "repo"
@@ -1010,6 +1013,7 @@ class IsolationTests(unittest.TestCase):
             self.assertEqual(report["verdict"], "recovered")
             self.assertEqual(report["commit"], landed["commit"])
 
+    @requires_symlink
     def test_land_rejects_a_symlink_task_without_writing_its_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -2377,7 +2381,7 @@ class RecoverTests(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(PROJECT_ROOT / "scripts/isolation.py"), "isolate-verify",
              "--repo", str(self.repo), "--base", landed, "--name", "historical",
-             "--historical-task", "T001"], capture_output=True, text=True,
+             "--historical-task", "T001"], capture_output=True, encoding="utf-8", errors="replace",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         sidecar = json.loads(result.stdout)
@@ -2385,7 +2389,7 @@ class RecoverTests(unittest.TestCase):
         self.assertEqual(git(root, "rev-parse", "HEAD"), landed)
         self.assertEqual(git(self.repo, "rev-parse", "HEAD"), head)
         self.assertFalse((root / "note.txt").exists())
-        self.assertEqual(subprocess.run([sys.executable, "src/app.py"], cwd=root, capture_output=True, text=True).stdout, "hello\n")
+        self.assertEqual(subprocess.run([sys.executable, "src/app.py"], cwd=root, capture_output=True, encoding="utf-8", errors="replace").stdout, "hello\n")
         for invalid_commit, task in [(head, "T001"), (landed, "T002"), (self.base, "T001")]:
             with self.assertRaises(isolation.IsolationError):
                 isolation.isolate_verify(self.repo, invalid_commit, "invalid", historical_task=task)
@@ -3225,7 +3229,7 @@ class RecoverTests(unittest.TestCase):
                 "--landed-commit",
                 self.base,
             ),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3247,7 +3251,7 @@ class RecoverTests(unittest.TestCase):
                 "--landed-commit",
                 landed["commit"],
             ),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3327,7 +3331,7 @@ class RecoverTests(unittest.TestCase):
                 "--task-file",
                 ".project/tasks/T001.md",
             ),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3355,7 +3359,7 @@ class RecoverTests(unittest.TestCase):
                 "--task-file",
                 ".project/tasks/T001.md",
             ),
-            text=True,
+            encoding="utf-8", errors="replace",
             capture_output=True,
             check=False,
         )
@@ -3378,7 +3382,7 @@ class RecoverTests(unittest.TestCase):
     def test_pending_task_needs_nothing_and_cli_emits_json(self) -> None:
         result = subprocess.run(
             (sys.executable, str(ISOLATION_SCRIPT), "recover", "--repo", str(self.repo)),
-            text=True, capture_output=True, check=True,
+            encoding="utf-8", errors="replace", capture_output=True, check=True,
         )
         payload = json.loads(result.stdout)
         self.assertEqual(payload["verdict"], "ok")
@@ -3399,7 +3403,7 @@ class RecoverTests(unittest.TestCase):
                     ),
                     cwd=self.repo,
                     env=environment,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     capture_output=True,
                     check=False,
                 )

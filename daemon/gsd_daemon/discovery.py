@@ -12,13 +12,15 @@ SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__"}
 
 
 def _normalized(paths: Iterable[str]) -> List[str]:
-    return [os.path.normcase(os.path.abspath(os.path.expanduser(p))) for p in paths]
+    return [os.path.abspath(os.path.expanduser(p)) for p in paths]
 
 
 def _is_excluded(path: str, excludes: List[str]) -> bool:
-    path = os.path.realpath(path)
+    # normcase only for the comparison: it lowercases on Windows, and
+    # discovered roots keep their original case for storage and display.
+    path = os.path.normcase(os.path.realpath(path))
     for excluded in excludes:
-        excluded = os.path.realpath(excluded)
+        excluded = os.path.normcase(os.path.realpath(excluded))
         if path == excluded or path.startswith(excluded + os.sep):
             return True
     return False
@@ -62,7 +64,9 @@ def _bound_worktrees(root: str) -> List[str]:
             continue
         for field in fields:
             if field.startswith("worktree "):
-                path = field.removeprefix("worktree ")
+                # Git for Windows reports C:/... paths; normpath matches them to
+                # the backslashed roots the walk found so dedupe sees one root.
+                path = os.path.normpath(field.removeprefix("worktree "))
                 if is_project_root(path):
                     found.append(path)
     return found
@@ -71,7 +75,7 @@ def _bound_worktrees(root: str) -> List[str]:
 def _dedupe_worktrees(roots: List[str]) -> List[str]:
     groups: Dict[str, List[str]] = {}
     for root in roots:
-        groups.setdefault(_git_common_dir(root) or root, []).append(root)
+        groups.setdefault(os.path.normcase(_git_common_dir(root) or root), []).append(root)
     return [min(members, key=_dedupe_rank) for members in groups.values()]
 
 

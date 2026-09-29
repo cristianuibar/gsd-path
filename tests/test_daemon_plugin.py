@@ -1,5 +1,6 @@
 import http.client
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -12,6 +13,7 @@ from gsd_daemon.config import Config
 from gsd_daemon.plugin import DEFAULT_REPO, HOSTS, PluginManager
 from gsd_daemon.serve import serve
 from gsd_daemon.watcher import Watcher
+from tests._platform import requires_symlink
 
 GUARD_MARKER = "gsd-path guard"
 RUNTIME_MARKER = "gsd-path project runtime"
@@ -102,7 +104,7 @@ class ArgvTests(unittest.TestCase):
         self.assertIn("--all", argv)
         self.assertNotIn("--update", argv)
         self.assertTrue(argv[0].endswith("python3") or "python" in Path(argv[0]).name)
-        self.assertTrue(argv[1].endswith("scripts/install.py"))
+        self.assertEqual(Path(argv[1]).parts[-2:], ("scripts", "install.py"))
 
     def test_install_global_hosts(self):
         self.manager.install_global(["claude", "kimi"])
@@ -129,7 +131,7 @@ class ArgvTests(unittest.TestCase):
         self.manager.install_project("/tmp/proj")
         argv = self.argv()
         self.assertIn("--project", argv)
-        self.assertEqual(argv[argv.index("--project") + 1], "/tmp/proj")
+        self.assertEqual(argv[argv.index("--project") + 1], os.path.abspath("/tmp/proj"))
         self.assertIn("--all", argv)
         self.assertNotIn("--local", argv)
 
@@ -445,6 +447,7 @@ class UninstallPlanTests(unittest.TestCase):
             else:
                 self.assertEqual(expected, agents.read_bytes().decode("utf-8"))
 
+    @requires_symlink
     def test_project_uninstall_keeps_symlinked_agents(self):
         shared = Path(self.tmp.name) / "shared-agents.md"
         text = "<!-- gsd-path:begin -->\nx\n<!-- gsd-path:end -->\nshared\n"

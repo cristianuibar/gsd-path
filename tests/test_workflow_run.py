@@ -147,7 +147,7 @@ class WorkflowRunTests(unittest.TestCase):
 
     def run_cli(self, root, *args, script=SCRIPT):
         return subprocess.run([sys.executable, "-B", str(script), *args, "--repo", str(root)],
-                              capture_output=True, text=True)
+                              capture_output=True, encoding="utf-8", errors="replace")
 
     def test_plan_gate_and_approval_use_canonical_helpers(self):
         with tempfile.TemporaryDirectory() as tmp:

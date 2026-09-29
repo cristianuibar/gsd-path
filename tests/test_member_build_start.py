@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from scripts import members, pipeline_state
+from tests._platform import requires_symlink
 
 ROOT = Path(__file__).resolve().parents[1]
 MEMBERS = ROOT / "scripts" / "members.py"
@@ -20,7 +21,7 @@ CHANGES = {"phase": "build", "status": "active"}
 
 def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
-                          cwd=repo, text=True, capture_output=True, check=check)
+                          cwd=repo, encoding="utf-8", errors="replace", capture_output=True, check=check)
 
 
 class MemberBuildStartTests(unittest.TestCase):
@@ -46,7 +47,7 @@ class MemberBuildStartTests(unittest.TestCase):
             git(member, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
             subprocess.run([sys.executable, str(MEMBERS), "add", "--repo", str(self.coordinator),
                             "--name", name, "--checkout", str(member)],
-                           text=True, capture_output=True, check=True)
+                           encoding="utf-8", errors="replace", capture_output=True, check=True)
             self.repos[name] = member
 
     def tearDown(self) -> None:
@@ -111,6 +112,7 @@ class MemberBuildStartTests(unittest.TestCase):
         self.assertFalse((self.coordinator / members.LOCK_PATH).exists())
         self.assertEqual(self.branch("web"), branch)
 
+    @requires_symlink
     def test_symlinked_build_directory_blocks_member_start(self) -> None:
         self.tasks("web")
         outside = self.root / "outside"
@@ -120,12 +122,13 @@ class MemberBuildStartTests(unittest.TestCase):
         external_lock.write_bytes(original.encode("utf-8"))
         (self.coordinator / ".project" / "build").symlink_to(outside, target_is_directory=True)
 
-        with self.assertRaisesRegex(pipeline_state.PipelineStateError, r"\.project/build"):
+        with self.assertRaisesRegex(pipeline_state.PipelineStateError, r"\.project[/\\]build"):
             self.start()
         self.assertEqual(self.phase(), "plan/done")
         self.assertIsNone(self.branch("web"))
         self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
 
+    @requires_symlink
     def test_symlinked_build_directory_blocks_member_free_reentry(self) -> None:
         self.tasks("web")
         self.start()
@@ -140,11 +143,12 @@ class MemberBuildStartTests(unittest.TestCase):
         external_lock.write_bytes(original.encode("utf-8"))
         build_dir.symlink_to(outside, target_is_directory=True)
 
-        with self.assertRaisesRegex(members.MembersError, r"\.project/build"):
+        with self.assertRaisesRegex(members.MembersError, r"\.project[/\\]build"):
             members.lock_build_members(self.coordinator)
         self.assertEqual(external_lock.read_text(encoding="utf-8"), original)
         self.assertEqual(self.branch("web"), branch)
 
+    @requires_symlink
     def test_symlinked_member_lock_file_blocks_start(self) -> None:
         self.tasks("web")
         build_dir = self.coordinator / ".project" / "build"

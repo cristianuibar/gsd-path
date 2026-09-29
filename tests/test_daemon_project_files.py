@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'daemon'))
 from gsd_daemon.config import Config
 from gsd_daemon.model import ProjectStatus
 from gsd_daemon.serve import serve_in_thread
+from tests._platform import requires_symlink
 
 
 class ProjectFilesTests(unittest.TestCase):
@@ -43,7 +44,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.watcher.sessions.records_for.return_value = []
 
     def git(self, *args):
-        return subprocess.check_output(['git', '-C', str(self.root), *args], text=True)
+        return subprocess.check_output(['git', '-C', str(self.root), *args], encoding="utf-8", errors="replace")
 
     def request(self, action='list', headers=None, **fields):
         conn = http.client.HTTPConnection('127.0.0.1', self.port)
@@ -58,6 +59,7 @@ class ProjectFilesTests(unittest.TestCase):
             body = raw
         return response.status, body
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_real_files_raw_and_revision_history(self):
         archive = self.root / '.project/archive/001/FINAL.md'
         archive.parent.mkdir(parents=True)
@@ -78,6 +80,8 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertIn('blocked', self.state.read_text(encoding="utf-8"))
         self.assertEqual(self.request('read', path='.project/archive/001/FINAL.md')[1]['text'], archive.read_text(encoding="utf-8"))
 
+    @requires_symlink
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_paths_origin_and_revision_are_confined(self):
         outside = self.root.parent / 'outside.md'
         outside.write_bytes('outside secret'.encode("utf-8"))
@@ -164,6 +168,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertEqual(self.js("document.querySelector('[data-file-revision]').value"), '')
         self.assertEqual(self.js("document.querySelector('[data-file-revision]').selectedOptions[0].textContent"), 'Working tree')
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_full_records_and_missing_coverage(self):
         build = self.root / '.project/build'
         build.mkdir()
@@ -205,6 +210,7 @@ class ProjectFilesTests(unittest.TestCase):
         self.assertIn('data-document-link=".project/STATE.md"', rendered)
         self.assertEqual(body['text'], text)
 
+    @unittest.skipIf(os.name == "nt", "secure no-follow file reading on Windows is tracked in #201")
     def test_untracked_binary_missing_and_literal_path(self):
         (self.root / 'image.bin').write_bytes(b'abc\x00def')
         (self.root / 'a [draft].md').write_bytes('literal name'.encode("utf-8"))

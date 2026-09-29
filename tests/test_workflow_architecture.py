@@ -36,7 +36,7 @@ from scripts import pipeline_state
 raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
 """
             result = subprocess.run([sys.executable, "-B", "-c", code, str(repo)],
-                                    cwd=root, capture_output=True, text=True)
+                                    cwd=root, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
             self.assertEqual(payload["state"]["phase"], "inspect")
@@ -69,7 +69,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
                 for action in ("status", "route"):
                     with self.subTest(bundle=bundle.parent.parent.name, action=action):
                         result = subprocess.run([sys.executable, "-B", str(bundle), action,
-                            "--repo", str(repo)], cwd=repo, capture_output=True, text=True,
+                            "--repo", str(repo)], cwd=repo, capture_output=True, encoding="utf-8", errors="replace",
                             env={**os.environ, "PYTHONPATH": ""})
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(json.loads(result.stdout)["route"]["action"], "resume-checkpoint")
@@ -98,7 +98,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
             path.write_bytes(path.read_text(encoding="utf-8").replace("status: active", "status: done").encode("utf-8"))
             before = path.read_bytes()
             payload = json.loads(subprocess.run([sys.executable, "-B", str(Path(pipeline_state.__file__)),
-                "status", "--repo", str(repo)], check=True, capture_output=True, text=True).stdout)
+                "status", "--repo", str(repo)], check=True, capture_output=True, encoding="utf-8", errors="replace").stdout)
             handoff = payload.get("handoff", {})
             self.assertEqual(handoff.get("outcome"), "inspect/done")
             self.assertEqual(handoff.get("review"), str(path))
@@ -143,7 +143,7 @@ raise SystemExit(pipeline_state.main(["status", "--repo", sys.argv[1]]))
                 completed = subprocess.run([sys.executable, "-B", str(Path(pipeline_state.__file__)),
                     "approve", "--repo", str(repo), "--kind", "roadmap-reslice",
                     "--milestone", "second", "--expected-head", head],
-                    capture_output=True, text=True, check=True)
+                    capture_output=True, encoding="utf-8", errors="replace", check=True)
                 result = json.loads(completed.stdout)
                 self.assertEqual(result["state"]["phase"], "inspect" if phase == "roadmap" else phase)
                 self.assertEqual(result["state"]["status"], "active")
