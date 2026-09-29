@@ -76,6 +76,55 @@ class MemberUndoTests(unittest.TestCase):
         branch = git(self.bound, "symbolic-ref", "--short", "HEAD")
         self._assert_resume_blocks_published_landing(f"refs/remotes/origin/{branch}")
 
+    def test_resume_after_member_reset_blocks_origin_main_publication(self) -> None:
+        self._assert_reset_member_resume_blocks_publication("refs/remotes/origin/main")
+
+    def test_resume_after_member_reset_blocks_remote_bound_publication(self) -> None:
+        branch = git(self.bound, "symbolic-ref", "--short", "HEAD")
+        self._assert_reset_member_resume_blocks_publication(f"refs/remotes/origin/{branch}")
+
+    def _assert_reset_member_resume_blocks_publication(self, ref: str) -> None:
+        result = self.landed()
+        with mock.patch.object(pipeline_undo, "_reset_to", side_effect=OSError("crash")):
+            with self.assertRaises(OSError):
+                pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(self.bound_tip(), self.member_base)
+        git(self.member, "update-ref", ref, result["landing"])
+        with self.assertRaisesRegex(pipeline_undo.UndoError, "already on"):
+            pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), result["commit"])
+
+    def test_lock_rechecks_target_before_writing_journal(self) -> None:
+        result = self.landed()
+
+        @contextmanager
+        def moved_before_lock(_repo):
+            (self.bound / "extra.txt").write_text("later\n", encoding="utf-8")
+            git(self.bound, "add", "extra.txt")
+            git(self.bound, "commit", "-q", "--no-verify", "-m", "later landing")
+            yield
+
+        with mock.patch.object(isolation, "_member_landing_lock", moved_before_lock):
+            with self.assertRaisesRegex(pipeline_undo.UndoError, "target changed"):
+                pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertIsNone(pipeline_undo.pending_transaction(self.coordinator))
+        self.assertNotEqual(self.bound_tip(), result["landing"])
+
+    def test_moved_coordinator_blocks_before_member_reset(self) -> None:
+        result = self.landed()
+        prepare = pipeline_undo._prepare_transaction
+
+        def prepare_then_move(*args, **kwargs):
+            transaction = prepare(*args, **kwargs)
+            git(self.coordinator, "commit", "-q", "--allow-empty", "--no-verify", "-m", "later record")
+            return transaction
+
+        with mock.patch.object(pipeline_undo, "_prepare_transaction", side_effect=prepare_then_move):
+            with self.assertRaisesRegex(pipeline_undo.UndoError, "HEAD moved"):
+                pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(self.bound_tip(), result["landing"])
+        self.assertIsNotNone(pipeline_undo.pending_transaction(self.coordinator))
+
     def _assert_resume_blocks_published_landing(self, ref: str) -> None:
         result = self.landed()
         with mock.patch.object(pipeline_undo, "_undo_member_landing", side_effect=OSError("crash")):

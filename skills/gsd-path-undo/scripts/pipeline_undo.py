@@ -679,10 +679,14 @@ def _member_undo_parent(repo: Path, member: str, landing: str) -> str:
     bound = entry["branch"]
     if _run_git(checkout, "rev-parse", f"refs/heads/{bound}").stdout.strip() != landing:
         raise UndoError(f"member {member} {bound} moved past this landing")
+    _require_member_unpublished(checkout, member, landing, bound)
+    return _run_git(checkout, "rev-parse", f"{landing}^").stdout.strip()
+
+
+def _require_member_unpublished(checkout: Path, member: str, landing: str, bound: str) -> None:
     for ref, where in (("refs/remotes/origin/main", "origin/main"), (f"refs/remotes/origin/{bound}", f"origin/{bound}")):
         if _run_git(checkout, "merge-base", "--is-ancestor", landing, ref, check=False).returncode == 0:
             raise UndoError(f"member {member} landing is already on {where}")
-    return _run_git(checkout, "rev-parse", f"{landing}^").stdout.strip()
 
 
 def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
@@ -691,6 +695,7 @@ def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
     checkout, _, entry = isolation._member_context(repo, member)
     tip = _run_git(checkout, "rev-parse", f"refs/heads/{entry['branch']}").stdout.strip()
     if tip == transaction["member_parent"]:
+        _require_member_unpublished(checkout, member, str(transaction["landing"]), entry["branch"])
         return
     if tip != transaction["landing"]:
         raise UndoError(f"member {member} bound branch moved during undo")
@@ -711,9 +716,9 @@ def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
 
 
 def _finish_transaction_locked(repo: Path, transaction: dict[str, object]) -> None:
+    stage = _transaction_recovery_stage(repo, transaction)
     if transaction["kind"] == "member-task":
         _undo_member_landing(repo, transaction)
-    stage = _transaction_recovery_stage(repo, transaction)
     if stage == "prepared":
         _require_unpublished_reset(repo, str(transaction["branch"]))
         _reset_to(repo, str(transaction["parent"]))
@@ -1046,15 +1051,18 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
         )
         _finish_transaction(resolved, transaction)
     elif kind == "member-task":
-        if _worktree_changes(resolved):
-            raise UndoError("worktree changed after member task undo preview")
-        _require_unpublished_reset(resolved, str(target["branch"]))
-        transaction = _prepare_transaction(
-            resolved, kind, expected_head, str(target["parent"]), str(target["branch"]), None, None,
-            {"member": str(target["member"]), "landing": str(target["landing"]),
-             "member_parent": str(target["member_parent"])},
-        )
-        _finish_transaction(resolved, transaction)
+        with isolation._member_landing_lock(resolved):
+            if preview(resolved)["target"] != target:
+                raise UndoError("member task undo target changed after preview")
+            if _worktree_changes(resolved):
+                raise UndoError("worktree changed after member task undo preview")
+            _require_unpublished_reset(resolved, str(target["branch"]))
+            transaction = _prepare_transaction(
+                resolved, kind, expected_head, str(target["parent"]), str(target["branch"]), None, None,
+                {"member": str(target["member"]), "landing": str(target["landing"]),
+                 "member_parent": str(target["member_parent"])},
+            )
+            _finish_transaction_locked(resolved, transaction)
     elif kind == "task":
         parent = target["parent"]
         if not parent:
