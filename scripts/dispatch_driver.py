@@ -19,8 +19,6 @@ import hashlib
 import json
 import os
 import re
-import shlex
-import signal
 import subprocess
 import sys
 import tempfile
@@ -170,12 +168,7 @@ def child_running(state: Dict[str, object]) -> bool:
     return state.get("finished_at") is None and bool(state.get("pid")) and process_alive(int(state["pid"]))
 
 
-def process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
+process_alive = _common.process_alive
 
 
 # --- child process ---------------------------------------------------------
@@ -208,13 +201,13 @@ def child_main(state_path: Path) -> int:
     attempt_dir = state_path.parent
     with open(attempt_dir / "brief.md", "rb") as brief, \
             open(attempt_dir / "stdout", "wb") as out, open(attempt_dir / "stderr", "wb") as err:
-        process = subprocess.Popen(state["command"], cwd=state["worktree"], stdin=brief,
-                                   stdout=out, stderr=err, start_new_session=True)
+        process = _common.popen_group(_common.resolve_argv(state["command"]), cwd=state["worktree"],
+                                      stdin=brief, stdout=out, stderr=err)
         try:
             exit_code: Optional[int] = process.wait(timeout=state.get("child_timeout"))
             timed_out = False
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            _common.kill_tree(process)
             process.wait()
             exit_code, timed_out = None, True
     save_state(attempt_dir / "exit.json",
@@ -285,7 +278,7 @@ def selected_command(state: Dict[str, object], options: argparse.Namespace, comm
     if caps_path is None:
         if overrides or previous or model_policy.policy_path(primary, project_dir).exists():
             raise model_policy.PolicyError('model policy requires --model-capabilities for this dispatch')
-        return shlex.split(command), None
+        return _common.split_command(command), None
     caps = model_policy.read_json(caps_path)
     action = getattr(options, 'action', 'round')
     role = {'round': 'coder', 'review': 'reviewer', 'panel': 'review_panel',
@@ -300,7 +293,7 @@ def selected_command(state: Dict[str, object], options: argparse.Namespace, comm
                                               dict(overrides, model=state['slug']), previous)
         model_policy.validate_panel(selection, state['family'], state.get('excluded_families', []))
         state['slug'] = selection['selected']['model']
-    return model_policy.command_args(shlex.split(command), selection), selection
+    return model_policy.command_args(_common.split_command(command), selection), selection
 
 
 def retain_selection(root: Path, state: Dict[str, object]) -> Dict[str, object]:
@@ -345,10 +338,10 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
     state_path = attempt_dir / "state.json"
     (attempt_dir / "brief.md").write_bytes(brief(state).encode("utf-8"))
     save_state(state_path, state)
-    wrapper = subprocess.Popen(
+    wrapper = _common.popen_detached(
         [sys.executable, "-B", str(Path(__file__).resolve()), "_child", "--state", str(state_path)],
         cwd=state["worktree"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL, start_new_session=True,
+        stderr=subprocess.DEVNULL,
     )
     state["_path"] = str(state_path)
     update_state(state, pid=wrapper.pid)
@@ -387,7 +380,7 @@ def snapshot_tree(primary: Path) -> str:
 
 
 def run_verify(command: str, cwd: Path) -> Dict[str, object]:
-    completed = _common.run_command("bash", "-c", command, cwd=cwd)
+    completed = _common.run_command(*_common.bash_argv(command), cwd=cwd)
     return {"exit_code": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
 
 

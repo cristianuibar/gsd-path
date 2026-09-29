@@ -882,11 +882,39 @@ def _process_identity(pid: int) -> Optional[str]:
 
 
 def _process_alive(pid: int) -> bool:
+    """Whether pid names a running process, without signalling it.
+
+    Windows os.kill(pid, 0) sends CTRL_C_EVENT, so Windows asks the kernel.
+    status_runtime and install carry verbatim copies (they cannot import this
+    module); tests/test_common_platform.py keeps them identical.
+    """
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except OSError as error:
+            return error.errno == errno.EPERM
+        return True
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        # ERROR_ACCESS_DENIED: a protected process exists but refuses the query.
+        return ctypes.get_last_error() == 5
     try:
-        os.kill(pid, 0)
-    except OSError as error:
-        return error.errno == errno.EPERM
-    return True
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == 259  # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _stale_install_lock_snapshot(lock: Path) -> Tuple[os.stat_result, bytes]:

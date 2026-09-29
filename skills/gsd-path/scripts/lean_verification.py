@@ -22,8 +22,8 @@ else:
 
 
 def _git(repo, *arguments):
-    return subprocess.run(["git", "-C", str(repo), *arguments],
-                          capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(["git", "-C", str(repo), *arguments], capture_output=True,
+                          encoding="utf-8", errors="surrogateescape", check=True).stdout.strip()
 
 
 def _reusable_wave(repo, expected_head):
@@ -119,7 +119,7 @@ def reuse_final(repo, expected_head):
         destination = repo / ".project/review/FINAL.md"
         if destination.is_symlink():
             raise contracts.HandoffError("FINAL.md must be a real file")
-        if destination.exists() and destination.read_text() != final:
+        if destination.exists() and destination.read_text(encoding="utf-8") != final:
             raise contracts.HandoffError("existing final evidence needs explicit reconciliation")
         if not destination.exists():
             _common.atomic_write(destination, final)
@@ -240,7 +240,7 @@ def verify_project(repo, expected_head):
                 )
         _retire_execution(repo, expected_head, execution)
         view = _gap_view(command, expected_head, execution, waves)
-        if not destination.exists() or destination.read_text() != view:
+        if not destination.exists() or destination.read_text(encoding="utf-8") != view:
             _common.atomic_write(destination, view)
         return {"passed": entry["result"] == "pass", "reused": True,
                 "path": str(destination), "execution": execution}
@@ -253,8 +253,8 @@ def verify_project(repo, expected_head):
         raise
     try:
         try:
-            completed = subprocess.run(["bash", "-c", command], cwd=worktree,
-                                       text=True, capture_output=True)
+            completed = subprocess.run(_common.bash_argv(command), cwd=worktree,
+                                       encoding="utf-8", errors="replace", capture_output=True)
             if sidecars:
                 isolation.check_member_verify(sidecars)
         finally:

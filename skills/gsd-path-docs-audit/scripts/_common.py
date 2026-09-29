@@ -159,7 +159,7 @@ def run_command(
     *arguments: str, cwd: Optional[Path] = None
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        arguments,
+        resolve_argv(arguments),
         cwd=cwd,
         encoding="utf-8",
         errors="surrogateescape",
@@ -418,13 +418,13 @@ def directory_mutex(
         kernel32.CloseHandle(handle)
 
 
-_STILL_ACTIVE = 259
-_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-_ERROR_ACCESS_DENIED = 5
-
-
 def process_alive(pid: int) -> bool:
-    """Whether pid names a running process, without signalling it."""
+    """Whether pid names a running process, without signalling it.
+
+    Windows os.kill(pid, 0) sends CTRL_C_EVENT, so Windows asks the kernel.
+    status_runtime and install carry verbatim copies (they cannot import this
+    module); tests/test_common_platform.py keeps them identical.
+    """
     if pid <= 0:
         return False
     if os.name != "nt":
@@ -441,15 +441,15 @@ def process_alive(pid: int) -> bool:
     kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
     kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
     kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
-        # A protected process exists even though it refuses the query.
-        return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
+        # ERROR_ACCESS_DENIED: a protected process exists but refuses the query.
+        return ctypes.get_last_error() == 5
     try:
         code = wintypes.DWORD()
         if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
             return True
-        return code.value == _STILL_ACTIVE
+        return code.value == 259  # STILL_ACTIVE
     finally:
         kernel32.CloseHandle(handle)
 
@@ -462,6 +462,29 @@ def popen_group(argv: Sequence[str], **kwargs) -> subprocess.Popen:
     else:
         kwargs["start_new_session"] = True
     return subprocess.Popen(list(argv), **kwargs)
+
+
+# Windows creation flags for a background process that outlives its caller.
+_CREATE_NO_WINDOW = 0x08000000
+_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+
+
+def popen_detached(argv: Sequence[str], **kwargs) -> subprocess.Popen:
+    """Start a background process that survives its caller's exit.
+
+    POSIX starts a new session. Windows hosts may run commands in a job object
+    that kills its members when the command returns, so this breaks away when
+    the job allows it, and gives the process a hidden console that its console
+    children inherit instead of flashing new windows.
+    """
+    if os.name != "nt":
+        return subprocess.Popen(list(argv), start_new_session=True, **kwargs)
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP | _CREATE_NO_WINDOW
+    try:
+        return subprocess.Popen(list(argv), creationflags=flags | _CREATE_BREAKAWAY_FROM_JOB, **kwargs)
+    except PermissionError:
+        # The job forbids breakaway; the process still runs, bound to that job.
+        return subprocess.Popen(list(argv), creationflags=flags, **kwargs)
 
 
 def kill_tree(process: subprocess.Popen) -> None:

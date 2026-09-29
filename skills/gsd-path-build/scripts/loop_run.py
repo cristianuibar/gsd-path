@@ -32,10 +32,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import fcntl
+try:
+    from . import _common
+except ImportError:
+    import _common
 
 
 class LoopError(RuntimeError):
@@ -119,25 +119,8 @@ def log_path(fields: dict) -> Path:
 def log_lock(fields: dict) -> Iterator[None]:
     path = log_path(fields)
     path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = path.with_name(f".{path.name}.lock")
-    with lock_path.open("a+b") as handle:
-        if sys.platform == "win32":
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            if sys.platform == "win32":
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with _common.exclusive_lock(path.with_name(f".{path.name}.lock")):
+        yield
 
 
 def load_log(fields: dict) -> list[dict]:
@@ -528,15 +511,22 @@ def command_claim(fields: dict) -> dict:
 
 
 def run_shell(command: str, timeout: float) -> tuple[Optional[int], str]:
-    """Run one spec command; a hung command counts as failed (exit None)."""
+    """Run one spec command; a hung command counts as failed (exit None).
+
+    POSIX runs /bin/sh as shell=True did; Windows runs Git for Windows bash, not
+    cmd.exe. A timeout kills the whole process group, so a grandchild cannot
+    keep the output pipes open.
+    """
+    argv = _common.bash_argv(command) if os.name == "nt" else ["/bin/sh", "-c", command]
+    process = _common.popen_group(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        completed = subprocess.run(
-            command, shell=True, capture_output=True, text=True, check=False, timeout=timeout
-        )
-    except subprocess.TimeoutExpired as expired:
-        output = (expired.stdout or b"").decode(errors="replace") + (expired.stderr or b"").decode(errors="replace")
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _common.kill_tree(process)
+        stdout, stderr = process.communicate()
+        output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
         return None, f"{output}\ntimed out at the admitted wall-clock deadline"
-    return completed.returncode, completed.stdout + completed.stderr
+    return process.returncode, (stdout + stderr).decode("utf-8", errors="replace")
 
 
 def command_verify(fields: dict, claim_identifier: Optional[str]) -> dict:

@@ -314,5 +314,50 @@ class GitOutputEncodingTests(unittest.TestCase):
             self.assertEqual(result.stdout.split("\0")[0], "café.md")
 
 
+class ProcessAliveCopyTests(unittest.TestCase):
+    """status_runtime and install cannot import _common; their copies must not drift."""
+
+    def function_source(self, path: Path, name: str) -> str:
+        import ast
+
+        text = path.read_bytes().decode("utf-8")
+        node = next(item for item in ast.parse(text).body
+                    if isinstance(item, ast.FunctionDef) and item.name == name)
+        lines = text.splitlines(keepends=True)[node.lineno - 1:node.end_lineno]
+        return "".join(lines).replace(f"def {name}(", "def process_alive(", 1)
+
+    def test_copies_match(self) -> None:
+        canonical = self.function_source(ROOT / "scripts" / "_common.py", "process_alive")
+        self.assertEqual(self.function_source(ROOT / "scripts" / "status_runtime.py", "process_alive"),
+                         canonical)
+        self.assertEqual(self.function_source(ROOT / "scripts" / "install.py", "_process_alive"),
+                         canonical)
+
+
+class PopenDetachedTests(unittest.TestCase):
+    def test_runs_and_reports_exit(self) -> None:
+        process = _common.popen_detached([sys.executable, "-c", "raise SystemExit(3)"],
+                                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.DEVNULL)
+        self.assertEqual(process.wait(30), 3)
+
+    @windows_only
+    def test_falls_back_when_the_job_forbids_breakaway(self) -> None:
+        real = subprocess.Popen
+        calls = []
+
+        def popen(argv, creationflags=0, **kwargs):
+            calls.append(creationflags)
+            if creationflags & _common._CREATE_BREAKAWAY_FROM_JOB:
+                raise PermissionError(5, "Access is denied")
+            return real(argv, creationflags=creationflags, **kwargs)
+
+        with mock.patch.object(_common.subprocess, "Popen", side_effect=popen):
+            process = _common.popen_detached([sys.executable, "-c", "pass"])
+        self.assertEqual(process.wait(30), 0)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse(calls[1] & _common._CREATE_BREAKAWAY_FROM_JOB)
+
+
 if __name__ == "__main__":
     unittest.main()
