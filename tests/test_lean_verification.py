@@ -256,7 +256,16 @@ Walkthrough:
             self.assertEqual(check_handoffs.validate_final(root)["verdict"], "pass")
 
     def test_wave_surface_state_converts_without_accepting_a_different_surface(self):
-        for named, expected in (("CLI, prints hello", True), ("Other CLI, prints hello", False)):
+        for named, expected in (
+            ("CLI, prints hello", True),
+            # The reviewer phrasing that refused reuse in a live run: detail after a dash.
+            ("CLI — entry `python3 hello.py`, run from the repository root", True),
+            ("CLI (python3 hello.py)", True),
+            ("cli: prints hello", True),
+            ("Other CLI, prints hello", False),
+            ("CLI tool, prints hello", False),
+            ("CLIENT — prints hello", False),
+        ):
             with self.subTest(surface=named), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 _, wave = self.fixture(root, surface=True)

@@ -20,7 +20,7 @@ Overall verdict: <pass | blocked>
 ### SC1 — <criterion copied verbatim from INTENT.md>
 
 - **Verdict**: <met | not-met | unverifiable>
-- **Surface**: <the surface PLAN.md's Surface contract lists this criterion under; omit the whole field for any other criterion>
+- **Surface**: <exactly the surface name PLAN.md's Surface contract lists this criterion under, with no detail after it; omit the whole field for any other criterion>
 - **Check**: `<command actually run, or "none">`
 - **Observed**: <relevant output or observed behavior>
 - **Reference**: <file:line, artifact path, or "none">

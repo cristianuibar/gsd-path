@@ -1647,6 +1647,19 @@ def validate_wave_evidence(
     }
 
 
+def criterion_surfaces(root: Path, project_dir: str = DEFAULT_PROJECT_DIR) -> Dict[str, str]:
+    """Map each surface-owned INTENT SC to the surface PLAN.md's contract lists it under."""
+
+    surface_of: Dict[str, str] = {}
+    surfaces = _surfaces(_read(root, _intent_path(project_dir)), "INTENT.md")
+    if surfaces:
+        plan = _read(root, f"{project_dir}/plan/PLAN.md")
+        for surface, (_task, owned) in _surface_contract(plan, surfaces).items():
+            for criterion in owned:
+                surface_of[criterion] = surface
+    return surface_of
+
+
 def validate_final(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR, *, final_text: Optional[str] = None
 ) -> Dict[str, object]:
@@ -1655,13 +1668,7 @@ def validate_final(
     _require_state(root, "ship", "active", project_dir)
     intent = _read(root, _intent_path(project_dir))
     criteria = _success_criteria(intent)
-    surface_of: Dict[str, str] = {}
-    surfaces = _surfaces(intent, "INTENT.md")
-    if surfaces:
-        plan = _read(root, f"{project_dir}/plan/PLAN.md")
-        for surface, (_task, owned) in _surface_contract(plan, surfaces).items():
-            for criterion in owned:
-                surface_of[criterion] = surface
+    surface_of = criterion_surfaces(root, project_dir)
     relative = f"{project_dir}/review/FINAL.md"
     text = _read(root, relative) if final_text is None else final_text
     reviewed_head = _reviewed_head(text, relative)

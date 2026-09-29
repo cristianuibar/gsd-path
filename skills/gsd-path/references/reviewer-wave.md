@@ -62,7 +62,9 @@ When explicitly briefed with final scope, record `Review scope: final` and the
 full supplied review HEAD in the wave artifact. Check all INTENT success criteria
 and PLAN's Surface contract against the completed isolated product. Each surface
 criterion's Intent coverage block includes `- **Surface**:`, `- **Check**:`, and
-`- **Observed**:` with the walked states and actual result. Reuse recorded task
+`- **Observed**:` with the walked states and actual result. `Surface` holds
+exactly the surface name from PLAN's Surface contract; walkthrough detail belongs
+in Check and Observed. Reuse recorded task
 output if it proves that exact walkthrough; run only a missing check. Final-scope
 coverage shares this wave artifact; do not write a second report. Shipping's
 runtime checks freshness and derives the final view from these records.
