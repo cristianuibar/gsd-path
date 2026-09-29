@@ -197,6 +197,41 @@ class MemberCreateTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse(self.journal().exists())
 
+    def test_partial_clone_without_head_resumes_from_origin_main(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.base, "init", "-q", "-b", "main", str(self.checkout))
+        git(self.checkout, "remote", "add", "origin", URL)
+        self.calls.clear()
+        listed = self.create()
+        self.assertEqual(listed[0]["checkout"], str(self.checkout))
+        self.assertEqual(git(self.checkout, "rev-parse", "HEAD"), git(self.remote, "rev-parse", "main"))
+        self.assertEqual(members.member_role(self.checkout)["name"], "web")
+        self.assertNotIn("create", [call[1] for call in self.calls])
+
+    def test_missing_checkout_parent_blocks_before_gh(self) -> None:
+        self.checkout = self.base / "missing" / "web"
+        with self.assertRaisesRegex(members.MembersError, "checkout parent does not exist"):
+            self.create()
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.journal().exists())
+
+    def test_recreated_remote_does_not_adopt_unrelated_clone(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.base, "clone", "-q", URL, str(self.checkout))
+        shutil.rmtree(self.remote)
+        git(self.base, "init", "-q", "--bare", "-b", "main", str(self.remote))
+        replacement = self.base / "replacement"
+        git(self.base, "init", "-q", "-b", "main", str(replacement))
+        (replacement / "README.md").write_text("replacement\n", encoding="utf-8")
+        git(replacement, "add", "-A")
+        git(replacement, "commit", "-q", "-m", "Replacement")
+        git(replacement, "push", "-q", str(self.remote), "main")
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "history unrelated"):
+            self.create()
+        self.assertEqual([call[:2] for call in self.calls], [("repo", "view")])
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+
 
 class MemberDetectTests(unittest.TestCase):
     """`members.py detect` reports whether a repo is a member, from inside that repo."""

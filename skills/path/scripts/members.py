@@ -529,6 +529,8 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     resolved = checkout.resolve()
     if resolved == root or root in resolved.parents or resolved in root.parents:
         raise MembersError(f"member checkout is nested with the coordinator: {resolved}")
+    if not resolved.parent.is_dir():
+        raise MembersError(f"member checkout parent does not exist: {resolved.parent}")
     target = {"schema": MEMBER_CREATE_SCHEMA, "name": name, "github": github, "visibility": visibility,
               "checkout": str(resolved), "integration": integration}
     common = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
@@ -584,7 +586,21 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
         raise MembersError(f"GitHub repository visibility is {actual_visibility}, not {visibility}")
     recorded["step"] = "clone"
     _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
-    if not occupied:
+    if occupied:
+        fetched = _common.run_git(resolved, "fetch", "-q", "origin")
+        if fetched.returncode != 0:
+            raise MembersError(f"could not fetch member checkout {resolved}: {(fetched.stderr or fetched.stdout).strip()}")
+        baseline = _common.run_git(resolved, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+        if baseline.returncode != 0:
+            raise MembersError(f"member checkout {resolved} has no current origin/main")
+        head = _common.run_git(resolved, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+        if head.returncode == 0:
+            if _common.run_git(resolved, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode != 0:
+                raise MembersError(f"member checkout {resolved} has history unrelated to current origin/main")
+        else:
+            _git(resolved, "remote", "set-head", "origin", "-a")
+            _git(resolved, "checkout", "-B", "main", "origin/main")
+    else:
         cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))
         if cloned.returncode != 0:
             raise MembersError(f"could not clone {url}: {(cloned.stderr or cloned.stdout).strip()}")
