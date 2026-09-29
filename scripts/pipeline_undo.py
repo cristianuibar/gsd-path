@@ -102,7 +102,7 @@ UNDO_TRANSACTION_SCHEMA = pipeline_state.UNDO_TRANSACTION_SCHEMA
 UNDO_TRANSACTION_NAME = pipeline_state.UNDO_TRANSACTION_NAME
 ROADMAP_APPROVAL_SUBJECT = "roadmap: program roadmap approved"
 TASK_SUBJECT_RE = re.compile(r"^(T\d{3,}): .+")
-KINDS = ("checkpoint", "task", "uncommitted-archive", "lookahead")
+KINDS = ("checkpoint", "task", "member-task", "uncommitted-archive", "lookahead")
 PROMOTION_PREFIX = "router: promote lookahead milestone "
 ABANDON_PREFIX = "build: abandon milestone "
 INTEGRATE_PREFIX = "integrate: "
@@ -670,7 +670,36 @@ def _transaction_recovery_stage(
     return "reset"
 
 
+def _member_undo_parent(repo: Path, member: str, landing: str) -> str:
+    """The member landing's parent, while that landing is the unpublished bound tip."""
+    checkout, _, entry = isolation._member_context(repo, member)
+    bound = entry["branch"]
+    if _run_git(checkout, "rev-parse", f"refs/heads/{bound}").stdout.strip() != landing:
+        raise UndoError(f"member {member} {bound} moved past this landing")
+    for ref, where in (("refs/remotes/origin/main", "origin/main"), (f"refs/remotes/origin/{bound}", f"origin/{bound}")):
+        if _run_git(checkout, "merge-base", "--is-ancestor", landing, ref, check=False).returncode == 0:
+            raise UndoError(f"member {member} landing is already on {where}")
+    return _run_git(checkout, "rev-parse", f"{landing}^").stdout.strip()
+
+
+def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
+    """Reset the member bound branch first; a resumed undo finds it already reset."""
+    member = str(transaction["member"])
+    checkout, _, entry = isolation._member_context(repo, member)
+    tip = _run_git(checkout, "rev-parse", f"refs/heads/{entry['branch']}").stdout.strip()
+    if tip == transaction["member_parent"]:
+        return
+    if tip != transaction["landing"]:
+        raise UndoError(f"member {member} bound branch moved during undo")
+    bound = Path(isolation.member_bound_checkout(repo, member)["checkout"])
+    if _run_git(bound, "status", "--porcelain", "--untracked-files=all").stdout:
+        raise UndoError(f"member {member} bound checkout is dirty")
+    _run_git(bound, "reset", "--hard", str(transaction["member_parent"]))
+
+
 def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
+    if transaction["kind"] == "member-task":
+        _undo_member_landing(repo, transaction)
     stage = _transaction_recovery_stage(repo, transaction)
     if stage == "prepared":
         _require_unpublished_reset(repo, str(transaction["branch"]))
@@ -825,6 +854,27 @@ def classify_undo(repo: Path) -> dict[str, object]:
         proof_error = _task_proof_error(resolved, head)
         if proof_error:
             return _blocked([f"task landing ownership is unproven: {proof_error}"])
+        record = isolation.MEMBER_RECORD_RE.search(body)
+        if record is not None:
+            try:
+                member_parent = _member_undo_parent(resolved, record["member"], record["landing"])
+            except (IsolationError, UndoError, PipelineStateError) as error:
+                return _blocked([f"member landing undo is unsafe: {error}"])
+            return {
+                "kind": "member-task",
+                "branch": recorded_branch,
+                "head": head,
+                "parent": parent,
+                "subject": subject,
+                "member": record["member"],
+                "landing": record["landing"],
+                "member_parent": member_parent,
+                "effects": [
+                    f"reset member {record['member']} bound branch to {member_parent}",
+                    f"reset {recorded_branch} to {parent}",
+                ],
+                "blocked": [],
+            }
         return {
             "kind": "task",
             "branch": recorded_branch,
@@ -981,6 +1031,17 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
             None,
             discussion,
         )
+        _finish_transaction(resolved, transaction)
+    elif kind == "member-task":
+        if _worktree_changes(resolved):
+            raise UndoError("worktree changed after member task undo preview")
+        _require_unpublished_reset(resolved, str(target["branch"]))
+        transaction = _prepare_transaction(
+            resolved, kind, expected_head, str(target["parent"]), str(target["branch"]), None, None
+        )
+        transaction.update(member=target["member"], landing=target["landing"],
+                           member_parent=target["member_parent"])
+        _write_json(_git_path(resolved, UNDO_TRANSACTION_NAME), transaction)
         _finish_transaction(resolved, transaction)
     elif kind == "task":
         parent = target["parent"]
