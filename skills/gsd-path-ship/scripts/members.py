@@ -301,6 +301,14 @@ def read_member_close(common: Path, archive_name: str) -> list[dict]:
     return data["members"]
 
 
+def milestone_member_close(common: Path, milestone: int) -> list[dict]:
+    """Member-close rows of milestone M<milestone>, whatever archive name it closed under."""
+    rows: list[dict] = []
+    for path in sorted((common / "gsd-path" / "member-close").glob(f"{milestone:03d}-*.json")):
+        rows.extend(read_member_close(common, path.stem))
+    return rows
+
+
 def write_member_close(common: Path, archive_name: str, rows: list[dict]) -> None:
     path = member_close_path(common, archive_name)
     path.parent.mkdir(parents=True, exist_ok=True)

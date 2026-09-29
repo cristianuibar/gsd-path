@@ -135,6 +135,7 @@ _worktree_report = isolation._worktree_report
 PipelineStateError = pipeline_state.PipelineStateError
 status_state = pipeline_state.status_state
 validate_state = pipeline_state.validate_state
+_run_git = pipeline_state._run_git
 
 if __package__:
     from . import pipeline_undo
@@ -418,6 +419,29 @@ def diagnose(repo: Path) -> dict[str, object]:
             for key, path in (status.get("journals") or {}).items()
             if path
         }
+        pending_members = [row["name"] for row in status.get("members") or [] if row["close"] == "pending"]
+        if pending_members:
+            findings.append(
+                _finding(
+                    "member-close",
+                    "stuck",
+                    "member close is pending for: " + ", ".join(pending_members),
+                    _command(archive_milestone, "close-members", "--repo", resolved),
+                )
+            )
+        common = _run_git(resolved, "rev-parse", "--path-format=absolute", "--git-common-dir", check=False)
+        landings = sorted(
+            (Path(common.stdout.strip()) / "gsd-path" / "member-landings").glob("*.json")
+        ) if common.returncode == 0 else []
+        if landings:
+            findings.append(
+                _finding(
+                    "member-landing",
+                    "stuck",
+                    "member landing journal is pending: " + ", ".join(path.stem for path in landings),
+                    "resume build; the dispatch driver finishes pending member landings before new work",
+                )
+            )
         undo_probe = by_name["undo-preview"]
         undo_result = undo_probe["result"] if undo_probe["ok"] else None
         route_retry = _route_retry(resolved, route, undo_result)
