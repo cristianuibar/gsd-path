@@ -254,6 +254,14 @@ The persisted `STATE.archive` field is the transaction identity.
    at the current HEAD is the only artifact-producing remedy. The archive helper independently binds every FINAL.md
    `SCn` heading id and normalized text to the archived INTENT.md; a renamed or
    easier criterion blocks even if the earlier handoff gate was bypassed.
+   For a multi-repo milestone (the archive holds `build/members.json`), run
+   `python3 <absolute archive_milestone.py> close-members --repo <root>`
+   after preflight passes and before recording shipment. It closes each
+   locked member in lock order in that member's integration mode and
+   journals each one. When it returns `awaiting-merge`, report the member PR
+   link, stop, and rerun the same command after the user merges it; never
+   merge a member PR yourself. When it returns `integrated`, keep its `body`
+   for the ship commit below.
 5. Only after preflight passes, record shipment through the journaled helper;
    for a program it atomically replaces both ROADMAP.md and STATE.md, setting
    the current entry to `Status: shipped` with the exact `Archive:` pointer:
@@ -274,7 +282,10 @@ The persisted `STATE.archive` field is the transaction identity.
    `ship: M00N — <milestone-slug>` and a body of exactly two consecutive lines,
    `Archive: .project/archive/<NNN>-<slug>` then
    `Reviewed-HEAD: <reviewed SHA>`, with no comment lines or blank line between them.
-   Write the subject, a blank line, and the two body lines to a message file,
+   A multi-repo milestone's body is exactly the `body` that `close-members`
+   returned: those two lines, then one `Member-Reviewed-HEAD:` and one
+   `Member:` line per member.
+   Write the subject, a blank line, and the body lines to a message file,
    then use `git commit -F <message-file>`. M00N and NNN come from STATE.archive.
    There is no untracked-project exception and no product or older-archive
    path may enter this commit.

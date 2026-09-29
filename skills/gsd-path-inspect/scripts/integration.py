@@ -1411,6 +1411,12 @@ def validate_integrated(
                 raise ArchiveError(f"published {ref} differs from local integration evidence")
     if pull_request is not None:
         result["pull_request"] = pull_request
+    for row in shipped.get("members", []):
+        proven = validate_member_integrated(project, row["name"], configured, row["reviewed_head"])
+        if (proven["merge"], proven["tag"]) != (row["merge"], row["tag"]):
+            raise ArchiveError(f"member {row['name']} integration differs from the ship commit")
+    if "members" in shipped:
+        result["members"] = shipped["members"]
     return result
 
 
