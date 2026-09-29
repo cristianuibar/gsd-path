@@ -41,7 +41,7 @@ class MemberCreateTests(unittest.TestCase):
         self.checkout = self.base / "web"
         # Git rewrites the GitHub URL to a local bare remote; the recorded origin stays the GitHub URL.
         config = self.base / "gitconfig"
-        config.write_text(f'[url "{self.remote}"]\n\tinsteadOf = {URL}\n', encoding="utf-8")
+        config.write_text(f'[url "{self.remote.as_posix()}"]\n\tinsteadOf = {URL}\n', encoding="utf-8")
         environment = mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(config)})
         environment.start()
         self.addCleanup(environment.stop)
@@ -216,11 +216,12 @@ class MemberCreateTests(unittest.TestCase):
         self.assertFalse(self.journal().exists())
 
     def test_gh_pins_github_com_host(self) -> None:
-        fake_gh = self.base / "gh"
-        fake_gh.write_text("#!/bin/sh\nprintf '%s\\n' \"$GH_HOST\"\n", encoding="utf-8")
-        fake_gh.chmod(0o755)
-        with mock.patch.dict(os.environ, {"GH_HOST": "enterprise.example", "PATH": f"{self.base}:{os.environ['PATH']}"}):
-            result = members._gh("repo", "view", "acme/web")
+        def fake_gh(command: list, **kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(command, 0, kwargs["env"]["GH_HOST"], "")
+
+        with mock.patch.dict(os.environ, {"GH_HOST": "enterprise.example"}):
+            with mock.patch.object(members.subprocess, "run", side_effect=fake_gh):
+                result = members._gh("repo", "view", "acme/web")
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "github.com")
 
