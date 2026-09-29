@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gsd-path-daemon"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Progress-monitoring daemon and tray app for GSD Path projects"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -16,6 +16,9 @@ tray = ["pystray", "Pillow"]
 
 [project.scripts]
 gsd-path-daemon = "gsd_daemon.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "gsd_daemon.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["gsd_daemon*"]

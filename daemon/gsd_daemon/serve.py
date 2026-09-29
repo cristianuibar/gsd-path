@@ -7,6 +7,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import List, Optional, Tuple
 
+from . import __version__
 from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import PluginManager
@@ -979,7 +980,8 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path.startswith("/status"):
             payload = aggregate(list(self.watcher.projects.values()), utc_now_iso())
-            payload["daemon"] = {"parents": list(self.watcher.config.parents), "poll_seconds": self.watcher.config.poll_seconds}
+            payload["daemon"] = {"parents": list(self.watcher.config.parents), "poll_seconds": self.watcher.config.poll_seconds,
+                                 "version": __version__, "pid": os.getpid()}
             payload["plugin"] = self._plugin_compact()
             self._respond(200, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path == "/api/plugin/status":
