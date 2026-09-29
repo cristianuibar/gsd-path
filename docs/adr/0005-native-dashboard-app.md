@@ -15,8 +15,10 @@ the plugin and the app, and see project stats.
 - **Shell.** Tauri gives a tray icon, a window, and notifications. The window
   shows the daemon's existing dashboard in the OS web view (WKWebView,
   WebView2, WebKitGTK), so one UI serves every OS. The app starts the daemon
-  when needed and stops only a process it launched. A daemon it reuses stays
-  running on quit. On first launch, the app uses the daemon's existing
+  when needed. It checks the daemon version in `/status` before reuse. An older
+  daemon, or one without a version, is stopped and replaced by an app-owned
+  process. A current daemon stays running on quit; the app stops only a process
+  it launched. On first launch, the app uses the daemon's existing
   uninstall cleanup to retire the old LaunchAgent, Startup shortcut, systemd
   unit, and Swift app login item. It checks that each old registration is gone
   before enabling Tauri autostart and shows a manual fix if cleanup fails.

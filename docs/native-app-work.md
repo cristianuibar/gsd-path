@@ -22,7 +22,7 @@ they write through the existing installer and helpers.
 | Slice | Contract |
 |---|---|
 | A0 Same-origin writes | Every daemon POST route (`/api/plugin/*`, `/api/config/parents`, `/api/refresh`) refuses a foreign Host, a cross-site Origin, and a non-JSON body, like `/api/path-config`. Update the dashboard's bodyless `/api/refresh` POST to send JSON. Tracked as its own task; it lands before any app build is published. |
-| A1 Shell and backend | Tauri 2 project in `daemon/app/`. On first run the app checks Python 3.9+ and Git and shows a static setup page with the fix when one is missing. Otherwise it creates or reuses `~/.gsd-path/venv`, installs the bundled daemon package, starts `gsd_daemon serve` when needed, and loads the dashboard. A daemon already running on the port is reused, not duplicated. On quit, the app stops only a daemon process it launched; a reused daemon keeps running. Tray menu matches the Swift app: project count and attention count, Open dashboard, Open in browser, Start, Stop, Restart, Quit, update notice. Launch at login uses Tauri autostart. |
+| A1 Shell and backend | Tauri 2 project in `daemon/app/`. On first run the app checks Python 3.9+ and Git and shows a static setup page with the fix when one is missing. Otherwise it creates or reuses `~/.gsd-path/venv`, installs the bundled daemon package, starts `gsd_daemon serve` when needed, and loads the dashboard. Add the daemon version to `/status`. Before reusing a daemon on the port, compare that version with the bundled one. If it is older or missing, stop it and start the bundled daemon as an app-owned process. Reuse a daemon at least as new as the bundled one; leave it running on quit. On quit, the app stops only a process it launched. Tray menu matches the Swift app: project count and attention count, Open dashboard, Open in browser, Start, Stop, Restart, Quit, update notice. Launch at login uses Tauri autostart. |
 | A2 Builds | CI builds the app on macOS (arm64 and x64), Windows, and Linux, and attaches `.dmg`, `.msi`, `.deb`, and AppImage files to a GitHub pre-release tagged `app-v<version>` for testers. macOS builds are ad-hoc signed. OS code signing is required before the first non-prerelease app release. |
 | A3 Self-update | The Tauri updater reads `latest.json` from the fixed `app-latest` GitHub pre-release at `https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json`. CI replaces that asset after each `app-v*` release and signs update artifacts with the owner's updater key, stored as a repository secret. The app checks on launch and from the tray, and asks before installing. |
 | A4 Install view | One page: hosts × installed skill version × latest, with Install and Update. Per project: runtime version, guard hooks present, and Update. For a coordinator with `.project/MEMBERS.md`: each member's marker, member hooks, and `origin/main`, with **Install hooks** (`install.py --member-of`) and **Repair** (`members.py repair`). Each failed check shows the exact fix. All data comes from installer and helper output; the daemon adds no rule of its own. |
@@ -40,9 +40,9 @@ can run in parallel. A6 comes last.
   content type to `/api/refresh`, and refresh still succeeds.
 - A1: on each OS, a first run with no Python shows the setup page and starts
   no daemon; a first run with Python starts the daemon and shows the
-  dashboard; quitting stops the process the app started. When a daemon was
-  started by the login service or CLI, the app reuses it and leaves it running
-  on quit.
+  dashboard; quitting stops the process the app started. An old pre-A0 daemon
+  on the port, with an older or missing `/status` version, is replaced by an
+  app-owned daemon. A current daemon is reused and keeps running on quit.
 - A2: the release workflow produces all listed files, and each installs and
   launches on a clean machine or VM for that OS. Unsigned builds are available
   only through pre-releases; the first non-prerelease build has OS signing.
@@ -73,6 +73,9 @@ can run in parallel. A6 comes last.
 - Remove autostart from `gsd_daemon install` in A6. Scripted installs lose
   startup behavior; the app becomes the only autostart path (owner ruling
   2026-09-29).
+- Check `/status` before reuse: replace a daemon older than the bundled version
+  or missing a version; reuse a daemon at least as new and leave it running on
+  quit (owner ruling 2026-09-29).
 - App updates use the fixed `app-latest` GitHub pre-release asset
   `https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json`;
   CI replaces it on each `app-v*` release (owner ruling 2026-09-29).
