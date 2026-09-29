@@ -1,0 +1,54 @@
+# One Tauri app is the dashboard on every OS
+
+Status: proposed.
+
+Users install GSD Path through `npx` flags, and the dashboard needs a Git
+checkout and `python3 -m gsd_daemon install`. Only macOS has a native app
+(`daemon/macos`, a Swift shell around the dashboard). Windows and Linux get a
+`pystray` icon. Multi-repo adds more install state per project that nothing
+shows.
+
+**Decision:** one [Tauri 2](https://v2.tauri.app/) app in `daemon/app/` is the
+dashboard on macOS, Windows, and Linux. It lets users manage installs, update
+the plugin and the app, and see project stats.
+
+- **Shell.** Tauri gives a tray icon, a window, and notifications. The window
+  shows the daemon's existing dashboard in the OS web view (WKWebView,
+  WebView2, WebKitGTK), so one UI serves every OS. The app starts the daemon
+  on launch and stops it on quit. Tauri autostart replaces the LaunchAgent,
+  Startup shortcut, and systemd unit.
+- **Backend.** The Python daemon stays the backend. The app creates
+  `~/.gsd-path/venv` with the user's Python 3.9+ and installs the bundled
+  daemon package into it, as `gsd_daemon install` does today. It does not
+  freeze the daemon: projects need Python 3.9+ anyway, and the daemon runs
+  `install.py` and each project's `status_runtime.py` with `sys.executable`,
+  which is not a Python interpreter in a frozen binary. When Python or Git is
+  missing, the app shows a static setup page with the fix, before any daemon
+  starts.
+- **One source of logic.** The app and dashboard show state and call the
+  installer and the bundled helpers (`install.py`, `members.py`). They never
+  copy a helper's rules. The existing copy of the guard-command check in
+  `plugin.py` is debt to remove, not a pattern to follow.
+- **Writes.** Every daemon write route accepts same-origin requests only,
+  like `/api/path-config`. The app never writes pipeline state. Multi-repo
+  actions are member hook install and marker repair; joining a member stays
+  in the router.
+- **Updates.** The app updates through the Tauri updater from a static
+  `latest.json` on GitHub Releases. Tauri requires signed update artifacts;
+  the key is a free keypair the owner holds, not OS code signing. The plugin
+  updates through the daemon's existing plugin manager.
+- **Signing.** Builds ship without OS code signing first. macOS builds carry
+  an ad-hoc signature, which Apple Silicon requires; users still approve the
+  app once in Privacy & Security. Windows shows a SmartScreen warning. OS
+  signing is added before a public release.
+
+**Considered options:** Electron (same shape, much larger app); three native
+shells (Swift, C#, GTK) with three codebases to keep equal; a frozen daemon
+sidecar (no Python needed for the app, but Python is still needed for
+projects, and child processes lose their interpreter); keeping the Swift app
+beside the new one (two macOS apps).
+
+**Consequences:** CI builds the app on macOS, Windows, and Linux and needs a
+Rust toolchain. The Swift app in `daemon/macos` is removed once the new app
+matches it. The npm package is unchanged; the installer and docs point to the
+app. The work plan is [native-app-work.md](../native-app-work.md).
