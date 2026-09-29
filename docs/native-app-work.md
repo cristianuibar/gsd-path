@@ -89,6 +89,14 @@ last.
   on `v*` tags only, so `app-v*` tags never publish to npm.
 - Linux ships `.deb` and AppImage only (owner ruling 2026-09-29).
 
+## Open questions
+
+- A1: How will the app compare the running daemon version before changing the
+  shared venv and ensure it never downgrades a newer installed package? The
+  installer uses `pip install --upgrade`, which can replace it.
+- A1: How will the app identify a process on the port as a GSD Path daemon
+  before stopping it, and what happens when another service holds the port?
+
 ## Out of scope
 
 - Joining a member from the app (the router owns joining).
