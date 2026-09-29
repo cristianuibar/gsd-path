@@ -683,11 +683,7 @@ def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
         _remove_untracked_tree(repo, archive)
     path = _git_path(repo, UNDO_TRANSACTION_NAME)
     path.unlink()
-    descriptor = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    pipeline_state._common.fsync_directory(path.parent)
 
 
 def classify_undo(repo: Path) -> dict[str, object]:

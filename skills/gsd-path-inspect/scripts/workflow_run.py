@@ -111,7 +111,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                         raise StepFailed(f"missing inspection resource: {path}")
             staging = Path(tempfile.mkdtemp(prefix="gsd-path-inspect-"))
             inventory_file = staging / "inventory.txt"
-            inventory_file.write_text(inventory, encoding="utf-8")
+            inventory_file.write_bytes(inventory.encode("utf-8"))
             assignments = []
             for task_name, role, template, filename in specs:
                 isolated = step("isolation.py", "isolate-verify", "--repo", str(repo),
@@ -131,7 +131,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                 if task_name == "inspect_docs":
                     brief += ("Alignment mode: false. No prior audit or changed set.\n"
                               "Frozen inventory follows; use it exactly, without rediscovery:\n" + inventory)
-                brief_file.write_text(brief, encoding="utf-8")
+                brief_file.write_bytes(brief.encode("utf-8"))
                 assignments.append({**isolated, "task_name": task_name, "role": str(role_path),
                                     "template": str(template_path), "output": output,
                                     "brief_file": str(brief_file)})

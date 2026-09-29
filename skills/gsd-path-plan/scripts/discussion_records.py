@@ -176,7 +176,7 @@ def validate_contents(project: Path, files: dict) -> None:
     staging.mkdir()
     try:
         for name in FILES:
-            (staging / name).write_text(files[name], encoding="utf-8")
+            (staging / name).write_bytes(files[name].encode("utf-8"))
         validate_or_empty(staging)
     finally:
         shutil.rmtree(staging)
@@ -193,11 +193,11 @@ def initialize_records(discussion: Path, dialogue_template: Path, answers_templa
         shutil.rmtree(staging)
     staging.mkdir()
     try:
-        (staging / "DIALOGUE.md").write_text(
-            template_header(dialogue_template, "### D001"), encoding="utf-8"
+        (staging / "DIALOGUE.md").write_bytes(
+            template_header(dialogue_template, "### D001").encode("utf-8")
         )
-        (staging / "ANSWERS.md").write_text(
-            template_header(answers_template, "## Answer A001"), encoding="utf-8"
+        (staging / "ANSWERS.md").write_bytes(
+            template_header(answers_template, "## Answer A001").encode("utf-8")
         )
         os.replace(staging, discussion)
     finally:

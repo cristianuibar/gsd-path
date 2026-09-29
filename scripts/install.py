@@ -360,7 +360,7 @@ def install_member_hooks(coordinator: Path, member: Path, dry_run: bool = False)
             temporary = hooks_dir / f".{name}.gsd-path-tmp"
             fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o755)
             staged.append(temporary)
-            with os.fdopen(fd, "w", encoding="utf-8") as output:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
                 os.fchmod(output.fileno(), 0o755)
                 output.write(member_hook(interpreter, name))
         for name, hook, chained, chain in plan:
@@ -674,7 +674,7 @@ def _stamp_installed_versions(staged_root: Path, version: Optional[str]) -> None
     if not version:
         return
     for name in {"gsd-path", *ROUTER_ALIASES}:
-        (staged_root / name / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+        (staged_root / name / "VERSION").write_bytes(f"{version}\n".encode("utf-8"))
 
 
 def _lexists(path: Path) -> bool:
@@ -810,7 +810,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
         encoding="utf-8"
     )
     for dispatch in sorted(staged_root.glob("*/references/dispatch.md")):
-        dispatch.write_text(adapter, encoding="utf-8")
+        dispatch.write_bytes(adapter.encode("utf-8"))
     if target == "cursor":
         shutil.copy2(
             source_root / "platforms" / "cursor" / "agent.md",
@@ -827,9 +827,8 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
         path_invocation = "path" if target == "opencode" else "/path"
         for name in SKILL_NAMES:
             entrypoint = staged_root / name / "SKILL.md"
-            entrypoint.write_text(
-                _augment_frontmatter(entrypoint.read_text(encoding="utf-8"), target),
-                encoding="utf-8",
+            entrypoint.write_bytes(
+                _augment_frontmatter(entrypoint.read_text(encoding="utf-8"), target).encode("utf-8"),
             )
         for markdown in sorted(staged_root.rglob("*.md")):
             content = markdown.read_text(encoding="utf-8")
@@ -838,7 +837,7 @@ def stage_target(source_root: Path, target: str, staged_root: Path) -> None:
                 if target == SHARED_AGENT_PROFILE
                 else content.replace("$gsd-path", invocation).replace("$path", path_invocation)
             )
-            markdown.write_text(transformed, encoding="utf-8")
+            markdown.write_bytes(transformed.encode("utf-8"))
 
 
 def _missing_directories(path: Path) -> List[Path]:
@@ -979,16 +978,15 @@ def _create_install_lock(lock: Path) -> None:
     quarantine = None
     published = False
     try:
-        (staging / INSTALL_LOCK_OWNER).write_text(
-            json.dumps(
+        (staging / INSTALL_LOCK_OWNER).write_bytes(
+            (json.dumps(
                 {
                     "schema": INSTALL_LOCK_SCHEMA,
                     "pid": os.getpid(),
                     "identity": identity,
                 }
             )
-            + "\n",
-            encoding="utf-8",
+            + "\n").encode("utf-8"),
         )
         quarantine = _recover_stale_install_lock(lock, recovery)
         staging.rename(lock)
@@ -1692,7 +1690,7 @@ def _atomic_write(
             with os.fdopen(descriptor, "wb") as output:
                 output.write(content)
         else:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
                 output.write(content)
         if mode is not None:
             temporary.chmod(mode)

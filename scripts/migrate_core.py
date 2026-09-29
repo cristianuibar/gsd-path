@@ -119,8 +119,8 @@ def prepare(repo, output, files, manifest):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
         manifest = dict(manifest, status="prepared", output=str(output))
-        (output / "manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+        (output / "manifest.json").write_bytes(
+            (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
         )
     except BaseException:
         shutil.rmtree(output)

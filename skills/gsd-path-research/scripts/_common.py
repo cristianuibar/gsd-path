@@ -365,6 +365,59 @@ def exclusive_lock(
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+_WAIT_OBJECT_0 = 0x0
+_WAIT_ABANDONED = 0x80
+_WAIT_TIMEOUT = 0x102
+
+
+@contextlib.contextmanager
+def directory_mutex(
+    directory: Path, *, blocking: bool = True, timeout: Optional[float] = None
+) -> Iterator[None]:
+    """Windows-only exclusive lock keyed on a directory's resolved path.
+
+    POSIX flocks the directory itself. Windows cannot lock a directory, and a
+    lock file inside it would be committed, so this holds a named kernel mutex
+    in the session namespace. A holder that dies releases it (WAIT_ABANDONED).
+    Contention raises BlockingIOError (non-blocking) or TimeoutError.
+    """
+    import ctypes
+    import hashlib
+    from ctypes import wintypes
+
+    identity = os.path.normcase(str(directory.resolve()))
+    name = "Local\\gsd-path-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    kernel32.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.ReleaseMutex.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.CreateMutexW(None, False, name)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            # Wait in short slices so Ctrl+C still interrupts a blocked caller.
+            result = kernel32.WaitForSingleObject(handle, 0 if not blocking else 200)
+            if result in (_WAIT_OBJECT_0, _WAIT_ABANDONED):
+                break
+            if result != _WAIT_TIMEOUT:
+                raise ctypes.WinError(ctypes.get_last_error())
+            if not blocking:
+                raise BlockingIOError(errno.EAGAIN, f"lock is held: {directory}")
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError(f"timed out waiting for lock: {directory}")
+        try:
+            yield
+        finally:
+            kernel32.ReleaseMutex(handle)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 _STILL_ACTIVE = 259
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _ERROR_ACCESS_DENIED = 5

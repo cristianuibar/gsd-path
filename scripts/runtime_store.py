@@ -107,7 +107,7 @@ def publish(source, *, expected=None, dry_run=False, repair=False):
             shutil.copyfile(source / "scripts" / name, staging / name)
             if hashlib.sha256((staging / name).read_bytes()).hexdigest() != digest:
                 raise ValueError(f"runtime source changed while installing: {name}")
-        (staging / "manifest.json").write_text(pin_text(manifest), encoding="utf-8")
+        (staging / "manifest.json").write_bytes(pin_text(manifest).encode("utf-8"))
         # Serialize publication/repair, including two explicit restorations.
         previous = Path(temporary) / "previous"
         with publication_lock(parent, pin["digest"]):

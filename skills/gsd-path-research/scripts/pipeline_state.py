@@ -1398,8 +1398,11 @@ def _append_event(
 
 @contextlib.contextmanager
 def _state_lock(project: Path) -> Iterator[None]:
-    if fcntl is None:  # pragma: no cover - Windows CI is not used
-        raise PipelineStateError("state locking is unavailable on this platform")
+    if fcntl is None:
+        # Windows cannot flock a directory.
+        with _common.directory_mutex(project):
+            yield
+        return
     descriptor = os.open(project, os.O_RDONLY)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -1425,27 +1428,21 @@ def _atomic_write(path: Path, content: str) -> None:
             and os.path.samestat(path_status, temporary_status)
         ):
             temporary.unlink()
-            directory = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            _common.fsync_directory(path.parent)
     if temporary.exists() or temporary.is_symlink():
         raise PipelineStateError(f"atomic-write temporary path already exists: {temporary}")
     descriptor: Optional[int] = None
     try:
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        descriptor = os.open(
+            temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _common.O_BINARY, 0o666
+        )
+        with os.fdopen(descriptor, "wb") as handle:
             descriptor = None
-            handle.write(content)
+            handle.write(content.encode("utf-8"))
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        _common.replace(temporary, path)
+        _common.fsync_directory(path.parent)
     finally:
         if descriptor is not None:
             os.close(descriptor)
