@@ -45,6 +45,27 @@ class MemberRetirementTests(unittest.TestCase):
             self.retire()
         self.assertEqual(self.remote_ref(BOUND), self.main)
 
+    def test_team_worktree_holding_bound_branch_is_preserved(self) -> None:
+        self.integrate()
+        git(self.member, "worktree", "remove", str(self.bound))
+        team = self.root.parent / "team-bound"
+        git(self.member, "worktree", "add", "-q", str(team), "gsd-path/demo-M001")
+        with self.assertRaisesRegex(ArchiveError, "outside Path's workspace"):
+            self.retire()
+        self.assertTrue(team.exists())
+        self.assertEqual(git(team, "symbolic-ref", "HEAD"), BOUND)
+        self.assertEqual(self.remote_ref(BOUND), self.member_tip)
+
+    def test_moved_local_bound_branch_preserves_remote(self) -> None:
+        self.integrate()
+        git(self.bound, "commit", "-q", "--allow-empty", "-m", "local move")
+        moved = git(self.member, "rev-parse", BOUND)
+        with self.assertRaisesRegex(ArchiveError, "moved"):
+            self.retire()
+        self.assertEqual(self.remote_ref(BOUND), self.member_tip)
+        self.assertEqual(git(self.member, "rev-parse", BOUND), moved)
+        self.assertTrue(self.bound.exists())
+
     def test_member_integrated_differently_from_the_ship_commit_is_not_retired(self) -> None:
         self.integrate()
         self.merge = "c" * 40

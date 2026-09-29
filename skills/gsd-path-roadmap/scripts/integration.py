@@ -1762,6 +1762,25 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
     if (proven["merge"], proven["tag"]) != (merge, tag):
         raise ArchiveError(f"member {member} integration differs from the ship commit")
     bound_ref = f"refs/heads/{bound}"
+    local = optional_ref(checkout, bound_ref)
+    if local is not None and local != reviewed_head:
+        raise ArchiveError(f"member {member} {bound} moved: {local}")
+    holder = registered_worktree(checkout, bound)
+    if holder is not None:
+        try:
+            expected = worktree_paths.worktree_path(
+                checkout, "bound", bound.removeprefix("gsd-path/")
+            ).resolve()
+        except (ValueError, OSError) as error:
+            raise ArchiveError(str(error)) from error
+        if holder != expected:
+            raise ArchiveError(f"member {member} bound checkout is outside Path's workspace: {holder}")
+        status = archive_milestone.require_git_success(
+            run_git(holder, "status", "--porcelain", "--untracked-files=all"),
+            "inspect member bound checkout",
+        )
+        if status:
+            raise ArchiveError(f"member {member} bound checkout is not clean: {holder}")
     remote = live_remote_ref(checkout, bound_ref)
     if remote is not None:
         if remote != reviewed_head:
@@ -1770,17 +1789,10 @@ def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_he
         archive_milestone.require_git_success(
             run_git(checkout, "push", f"--force-with-lease={bound_ref}:{reviewed_head}", "origin", "--delete", bound),
             f"delete member origin/{bound}")
-    holder = registered_worktree(checkout, bound)
     if holder is not None:
-        # Path's own bound checkout; the member team's checkout never holds the bound branch.
-        if holder == checkout or run_git(holder, "status", "--porcelain", "--untracked-files=all").stdout:
-            raise ArchiveError(f"member {member} bound checkout is not a clean Path checkout: {holder}")
         archive_milestone.require_git_success(run_git(checkout, "worktree", "remove", str(holder)),
                                               "remove member bound checkout")
-    local = optional_ref(checkout, bound_ref)
     if local is not None:
-        if local != reviewed_head:
-            raise ArchiveError(f"member {member} {bound} moved: {local}")
         archive_milestone.require_git_success(run_git(checkout, "update-ref", "-d", bound_ref, reviewed_head),
                                               "delete member bound branch")
     run_git(checkout, "update-ref", "-d", f"refs/remotes/origin/{bound}")
