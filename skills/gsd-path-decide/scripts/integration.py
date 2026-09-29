@@ -1750,6 +1750,58 @@ def validate_member_integrated(
     return {"member": member, "merge": merge, "tag": tag_name, "tag_object": published}
 
 
+def retire_member(coordinator: Path, member: str, archive_path: str, reviewed_head: str,
+                  merge: str, tag: str) -> dict:
+    """After integration, delete a member's bound branch everywhere and clear its authorizations."""
+    try:
+        import members
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import members
+    checkout, project, bound, _, tag_name = _member_names(coordinator, member, archive_path)
+    proven = validate_member_integrated(coordinator, member, archive_path, reviewed_head)
+    if (proven["merge"], proven["tag"]) != (merge, tag):
+        raise ArchiveError(f"member {member} integration differs from the ship commit")
+    bound_ref = f"refs/heads/{bound}"
+    local = optional_ref(checkout, bound_ref)
+    if local is not None and local != reviewed_head:
+        raise ArchiveError(f"member {member} {bound} moved: {local}")
+    holder = registered_worktree(checkout, bound)
+    if holder is not None:
+        try:
+            expected = worktree_paths.worktree_path(
+                checkout, "bound", bound.removeprefix("gsd-path/")
+            ).resolve()
+        except (ValueError, OSError) as error:
+            raise ArchiveError(str(error)) from error
+        if holder != expected:
+            raise ArchiveError(f"member {member} bound checkout is outside Path's workspace: {holder}")
+        status = archive_milestone.require_git_success(
+            run_git(holder, "status", "--porcelain", "--untracked-files=all"),
+            "inspect member bound checkout",
+        )
+        if status:
+            raise ArchiveError(f"member {member} bound checkout is not clean: {holder}")
+    remote = live_remote_ref(checkout, bound_ref)
+    if remote is not None:
+        if remote != reviewed_head:
+            raise ArchiveError(f"member {member} origin/{bound} moved: {remote}")
+        members.authorize_delete(checkout, project, bound_ref, reviewed_head)
+        archive_milestone.require_git_success(
+            run_git(checkout, "push", f"--force-with-lease={bound_ref}:{reviewed_head}", "origin", "--delete", bound),
+            f"delete member origin/{bound}")
+    if holder is not None:
+        archive_milestone.require_git_success(run_git(checkout, "worktree", "remove", str(holder)),
+                                              "remove member bound checkout")
+    if local is not None:
+        archive_milestone.require_git_success(run_git(checkout, "update-ref", "-d", bound_ref, reviewed_head),
+                                              "delete member bound branch")
+    run_git(checkout, "update-ref", "-d", f"refs/remotes/origin/{bound}")
+    for kind, ref in (("push", bound_ref), ("push", "refs/heads/main"), ("push", f"refs/tags/{tag_name}"),
+                      ("delete", bound_ref)):
+        members.clear_authorization(checkout, project, kind, ref)
+    return {"member": member, "retired": bound}
+
+
 def close_members(repo: Path) -> dict:
     """Close each locked member in lock order before the coordinator ship commit; resumable."""
     try:

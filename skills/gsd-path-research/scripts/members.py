@@ -333,6 +333,11 @@ def _authorize(checkout: Path, project: str, kind: str, ref: str, sha: str) -> N
     _git(checkout, "update-ref", authorization, sha)
 
 
+def clear_authorization(checkout: Path, project: str, kind: str, ref: str) -> None:
+    """Remove a push or delete authorization; S4 retirement clears a milestone's own."""
+    _git(checkout, "update-ref", "-d", _authorization_ref(project, kind, ref))
+
+
 def authorize_push(checkout: Path, project: str, ref: str, sha: str) -> None:
     """Authorize `ref` at exactly `sha` until cleared (a commit or tag object)."""
     _authorize(checkout, project, "push", ref, sha)

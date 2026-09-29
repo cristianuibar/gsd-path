@@ -654,6 +654,25 @@ def retire_previous_branch(
         _run_git(repo, "branch", "-d", previous_branch)
 
 
+def _retire_members(repo: Path, ship_sha: str) -> None:
+    """Retire each member the ship commit names; each step is idempotent for a resumed bind-next."""
+    message = _run_git(repo, "show", "-s", "--format=%B", ship_sha).stdout
+    rows = ship_member_rows(message)
+    if not rows:
+        return
+    if __package__:
+        from . import integration
+    else:
+        import integration
+    archive = re.search(r"(?m)^Archive: (\S+)$", message)
+    try:
+        for row in rows:
+            integration.retire_member(repo, row["name"], archive.group(1), row["reviewed_head"],
+                                      row["merge"], row["tag"])
+    except integration.ArchiveError as error:
+        raise PipelineGitError(f"member retirement failed: {error}") from error
+
+
 def bind_next_milestone_branch(
     repo: Path,
     branch: str,
@@ -887,6 +906,7 @@ def bind_next_milestone_branch(
             allow_remote_absent or journal["stage"] in {"switched", "retired"}
         ),
     )
+    _retire_members(repo, ship_sha)
     journal["stage"] = "retired"
     _write_bind_next_journal(journal_path, journal)
     return {
