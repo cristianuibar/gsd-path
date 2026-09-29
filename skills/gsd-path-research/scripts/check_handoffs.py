@@ -1369,6 +1369,21 @@ def validate_roadmap(
     return {"phase": "roadmap", "milestones": ids, "dependencies": dependencies}
 
 
+def _integrated_members(root: Path, state: Dict[str, str]) -> Set[str]:
+    """Members this milestone already closed; a new task for one would need a second merge."""
+    match = re.fullmatch(r"gsd-path/M(\d{3,})", state.get("branch") or "")
+    common = subprocess.run(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                            capture_output=True, text=True, check=False)
+    if match is None or common.returncode != 0:
+        return set()
+    if __package__:
+        from . import members
+    else:
+        import members
+    rows = members.milestone_member_close(Path(common.stdout.strip()), int(match.group(1)))
+    return {row["name"] for row in rows if row.get("status") == "integrated"}
+
+
 def validate_plan(
     root: Path, project_dir: str = DEFAULT_PROJECT_DIR
 ) -> Dict[str, object]:
@@ -1388,6 +1403,14 @@ def validate_plan(
     # Build readiness owns task lifecycle validation; coverage must survive landings.
     state = _require_pipeline(root, project_dir)
     _validate_task_graph(wave_depths, tasks, initial=state["phase"] == "plan")
+    integrated = _integrated_members(root, state)
+    for task_id, text in tasks.items():
+        repo = str(_strict_frontmatter(text, task_id).get("repo") or "")
+        if repo in integrated and _task_scalar(text, task_id, "status") != "done":
+            raise HandoffError(
+                f"{task_id} changes member {repo}, which is already integrated in this milestone; "
+                "plan that change in a new milestone"
+            )
     assigned: Dict[str, Set[str]] = {task_id: set() for task_id in tasks}
     covered = set()
     for criterion, task_id, acceptance in rows:

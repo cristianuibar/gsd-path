@@ -644,6 +644,29 @@ def _completion_status(repo: Path, state: Mapping[str, object], project_dir: str
     return {"status": "verified", "proof": proof}
 
 
+def _member_status(repo: Path, state: Mapping[str, object]) -> Optional[list]:
+    """Locked members and their ship close, when this milestone has a member lock."""
+    if __package__:
+        from scripts import members
+    else:
+        import members
+    archive = state.get("archive")
+    locks = [repo / ".project" / "build" / "members.json"]
+    if isinstance(archive, str) and archive not in {"", "null"}:
+        locks.insert(0, repo / archive.rstrip("/") / "build" / "members.json")
+    lock = next((path for path in locks if path.is_file()), None)
+    if lock is None:
+        return None
+    closed = {}
+    match = re.fullmatch(r"gsd-path/M(\d{3,})", str(state.get("branch") or ""))
+    if match is not None:
+        common = Path(_run_git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
+        closed = {row["name"]: row.get("status") for row in members.milestone_member_close(common, int(match.group(1)))}
+    entries = json.loads(lock.read_text(encoding="utf-8"))["members"]
+    return [{"name": entry["name"], "branch": entry["branch"], "close": closed.get(entry["name"])}
+            for entry in entries]
+
+
 def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
     """Report owned state, route, and git facts without advancing a phase."""
     resolved = _repo_root(repo)
@@ -678,7 +701,8 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "collect_artifact": None,
     }
     completion = _completion_status(resolved, state, project_dir)
-    return {
+    member_rows = _member_status(resolved, state) if has_git and project_dir == ".project" else None
+    result = {
         "schema": STATUS_SCHEMA,
         "advance": False,
         "completion": completion,
@@ -708,6 +732,9 @@ def status_state(repo: Path, project_dir: str = ".project") -> dict[str, object]
         "next_skill": _next_skill(route if isinstance(route, dict) else {}),
         "handoff": phase_handoff(state, route, _track_root(resolved, project_dir) / "STATE.md", completion),
     }
+    if member_rows is not None:
+        result["members"] = member_rows
+    return result
 
 
 def phase_handoff(state: Mapping[str, object], route: Mapping[str, object], path: Path,
