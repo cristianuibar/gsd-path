@@ -265,7 +265,8 @@ class ParentsEndpointTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"GSD_DAEMON_CONFIG": str(root / "config.json")}):
                 def request(method, path, body=None):
                     conn = http.client.HTTPConnection(*server.server_address)
-                    conn.request(method, path, json.dumps(body) if body else None)
+                    conn.request(method, path, json.dumps(body) if body else None,
+                                 {"Content-Type": "application/json"} if body else {})
                     response = conn.getresponse()
                     data = response.read()
                     conn.close()
@@ -332,6 +333,89 @@ class ParentsEndpointTests(unittest.TestCase):
         self.assertEqual(status, 400)
         status, payload = self.post({"action": "add"})
         self.assertEqual(status, 400)
+
+
+class PostOriginTests(unittest.TestCase):
+    """Every POST route refuses cross-site pages, DNS rebinding, and non-JSON bodies."""
+
+    ROUTES = ("/api/plugin/install", "/api/plugin/update", "/api/plugin/uninstall",
+              "/api/config/parents", "/api/path-config", "/api/refresh")
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        env = mock.patch.dict(os.environ, {"GSD_DAEMON_CONFIG": str(self.root / "daemon.json")})
+        env.start()
+        self.addCleanup(env.stop)
+        self.plugin = mock.Mock()
+        self.plugin.plan_uninstall_project.return_value = {"plan": []}
+        self.plugin.apply_plan.return_value = {"ok": True}
+        self.scans = []
+        self.watcher = Watcher(Config(parents=[], history=False, session_dirs=[]))
+        with mock.patch("threading.Thread.start"):  # no background poll: scans come only from requests
+            self.server = serve(self.watcher, port=0, plugin=self.plugin)
+        self.server.RequestHandlerClass.scan = staticmethod(lambda scan_sessions=True: self.scans.append(1))
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.port = self.server.server_address[1]
+        self.body = json.dumps({"scope": "project", "root": str(self.root), "confirm": True,
+                                "action": "add", "path": str(self.root)})
+
+    def post(self, path, headers, body=None):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.putrequest("POST", path, skip_host="Host" in headers)
+        data = (self.body if body is None else body).encode()
+        for key, value in {**headers, "Content-Length": str(len(data))}.items():
+            conn.putheader(key, value)
+        conn.endheaders(data)
+        response = conn.getresponse()
+        payload = json.loads(response.read())
+        conn.close()
+        return response.status, payload
+
+    def assert_refused(self, headers, code):
+        for path in self.ROUTES:
+            with self.subTest(path=path, headers=headers):
+                status, payload = self.post(path, headers)
+                self.assertEqual(status, code, payload)
+        self.assertEqual(self.plugin.method_calls, [])
+        self.assertEqual(self.scans, [])
+        self.assertEqual(self.watcher.config.parents, [])
+        self.assertFalse((self.root / "daemon.json").exists())
+
+    def test_cross_site_origin_refused(self):
+        self.assert_refused({"Content-Type": "application/json", "Origin": "https://evil.example"}, 403)
+
+    def test_opaque_origin_refused(self):
+        self.assert_refused({"Content-Type": "application/json", "Origin": "null"}, 403)
+
+    def test_foreign_host_refused(self):
+        self.assert_refused({"Content-Type": "application/json", "Host": f"evil.example:{self.port}"}, 403)
+
+    def test_cross_site_fetch_metadata_refused(self):
+        self.assert_refused({"Content-Type": "application/json", "Sec-Fetch-Site": "cross-site"}, 403)
+
+    def test_text_plain_body_refused(self):
+        for path in self.ROUTES[:-1]:  # /api/refresh takes no body
+            with self.subTest(path=path):
+                status, payload = self.post(path, {"Content-Type": "text/plain"})
+                self.assertEqual(status, 415, payload)
+        self.assertEqual(self.plugin.method_calls, [])
+        self.assertEqual(self.watcher.config.parents, [])
+
+    def test_same_origin_json_requests_still_work(self):
+        origin = {"Origin": f"http://localhost:{self.port}", "Host": f"localhost:{self.port}",
+                  "Sec-Fetch-Site": "same-origin"}
+        status, payload = self.post("/api/plugin/uninstall", {**origin, "Content-Type": "application/json"})
+        self.assertEqual((status, payload["ok"]), (200, True), payload)
+        self.plugin.plan_uninstall_project.assert_called_once_with(str(self.root))
+        self.plugin.apply_plan.assert_called_once_with({"plan": []}, confirm=True)
+        status, payload = self.post("/api/refresh", origin, body="")  # dashboard sends no body or type
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(self.scans, [1])
 
 
 class BrowseEndpointTests(unittest.TestCase):
