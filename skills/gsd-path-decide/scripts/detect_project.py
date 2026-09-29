@@ -1128,7 +1128,7 @@ def classify(repo: Path) -> dict:
         missing_ok=True,
     )
     if (
-        ANCHORED_STATE_CREATE_SUPPORTED
+        STATE_CREATE_SUPPORTED
         and orphan_paths == (f".project/{STATE_TEMP_NAME}",)
         and not unsafe_paths
         and temporary_state_status is not None
@@ -1319,6 +1319,9 @@ def write_state_anchored(
     expected_root: os.stat_result,
     expected_project: Optional[os.stat_result],
 ) -> None:
+    if WINDOWS_STATE_CREATE_SUPPORTED:
+        write_state_windows(root, content, expected_root, expected_project)
+        return
     if not ANCHORED_STATE_CREATE_SUPPORTED:
         raise DetectError("anchored no-follow STATE.md creation is unavailable")
     payload = content.encode("utf-8")
@@ -1496,6 +1499,285 @@ def write_state_anchored(
         close_file_descriptors(state_fd, project_fd, root_fd)
 
 
+# --- Windows anchored creation ------------------------------------------------
+# Windows has no dir_fd, O_NOFOLLOW, or O_DIRECTORY. Handles give the same
+# guarantee (docs/adr/0004-windows-anchored-state.md):
+# - each directory is opened without following a reparse point and held
+#   without FILE_SHARE_DELETE, so it cannot be renamed or replaced while held;
+# - children are opened relative to the held parent handle (NtCreateFile with
+#   a RootDirectory), so no path is resolved again after it was checked;
+# - STATE.md is published by renaming the temporary file's own handle without
+#   replacing an existing name, and rollback deletes through that handle.
+
+_FILE_LIST_DIRECTORY = 0x0001
+_FILE_TRAVERSE = 0x0020
+_FILE_READ_ATTRIBUTES = 0x0080
+_DELETE = 0x00010000
+_SYNCHRONIZE = 0x00100000
+_GENERIC_WRITE = 0x40000000
+_GENERIC_READ = 0x80000000
+_FILE_SHARE_READ = 0x1
+_FILE_SHARE_WRITE = 0x2
+_OPEN_EXISTING = 3
+_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+_FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+_FILE_OPEN = 1
+_FILE_CREATE = 2
+_FILE_OPEN_IF = 3
+_FILE_DIRECTORY_FILE = 0x00000001
+_FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020
+_FILE_NON_DIRECTORY_FILE = 0x00000040
+_FILE_OPEN_REPARSE_POINT = 0x00200000
+_OBJ_CASE_INSENSITIVE = 0x00000040
+_FILE_RENAME_INFORMATION = 10
+_FILE_DISPOSITION_INFO = 4
+_DIRECTORY_ACCESS = _FILE_LIST_DIRECTORY | _FILE_TRAVERSE | _FILE_READ_ATTRIBUTES | _SYNCHRONIZE
+# Readers and writers may share a held directory; nobody may delete or rename it.
+_PIN_SHARE = _FILE_SHARE_READ | _FILE_SHARE_WRITE
+
+WINDOWS_STATE_CREATE_SUPPORTED = os.name == "nt"
+STATE_CREATE_SUPPORTED = ANCHORED_STATE_CREATE_SUPPORTED or WINDOWS_STATE_CREATE_SUPPORTED
+
+
+class _WindowsHandles:
+    """kernel32/ntdll calls for the Windows anchored create, bound on first use."""
+
+    def __init__(self) -> None:
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        class UnicodeString(ctypes.Structure):
+            _fields_ = [("Length", wintypes.USHORT), ("MaximumLength", wintypes.USHORT),
+                        ("Buffer", wintypes.LPWSTR)]
+
+        class ObjectAttributes(ctypes.Structure):
+            _fields_ = [("Length", wintypes.ULONG), ("RootDirectory", wintypes.HANDLE),
+                        ("ObjectName", ctypes.POINTER(UnicodeString)),
+                        ("Attributes", wintypes.ULONG), ("SecurityDescriptor", ctypes.c_void_p),
+                        ("SecurityQualityOfService", ctypes.c_void_p)]
+
+        class IoStatusBlock(ctypes.Structure):
+            _fields_ = [("Status", ctypes.c_void_p), ("Information", ctypes.c_size_t)]
+
+        self.ctypes, self.wintypes, self.msvcrt = ctypes, wintypes, msvcrt
+        self.UnicodeString, self.ObjectAttributes, self.IoStatusBlock = (
+            UnicodeString, ObjectAttributes, IoStatusBlock)
+        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.ntdll = ctypes.WinDLL("ntdll")
+        self.kernel32.CreateFileW.restype = wintypes.HANDLE
+        self.kernel32.CreateFileW.argtypes = (
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+        self.kernel32.SetFileInformationByHandle.argtypes = (
+            wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+        self.ntdll.NtCreateFile.restype = ctypes.c_long
+        self.ntdll.NtCreateFile.argtypes = (
+            ctypes.POINTER(wintypes.HANDLE), wintypes.DWORD, ctypes.POINTER(ObjectAttributes),
+            ctypes.POINTER(IoStatusBlock), ctypes.c_void_p, wintypes.ULONG, wintypes.ULONG,
+            wintypes.ULONG, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG)
+        self.ntdll.RtlNtStatusToDosError.restype = wintypes.ULONG
+        self.ntdll.RtlNtStatusToDosError.argtypes = (ctypes.c_long,)
+        self.ntdll.NtSetInformationFile.restype = ctypes.c_long
+        self.ntdll.NtSetInformationFile.argtypes = (
+            wintypes.HANDLE, ctypes.POINTER(IoStatusBlock), ctypes.c_void_p, wintypes.ULONG,
+            ctypes.c_int)
+
+    def adopt(self, handle: int) -> int:
+        """A CRT descriptor that owns handle, so os.fstat, os.write, and os.close apply."""
+        try:
+            descriptor = self.msvcrt.open_osfhandle(handle, 0)
+        except OSError:
+            self.kernel32.CloseHandle(self.wintypes.HANDLE(handle))
+            raise
+        # The CRT adopts handles in text mode, where os.write turns "\n" into "\r\n".
+        self.msvcrt.setmode(descriptor, os.O_BINARY)
+        return descriptor
+
+    def open_root(self, path: Path) -> int:
+        handle = self.kernel32.CreateFileW(
+            str(path), _DIRECTORY_ACCESS, _PIN_SHARE, None, _OPEN_EXISTING,
+            _FILE_FLAG_BACKUP_SEMANTICS | _FILE_FLAG_OPEN_REPARSE_POINT, None)
+        if handle is None or handle == self.wintypes.HANDLE(-1).value:
+            raise self.ctypes.WinError(self.ctypes.get_last_error())
+        return self.adopt(handle)
+
+    def open_relative(
+        self, parent_fd: int, name: str, access: int, share: int, disposition: int, options: int
+    ) -> int:
+        """Open name inside the directory held by parent_fd, never following a reparse point."""
+        ctypes = self.ctypes
+        buffer = ctypes.create_unicode_buffer(name)
+        length = len(name) * ctypes.sizeof(ctypes.c_wchar)
+        object_name = self.UnicodeString(length, length + ctypes.sizeof(ctypes.c_wchar),
+                                         ctypes.cast(buffer, self.wintypes.LPWSTR))
+        attributes = self.ObjectAttributes(
+            ctypes.sizeof(self.ObjectAttributes), self.msvcrt.get_osfhandle(parent_fd),
+            ctypes.pointer(object_name), _OBJ_CASE_INSENSITIVE, None, None)
+        handle = self.wintypes.HANDLE()
+        status = self.ntdll.NtCreateFile(
+            ctypes.byref(handle), access | _SYNCHRONIZE, ctypes.byref(attributes),
+            ctypes.byref(self.IoStatusBlock()), None, 0, share, disposition,
+            options | _FILE_SYNCHRONOUS_IO_NONALERT | _FILE_OPEN_REPARSE_POINT, None, 0)
+        if status < 0:
+            raise ctypes.WinError(self.ntdll.RtlNtStatusToDosError(status))
+        return self.adopt(handle.value)
+
+    def rename_no_replace(self, fd: int, directory_fd: int, name: str) -> None:
+        """Rename the file held by fd to name inside the directory held by directory_fd.
+
+        The renameat equivalent; fails when name already exists.
+        """
+        ctypes, wintypes = self.ctypes, self.wintypes
+
+        class RenameInformation(ctypes.Structure):
+            _fields_ = [("ReplaceIfExists", wintypes.BOOLEAN), ("RootDirectory", wintypes.HANDLE),
+                        ("FileNameLength", wintypes.ULONG),
+                        ("FileName", wintypes.WCHAR * (len(name) + 1))]
+
+        info = RenameInformation(False, self.msvcrt.get_osfhandle(directory_fd),
+                                 len(name) * ctypes.sizeof(ctypes.c_wchar), name)
+        status = self.ntdll.NtSetInformationFile(
+            self.msvcrt.get_osfhandle(fd), ctypes.byref(self.IoStatusBlock()),
+            ctypes.byref(info), ctypes.sizeof(info), _FILE_RENAME_INFORMATION)
+        if status < 0:
+            raise ctypes.WinError(self.ntdll.RtlNtStatusToDosError(status))
+
+    def delete_on_close(self, fd: int) -> None:
+        """Delete exactly the file held by fd when it closes, whatever its name is now."""
+        ctypes = self.ctypes
+        flag = ctypes.c_ubyte(1)
+        if not self.kernel32.SetFileInformationByHandle(
+                self.msvcrt.get_osfhandle(fd), _FILE_DISPOSITION_INFO,
+                ctypes.byref(flag), ctypes.sizeof(flag)):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
+def windows_project_entries(project: Path) -> set:
+    """project_entries for a .project held open without delete sharing."""
+    entries = set(os.listdir(project))
+    for name in entries & _common.OS_JUNK_NAMES:
+        try:
+            status = os.stat(project / name, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        if ignored_junk(project, name, status):
+            entries.discard(name)
+    return entries
+
+
+def write_state_windows(
+    root: Path,
+    content: str,
+    expected_root: os.stat_result,
+    expected_project: Optional[os.stat_result],
+) -> None:
+    win = _WindowsHandles()
+    payload = content.encode("utf-8")
+    project = root / ".project"
+    root_fd = project_fd = state_fd = None
+    delete_on_failure = False
+    # The same lock pipeline_state takes for this track.
+    with _common.directory_mutex(project):
+        try:
+            try:
+                root_fd = win.open_root(root)
+            except OSError as error:
+                raise DetectError(f"cannot open repo for STATE.md creation: {error}") from error
+            opened_root = os.fstat(root_fd)
+            if (
+                is_link_like(root, opened_root)
+                or not stat.S_ISDIR(opened_root.st_mode)
+                or not os.path.samestat(expected_root, opened_root)
+            ):
+                raise DetectError("repo changed after classification")
+            try:
+                project_fd = win.open_relative(
+                    root_fd, ".project", _DIRECTORY_ACCESS, _PIN_SHARE,
+                    _FILE_CREATE if expected_project is None else _FILE_OPEN,
+                    _FILE_DIRECTORY_FILE)
+            except FileExistsError as error:
+                raise DetectError(".project changed after classification") from error
+            except OSError as error:
+                raise DetectError(f"cannot open .project for STATE.md creation: {error}") from error
+            opened_project = os.fstat(project_fd)
+            if is_link_like(project, opened_project) or not stat.S_ISDIR(opened_project.st_mode):
+                raise DetectError("cannot create state through a non-directory .project")
+            if expected_project is not None and not os.path.samestat(expected_project, opened_project):
+                raise DetectError(".project changed after classification")
+            if windows_project_entries(project) not in (set(), {STATE_TEMP_NAME}):
+                raise DetectError(".project changed after classification")
+            try:
+                # Share mode 0: nothing else may open the temporary file while it is held.
+                state_fd = win.open_relative(
+                    project_fd, STATE_TEMP_NAME, _GENERIC_READ | _GENERIC_WRITE | _DELETE,
+                    0, _FILE_OPEN_IF, _FILE_NON_DIRECTORY_FILE)
+            except OSError as error:
+                raise DetectError(f"cannot reserve temporary STATE.md: {error}") from error
+            created_status = os.fstat(state_fd)
+            if is_link_like(project / STATE_TEMP_NAME, created_status) or not stat.S_ISREG(
+                created_status.st_mode
+            ):
+                raise DetectError("temporary STATE.md is not a regular file")
+            if created_status.st_nlink != 1:
+                raise DetectError("temporary STATE.md has an unexpected link count")
+            delete_on_failure = True
+            if "STATE.md" in os.listdir(project):
+                raise DetectError("STATE.md already exists")
+            os.ftruncate(state_fd, 0)
+            write_all(state_fd, payload)
+            os.fsync(state_fd)
+            current_root = lstat_evidence(root, missing_ok=False)
+            current_project = lstat_evidence(project, missing_ok=False)
+            if (
+                is_link_like(root, current_root)
+                or not os.path.samestat(opened_root, current_root)
+                or is_link_like(project, current_project)
+                or not os.path.samestat(opened_project, current_project)
+            ):
+                raise DetectError("project identity changed while creating STATE.md")
+            current_state = os.fstat(state_fd)
+            if current_state.st_nlink != 1 or not os.path.samestat(created_status, current_state):
+                raise DetectError("temporary STATE.md changed while writing")
+            if windows_project_entries(project) != {STATE_TEMP_NAME}:
+                raise DetectError(".project contents changed while creating STATE.md")
+            try:
+                win.rename_no_replace(state_fd, project_fd, "STATE.md")
+            except OSError as error:
+                if "STATE.md" in os.listdir(project):
+                    raise DetectError("STATE.md already exists") from error
+                raise DetectError(f"cannot publish STATE.md: {error}") from error
+            published = lstat_evidence(project / "STATE.md", missing_ok=False)
+            if (
+                is_link_like(project / "STATE.md", published)
+                or published.st_nlink != 1
+                or not os.path.samestat(created_status, published)
+            ):
+                raise DetectError("STATE.md changed while publishing")
+            if windows_project_entries(project) != {"STATE.md"}:
+                raise DetectError(".project contents changed while publishing STATE.md")
+            delete_on_failure = False
+            closing_state_fd, state_fd = state_fd, None
+            try:
+                os.close(closing_state_fd)
+            except OSError as error:
+                raise DetectError(f"cannot close STATE.md: {error}") from error
+        except BaseException as error:
+            if delete_on_failure and state_fd is not None:
+                try:
+                    win.delete_on_close(state_fd)
+                except OSError as rollback_error:
+                    raise DetectError(
+                        f"cannot roll back STATE.md: {rollback_error}") from error
+            if isinstance(error, DetectError):
+                raise
+            if isinstance(error, OSError):
+                raise DetectError(f"cannot create STATE.md: {error}") from error
+            raise
+        finally:
+            close_file_descriptors(state_fd, project_fd, root_fd)
+
+
 def initialize(
     repo: Path, template: Path, phase: Optional[str] = None, *, require_git: bool = False
 ) -> dict:
@@ -1530,7 +1812,7 @@ def initialize(
         raise DetectError(
             f"initialize phase {phase} does not match verdict {payload['verdict']}"
         )
-    if not ANCHORED_STATE_CREATE_SUPPORTED:
+    if not STATE_CREATE_SUPPORTED:
         payload["wrote_state"] = False
         payload["error"] = "anchored no-follow STATE.md creation is unavailable"
         return payload

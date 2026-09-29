@@ -12,12 +12,14 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import archive_milestone
 import detect_project
 import pipeline_state
 import promote_lookahead
+from _platform import requires_symlink
 
 
 SCRIPT = ROOT / "scripts" / "detect_project.py"
@@ -427,6 +429,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertTrue(json.loads(result.stdout)["wrote_state"])
             self.assertTrue((repo / ".project" / "STATE.md").is_file())
 
+    @requires_symlink
     def test_symlinked_project_directory_is_orphan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -526,6 +529,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "owned")
             self.assertEqual(payload["pipeline"], "gsd-path/v2")
 
+    @requires_symlink
     def test_project_child_symlink_is_reported_lexically(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -539,6 +543,7 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "orphan")
             self.assertEqual(payload["orphan_paths"], [".project/external"])
 
+    @requires_symlink
     def test_symlinked_state_file_is_orphan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
@@ -1515,7 +1520,7 @@ class DetectProjectTests(unittest.TestCase):
             output = io.StringIO()
             with mock.patch.object(
                 detect_project,
-                "ANCHORED_STATE_CREATE_SUPPORTED",
+                "STATE_CREATE_SUPPORTED",
                 False,
             ), mock.patch.object(sys, "stdout", output):
                 status = detect_project.main(
