@@ -30,7 +30,8 @@ class NativeMemberDispatchTests(unittest.TestCase):
         isolation.retire_member_task(self.coordinator, "web", "T001")
         task = self.coordinator / landing.TASK_FILE
         task.write_text(task.read_text(encoding="utf-8").replace(
-            "## Log", "## Verify\n\n```bash\ngrep -q v2 app.py\n```\n\n## Log"), encoding="utf-8")
+            "## Log", "## Verify\n\n```bash\ngrep -q v2 app.py\n```\n\n## Log").replace(
+            "repo: web", 'repo: "web"'), encoding="utf-8")
         git(self.coordinator, "add", "-A")
         git(self.coordinator, "commit", "-q", "-m", "plan: T001 Verify")
         self.base = git(self.coordinator, "rev-parse", "HEAD")

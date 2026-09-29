@@ -12,9 +12,10 @@ import tempfile
 from pathlib import Path
 
 try:
-    from scripts import _common
+    from scripts import _common, isolation
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
+    import isolation
 
 
 class StepFailed(RuntimeError):
@@ -33,8 +34,10 @@ INSPECTION_SPECS = (("inspect_codebase", "codebase-mapper", "codebase", "evidenc
 def _task_member(repo: Path, project_dir: str, task_id: str):
     """The `repo:` member a task names, or None for a coordinator task."""
     for path in sorted((repo / project_dir / "tasks").glob(f"{task_id}-*.md")):
-        match = re.search(r"(?m)^repo:[ \t]*(\S+)[ \t]*$", path.read_text(encoding="utf-8").split("\n---", 1)[0])
-        return match.group(1) if match else None
+        fields, error = isolation.task_frontmatter(path.read_text(encoding="utf-8"))
+        if error:
+            raise StepFailed(error)
+        return fields.get("repo")
     return None
 
 

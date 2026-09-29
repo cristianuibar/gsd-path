@@ -225,9 +225,11 @@ dispatch contract and perform steps 1–5 by hand.
    spawn one implementation-capable child per task with deterministic logical
    task name `build_<task_id>`.
    Its brief contains the absolute isolated-worktree root, coder role, task
-   file, task template, and the absolute INTENT.md path in that worktree.
+   file, task template, and the absolute INTENT.md path in the coordinator for
+   member tasks or in that worktree for coordinator tasks.
    Generate the coder's intent view with `python3 <absolute task_context.py>
-   --repo <absolute isolated-worktree> --task <absolute task file>` and include
+   --repo <absolute coordinator root for member tasks, otherwise isolated-worktree>
+   --task <absolute live task copy for member tasks, otherwise isolated task file>` and include
    its output in the brief. The helper preserves all global rules and falls
    back to full intent when projection is ambiguous. Never summarize it by hand.
    Add no hidden implementation context; repair a

@@ -26,21 +26,29 @@ class MemberFixtureTests(unittest.TestCase):
             git(member, "push", "-q", "origin", "main")
             self.assertEqual(git(arm / "web-origin.git", "rev-parse", "main"), git(member, "rev-parse", "HEAD"))
 
-    def test_multi_repo_scenario_names_the_member_flow(self) -> None:
-        scenario = evaluate_host.SCENARIOS["multi-repo"]
-        self.assertEqual(scenario["fixture"], "counter-member")
-        request = scenario["request"].format(member="/m", plugin="/p", repo="/r")
-        self.assertIn("--member-of /r --project /m", request)
-
-    def test_only_the_release_scenario_carries_the_receipt_addendum(self) -> None:
-        if git(evaluate_host.ROOT, "status", "--porcelain"):
-            self.skipTest("prepare needs a committed candidate")
+    def test_multi_repo_prepare_delivers_the_member_flow(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary).resolve()
-            evaluate_host.prepare("claude", base / "multi", evaluate_host.ROOT, "multi-repo")
-            prompt = (base / "multi" / "multi-repo" / "prompt.txt").read_text(encoding="utf-8")
+            candidate = base / "candidate"
+            subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", str(evaluate_host.ROOT), str(candidate)],
+                           check=True, capture_output=True)
+            evaluate_host.prepare("claude", base / "multi", candidate, "multi-repo")
+            arm = base / "multi" / "multi-repo"
+            prompt = (arm / "prompt.txt").read_text(encoding="utf-8")
+            self.assertIn(f"--member-of {arm / 'repo'} --project {arm / 'web'}", prompt)
+            self.assertIn(str(arm / "web"), prompt)
             self.assertIn("close-members", prompt)
             self.assertNotIn("RELEASE-EVIDENCE ADDENDUM", prompt)
+
+    def test_older_evaluator_rejects_host_only_scenario(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            result = subprocess.run(["python3", "-B", str(evaluate_host.ROOT / "tests/evaluate_features.py"),
+                                     "prepare", "--directory", str(base / "unused"), "--scenario", "multi-repo"],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("invalid choice", result.stderr)
+            self.assertFalse((base / "unused").exists())
 
 
 if __name__ == "__main__":

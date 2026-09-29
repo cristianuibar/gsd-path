@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tests.dogfood import FIXTURE_SCRIPT  # noqa: E402
-from tests.evaluate_features import SCENARIOS  # noqa: E402
+from tests.evaluate_features import ALL_SCENARIOS as SCENARIOS  # noqa: E402
 from tests.hosts import load  # noqa: E402
 
 RELEASE_ADDENDUM = """
