@@ -123,6 +123,12 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   request scans skip host session logs, share a lock with background scans,
   and record changes when history is enabled.
 
+Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
+`localhost:<port>`, `Origin` is absent or `http://<Host>`, and
+`Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
+except `/api/refresh` must also send `Content-Type: application/json`, or it
+returns 415. This blocks other web pages and DNS rebinding.
+
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.
 The board and project page adapt to the window within a centered content area;

@@ -1002,6 +1002,14 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
+        # Every POST changes local state: refuse cross-site pages and DNS rebinding,
+        # and require JSON so a CORS "simple" text/plain POST cannot reach a route.
+        if not self._same_origin():
+            self._respond(403, 'application/json', json.dumps({'error': 'Same-origin requests only.'}))
+            return
+        if path != '/api/refresh' and self.headers.get_content_type() != 'application/json':
+            self._respond(415, 'application/json', json.dumps({'error': 'POST body must be application/json.'}))
+            return
         if path == '/api/path-config':
             self._path_config(True)
             return
@@ -1054,10 +1062,15 @@ class _Handler(BaseHTTPRequestHandler):
             _PLUGIN_OP_LOCK.release()
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
 
-    def _project_files(self):
+    def _same_origin(self) -> bool:
         port = self.server.server_address[1]
         host = self.headers.get('Host')
-        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or self.headers.get('Origin') not in (None, f'http://{host}') or self.headers.get('Sec-Fetch-Site') == 'cross-site':
+        return (host in (f'127.0.0.1:{port}', f'localhost:{port}')
+                and self.headers.get('Origin') in (None, f'http://{host}')
+                and self.headers.get('Sec-Fetch-Site') != 'cross-site')
+
+    def _project_files(self):
+        if not self._same_origin():
             self._respond(403, 'application/json', json.dumps({'error': 'Same-origin project file requests only.'}))
             return
         try:
@@ -1079,17 +1092,11 @@ class _Handler(BaseHTTPRequestHandler):
         self._respond(code, 'application/json', json.dumps(payload))
 
     def _path_config(self, write):
-        port = self.server.server_address[1]
-        host = self.headers.get('Host')
-        if host not in (f'127.0.0.1:{port}', f'localhost:{port}') or (
-            self.headers.get('Origin') not in (None, f'http://{host}')
-        ):
+        if not self._same_origin():
             self._respond(403, 'application/json', json.dumps({'error': 'Same-origin settings requests only.'}))
             return
         try:
             if write:
-                if self.headers.get_content_type() != 'application/json':
-                    raise ValueError('settings writes require application/json')
                 length = int(self.headers.get('Content-Length', '0'))
                 if length <= 0:
                     raise ValueError('settings writes require a JSON body')
