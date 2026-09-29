@@ -4,8 +4,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts import pipeline_git, state_checkpoint, state_promote
+from scripts import check_task_briefs, pipeline_git, state_checkpoint, state_promote
 from tests.test_pipeline_state import PLAN_WAVE, roadmap_text, run_git, state_text, task_text
 
 MEMBERS = Path(__file__).resolve().parents[1] / "scripts" / "members.py"
@@ -103,6 +104,34 @@ class MemberDriftTests(unittest.TestCase):
 
     def test_approval_records_the_member_base_the_brief_was_checked_at(self) -> None:
         self.approve()
+        common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
+        recorded = json.loads((common / "gsd-path" / "lookahead-member-bases" / "second.json").read_text())
+        self.assertEqual(recorded["bases"], {"web": self.approval_base})
+
+    def test_approval_records_lint_base_when_member_ref_moves(self) -> None:
+        original = check_task_briefs._member_bases
+        ref_moved = False
+
+        def drifting_resolver(root: Path):
+            locate = original(root)
+
+            def tracked(name: str):
+                nonlocal ref_moved
+                located = locate(name)
+                if not ref_moved:
+                    (self.member / "app.py").write_text("changed = True\n", encoding="utf-8")
+                    run_git(self.member, "commit", "-am", "move member main")
+                    run_git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
+                    ref_moved = True
+                return located
+
+            return tracked
+
+        with patch.object(check_task_briefs, "_member_bases", side_effect=drifting_resolver):
+            self.approve()
+        self.assertTrue(ref_moved)
+        moved_base = run_git(self.member, "rev-parse", "refs/remotes/origin/main").stdout.strip()
+        self.assertNotEqual(moved_base, self.approval_base)
         common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
         recorded = json.loads((common / "gsd-path" / "lookahead-member-bases" / "second.json").read_text())
         self.assertEqual(recorded["bases"], {"web": self.approval_base})

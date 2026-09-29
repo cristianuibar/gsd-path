@@ -487,6 +487,7 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
         validate_task_briefs(
             repo, head.stdout.strip(), f"{project_dir}/tasks",
             dependency_files=dependency_files, landed_bases=landed_bases,
+            member_base=member_base,
         )
         if project_dir == ".project/next":
             # Promotion checks lookahead member tasks from the bases their briefs were checked at.
