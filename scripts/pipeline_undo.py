@@ -689,6 +689,12 @@ def _require_member_unpublished(checkout: Path, member: str, landing: str, bound
             raise UndoError(f"member {member} landing is already on {where}")
 
 
+def _require_no_member_landing_journal(repo: Path) -> None:
+    directory = isolation.common_git_dir(repo).joinpath(*isolation.MEMBER_LANDING_DIR)
+    if any(directory.glob("*.json")):
+        raise UndoError("member landing journal is pending; recover member landing first")
+
+
 def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
     """Reset the member bound branch first; a resumed undo finds it already reset."""
     member = str(transaction["member"])
@@ -716,6 +722,8 @@ def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
 
 
 def _finish_transaction_locked(repo: Path, transaction: dict[str, object]) -> None:
+    if transaction["kind"] == "member-task":
+        _require_no_member_landing_journal(repo)
     stage = _transaction_recovery_stage(repo, transaction)
     if transaction["kind"] == "member-task":
         _undo_member_landing(repo, transaction)
@@ -875,6 +883,7 @@ def classify_undo(repo: Path) -> dict[str, object]:
         record = isolation.MEMBER_RECORD_RE.search(body)
         if record is not None:
             try:
+                _require_no_member_landing_journal(resolved)
                 member_parent = _member_undo_parent(resolved, record["member"], record["landing"])
             except (IsolationError, UndoError, PipelineStateError) as error:
                 return _blocked([f"member landing undo is unsafe: {error}"])
@@ -1052,6 +1061,7 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
         _finish_transaction(resolved, transaction)
     elif kind == "member-task":
         with isolation._member_landing_lock(resolved):
+            _require_no_member_landing_journal(resolved)
             if preview(resolved)["target"] != target:
                 raise UndoError("member task undo target changed after preview")
             if _worktree_changes(resolved):

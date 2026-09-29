@@ -14,6 +14,7 @@ class MemberUndoTests(unittest.TestCase):
     land = landing.MemberLandingTests.land
     edit = landing.MemberLandingTests.edit
     bound_tip = landing.MemberLandingTests.bound_tip
+    journal = landing.MemberLandingTests.journal
 
     def landed(self) -> dict:
         self.edit()
@@ -109,6 +110,34 @@ class MemberUndoTests(unittest.TestCase):
                 pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
         self.assertIsNone(pipeline_undo.pending_transaction(self.coordinator))
         self.assertNotEqual(self.bound_tip(), result["landing"])
+
+    def test_pending_landing_journal_blocks_preview_apply_and_resume(self) -> None:
+        result = self.landed()
+        self.journal().write_text("{}", encoding="utf-8")
+        target = pipeline_undo.preview(self.coordinator)["target"]
+        self.assertIsNone(target["kind"])
+        self.assertIn("member landing journal", " ".join(target["blocked"]))
+        self.journal().unlink()
+
+        @contextmanager
+        def journal_appears(_repo):
+            self.journal().write_text("{}", encoding="utf-8")
+            yield
+
+        with mock.patch.object(isolation, "_member_landing_lock", journal_appears):
+            with self.assertRaisesRegex(pipeline_undo.UndoError, "member landing journal"):
+                pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertIsNone(pipeline_undo.pending_transaction(self.coordinator))
+        self.journal().unlink()
+
+        with mock.patch.object(pipeline_undo, "_undo_member_landing", side_effect=OSError("crash")):
+            with self.assertRaises(OSError):
+                pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.journal().write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(pipeline_undo.UndoError, "member landing journal"):
+            pipeline_undo.apply_undo(self.coordinator, "member-task", result["commit"])
+        self.assertEqual(self.bound_tip(), result["landing"])
+        self.assertEqual(git(self.coordinator, "rev-parse", "HEAD"), result["commit"])
 
     def test_moved_coordinator_blocks_before_member_reset(self) -> None:
         result = self.landed()
