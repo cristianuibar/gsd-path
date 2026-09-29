@@ -90,7 +90,11 @@ executable interface; do not infer multi-repo behavior from host receipts.
 
 - No `MEMBERS.md`: existing single-repo commands and output stay unchanged.
 - Brownfield `members add` creates `MEMBERS.md`; ship input validation accepts it, `REPOSITORY.md` stays fixed, and non-`main` defaults are refused.
-- A two-repo quick-lane run covers task dispatch, cross-repo milestone Verify from the coordinator sidecar with `../<member>`, final review, ordered ship, and next-milestone branch retirement.
+- Two-repo coverage combines the member dispatch and task Verify round in
+  `tests/test_member_round.py` with the standard-lane milestone in
+  `tests/test_member_full_cycle.py`. Together they cover cross-repo milestone
+  Verify from the coordinator sidecar with `../<member>`, final review, ordered
+  ship, and next-milestone branch retirement.
 - Namespaced member bound, task, verify, and integrate branches work without colliding with retained member branches or being accepted as coordinator branches.
 - S2d denies guarded file-edit requests into a member during plan, including edits from a coordinator session. See S3c3b2 for member sidecar host hooks.
 - Prove member marker validation and pre-push authorization against S2a–S2b, including the bound branch and tag pushes in S4b1a–S4b1b and the authorized branch deletion in S4c1.
