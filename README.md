@@ -395,8 +395,8 @@ is a **member** listed in `.project/MEMBERS.md`. A member needs a GitHub.com
 
 - Add members at a milestone boundary: ask the router to add an existing repo
   (`members.py add`) or to create a new one (`members.py add --create`, after
-  you approve the exact owner, name, visibility, and checkout). Then install
-  the member's guard hooks with
+  you approve the exact owner, name, visibility, and checkout). For optional
+  guard hooks, install them in the member with
   `npx @opengsd/gsd-path@latest --member-of <coordinator> --project <member>`.
 - The planner gives each member task `repo: <member>`; one task changes one
   repo. Project Verify runs from the coordinator and reaches a member as
