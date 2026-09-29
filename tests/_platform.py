@@ -53,6 +53,20 @@ def _bash_available() -> bool:
 requires_bash = unittest.skipUnless(_bash_available(), "no usable bash on this host")
 
 
+def host_shell(command: str) -> list:
+    """argv that runs a hook command string the way the host does.
+
+    POSIX hosts use /bin/sh (what shell=True runs); Claude Code on Windows
+    runs hook commands in Git Bash, never cmd.exe.
+    """
+    if not WINDOWS:
+        return ["/bin/sh", "-c", command]
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import _common
+
+    return _common.bash_argv(command)
+
+
 def fake_cli(bin_dir: Path, name: str, python_source: str) -> Path:
     """Write an executable named name in bin_dir that runs python_source.
 

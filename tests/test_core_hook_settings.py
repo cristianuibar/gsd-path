@@ -7,6 +7,9 @@ import tempfile
 import unittest
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _platform import WINDOWS, host_shell
+
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/core_hook_settings.py"
 
 
@@ -46,7 +49,7 @@ class HookSettingsTests(unittest.TestCase):
         self.assertEqual(commands[1]["command"], "company-guard")
         self.assertEqual(data["enabledPlugins"], {"gsd-path@marketplace": True})
         for cwd, expected in ((self.project, 0), (self.root, 7)):
-            result = subprocess.run(commands[0]["command"], shell=True,
+            result = subprocess.run(host_shell(commands[0]["command"]),
                                     input=json.dumps({"cwd": str(cwd)}), text=True, capture_output=True)
             self.assertEqual(result.returncode, expected, result.stderr)
         self.assertEqual(self.command("apply").returncode, 0)
@@ -78,7 +81,7 @@ class HookSettingsTests(unittest.TestCase):
         event = json.dumps({"cwd": str(self.project), "tool_name": "Write", "tool_input": {
             "file_path": str(self.project / ".project/archive/001-example/INTENT.md"), "content": "overwrite",
         }})
-        results = [subprocess.run(hook["command"], shell=True, input=event, text=True, capture_output=True) for hook in hooks]
+        results = [subprocess.run(host_shell(hook["command"]), input=event, text=True, capture_output=True) for hook in hooks]
         self.assertEqual(results[0].returncode, 0, results[0].stderr)
         self.assertEqual(results[1].returncode, 2, results[1].stderr)
         self.assertEqual(json.loads(results[1].stdout)["permissionDecision"], "deny")

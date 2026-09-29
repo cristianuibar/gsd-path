@@ -1,11 +1,14 @@
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
 
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _platform import WINDOWS, host_shell
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/core_hook_gate.py"
 
@@ -32,7 +35,8 @@ class CoreHookGateTests(unittest.TestCase):
 
     def gate(self, payload):
         return subprocess.run(
-            [sys.executable, "-B", str(SCRIPT), "--repo", str(self.project), "--command", self.command],
+            [sys.executable, "-B", str(SCRIPT), "--repo", str(self.project), "--command", self.command,
+             *(["--shell", "bash"] if WINDOWS else [])],
             input=payload, capture_output=True, cwd=self.core,
         )
 
@@ -67,7 +71,8 @@ class CoreHookGateTests(unittest.TestCase):
         self.assertTrue(events)
         for event in events:
             with self.subTest(tool=event["tool_name"]):
-                self.assertTrue(Path(event["cwd"]).is_absolute())
+                # Recorded on a POSIX host.
+                self.assertTrue(PurePosixPath(event["cwd"]).is_absolute())
                 # Relocate the captured evaluation project into this fixture.
                 event["cwd"] = str(self.project)
                 self.assertEqual(self.gate(json.dumps(event).encode()).returncode, 0)

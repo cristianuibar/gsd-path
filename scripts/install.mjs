@@ -131,15 +131,22 @@ export const GIT_HOOKS = [
 ];
 export const GIT_HOOK_NAMES = GIT_HOOKS.map(([name]) => name);
 
-// Every interpreter a managed hook may legitimately be pinned to.
-const INTERPRETER_CANDIDATES = ["python3", "python"];
+// Every interpreter a managed hook may legitimately be pinned to. Each is a
+// command prefix: python.org Windows installs may put only `py` on PATH.
+const INTERPRETER_CANDIDATES = ["python3", "python", "py -3"];
 
-// Probe for a runnable Python interpreter (python3, then python) so emitted
-// hooks never hard-code an interpreter that does not exist on this machine
-// (python3 is typically absent on Windows).
+// Run a Python interpreter command prefix (for example "py -3") with args.
+function spawnPython(interpreter, args, options) {
+  const [command, ...prefix] = interpreter.split(" ");
+  return spawnSync(command, [...prefix, ...args], options);
+}
+
+// Probe for a runnable Python interpreter (python3, then python, then py -3)
+// so emitted hooks never hard-code an interpreter that does not exist on this
+// machine (python3 is typically absent on Windows).
 export function detectPythonInterpreter() {
   for (const candidate of INTERPRETER_CANDIDATES) {
-    const result = spawnSync(
+    const result = spawnPython(
       candidate,
       ["-B", "-c", "import sys; raise SystemExit(sys.version_info < (3, 9))"],
       { stdio: "ignore" }
@@ -1312,7 +1319,7 @@ export const hooks = {
 // Project installation already requires Python; keep runtime lifecycle ownership there.
 function projectAdapter(source, project, action, payload = {}, env = process.env) {
   const interpreter = requiredPythonRuntime("project runtime");
-  const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"), "--adapter-request"], {
+  const result = spawnPython(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"), "--adapter-request"], {
     input: JSON.stringify({ source, project, action, ...payload }), encoding: "utf8", env: { ...process.env, ...env },
   });
   if (result.error || result.status !== 0) {
@@ -1687,7 +1694,7 @@ export async function main(argv, env = process.env) {
   if (!migrateAndUpdate && (values["member-of"] !== undefined
       || ["runtime-restore", "runtime-upgrade", "runtime-migrate"].some(name => values[name]))) {
     const interpreter = requiredPythonRuntime("project runtime");
-    const result = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
+    const result = spawnPython(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
       ...argv.filter(arg => arg !== "--no-color")], { stdio: "inherit", env });
     return result.status ?? 1;
   }
@@ -1792,7 +1799,7 @@ export async function main(argv, env = process.env) {
   }
   if (migrateAndUpdate) {
     const interpreter = requiredPythonRuntime("project runtime");
-    const migration = spawnSync(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
+    const migration = spawnPython(interpreter, ["-B", path.join(SCRIPT_DIRECTORY, "install.py"),
       "--runtime-migrate", "--project", project, "--source-root", sourceRoot,
       ...(values["dry-run"] ? ["--dry-run"] : [])], { stdio: "inherit", env });
     if (migration.error || migration.status !== 0) {

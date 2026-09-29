@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 import shlex
 import stat
-import subprocess
 import sys
 import tempfile
 
@@ -47,8 +46,15 @@ def plan(args):
     gate = Path(__file__).resolve().with_name("core_hook_gate.py")
     if not gate.is_file():
         raise ValueError(f"missing installed hook gate: {gate}")
-    argv = [sys.executable, "-B", str(gate), "--repo", str(repo), "--command", original]
-    replacement = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    if os.name == "nt":
+        # Claude Code runs Windows hook commands in Git Bash: quote for bash,
+        # use forward slashes, and have the gate run the original through bash
+        # rather than cmd.exe.
+        argv = [Path(sys.executable).as_posix(), "-B", gate.as_posix(), "--repo", repo.as_posix(),
+                "--shell", "bash", "--command", original]
+    else:
+        argv = [sys.executable, "-B", str(gate), "--repo", str(repo), "--command", original]
+    replacement = shlex.join(argv)
     entry["command"] = replacement
     after = (json.dumps(data, indent=2) + "\n").encode()
     receipt = {
