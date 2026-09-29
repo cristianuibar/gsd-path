@@ -248,10 +248,15 @@ dispatch contract and perform steps 1–5 by hand.
    completion when it lands — never wait for slower in-flight tasks first;
    when several results wait, land them in task-id order.
 
-   - For `ready`, compare the complete worktree diff to `base`. Permit only
-     declared `files` plus append-only Log changes in that task file. Include
-     additions, deletions, renames, and binary changes; an unexpected path
-     blocks before any product commit.
+   - For a `ready` coordinator task, compare the complete worktree diff to
+     `base`. Permit only declared `files` plus append-only Log changes in that
+     task file. Include additions, deletions, renames, and binary changes; an
+     unexpected path blocks before any product commit.
+   - For a `ready` member task, compare the complete member sidecar diff to the
+     returned `member_base`. Permit only declared `files`, including additions,
+     deletions, renames, and binary changes. Separately check the returned live
+     task `copy` against the coordinator task contract for an append-only Log.
+     An unexpected path or Log change blocks before any product commit.
    - For a returned `ready` coder, run `python3 <absolute dispatch_driver.py>
      finish --repo <absolute primary> --task-id <id>`. This action works with
      native child tools; no child command is needed. It reproduces serial work
