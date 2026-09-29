@@ -6,6 +6,7 @@ hook wiring. Inspection failures and violations both exit 1: unreadable Git
 state cannot prove archive immutability or safe publication.
 """
 
+import json
 import re
 import subprocess
 from functools import lru_cache
@@ -19,7 +20,7 @@ sys.path.insert(0, str(_HERE / "runtime" if (_HERE / "runtime" / "isolation.py")
 sys.dont_write_bytecode = True  # a hook must not leave __pycache__ in the worktree
 try:
     from isolation import BOOKKEEPING_PREFIXES, NULL_SHA, _landing_state, task_frontmatter
-    from pipeline_git import is_ship_subject, task_commit_body
+    from pipeline_git import is_ship_subject, ship_commit_body, task_commit_body
     from pipeline_state import _completion_status
     import members
 except ImportError as error:  # pragma: no cover - broken install
@@ -296,9 +297,22 @@ def ship_contract_violations(entries, subject, body, new_archives, state):
         encoding="utf-8", errors="replace",
         check=True,
     ).stdout.strip()
-    expected_body = f"Archive: {archive}\nReviewed-HEAD: {reviewed_head}"
+    lock = f"{archive}/build/members.json"
+    staged_lock = subprocess.run(
+        ["git", "ls-files", "--cached", "--", lock],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    locked = [entry["name"] for entry in json.loads(staged_file(lock))["members"]] if staged_lock else []
+    rows = members.read_member_close(
+        Path(git_output("rev-parse", "--path-format=absolute", "--git-common-dir")), Path(archive).name
+    ) if locked else []
+    if [row["name"] for row in rows] != locked or any(row["status"] != "integrated" for row in rows):
+        found.append("ship commit requires every locked member closed; run archive_milestone.py close-members")
+    expected_body = ship_commit_body(archive, reviewed_head, rows).rstrip("\n")
     if body != expected_body:
-        found.append("ship commit body does not match Archive and Reviewed-HEAD")
+        found.append("ship commit body does not match Archive, Reviewed-HEAD, and closed members")
     changed_paths = {
         new if code in "CR" else old
         for code, old, new in entries
@@ -388,6 +402,10 @@ def staged_abandon_target(new_archives, state):
 
 
 @lru_cache(maxsize=None)
+def git_output(*arguments):
+    return subprocess.run(["git", *arguments], capture_output=True, text=True, check=True).stdout.strip()
+
+
 def current_branch():
     return subprocess.run(
         ["git", "branch", "--show-current"],

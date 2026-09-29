@@ -126,8 +126,13 @@ def is_integrate_subject(subject: str, archive_name: str, default_branch: str) -
     }
 
 
-def ship_commit_body(archive_path: str, reviewed_head: str) -> str:
-    return f"Archive: {archive_path}\nReviewed-HEAD: {reviewed_head}\n"
+def ship_commit_body(archive_path: str, reviewed_head: str, members: Sequence[dict] = ()) -> str:
+    """The ship body; a multi-repo milestone adds each closed member in lock order."""
+    return f"Archive: {archive_path}\nReviewed-HEAD: {reviewed_head}\n" + "".join(
+        f"Member-Reviewed-HEAD: {row['name']}@{row['reviewed_head']}\n"
+        f"Member: {row['name']} {row['merge']} {row['tag']}\n"
+        for row in members
+    )
 
 
 def integrate_commit_body(

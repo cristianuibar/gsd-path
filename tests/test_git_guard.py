@@ -1,5 +1,5 @@
-import json
 import re
+import json
 import subprocess
 import sys
 import tempfile
@@ -203,6 +203,40 @@ class GitGuardEndToEndTests(unittest.TestCase):
         result = self.run_guard("feat: late archive addition")
         self.assertEqual(1, result.returncode)
         self.assertIn("read-only", result.stderr)
+
+    def test_member_ship_body_names_every_closed_member(self):
+        self.git("branch", "-m", "gsd-path/M002")
+        archived = self.repo / ".project" / "archive" / "002-next"
+        (archived / "build").mkdir(parents=True)
+        (archived / "MANIFEST.md").write_text("manifest\n", encoding="utf-8")
+        (archived / "build" / "members.json").write_text(json.dumps(
+            {"schema": "gsd-path/member-lock/v1",
+             "members": [{"name": "web", "branch": "gsd-path/demo-M002", "base": "a" * 40}]}), encoding="utf-8")
+        (self.repo / ".project" / "STATE.md").write_text(
+            "---\npipeline: gsd-path/v2\nproject: demo\nmilestone: next\n"
+            "phase: shipped\nstatus: done\nbranch: gsd-path/M002\n"
+            "archive: .project/archive/002-next\n---\n",
+            encoding="utf-8",
+        )
+        self.git("add", "-A")
+        (archived / "build" / "members.json").unlink()
+        base = f"Archive: .project/archive/002-next\nReviewed-HEAD: {self.head()}"
+        row = {"name": "web", "mode": "direct", "reviewed_head": "b" * 40, "status": "pending",
+               "merge": None, "tag": None}
+        journal = self.repo / ".git" / "gsd-path" / "member-close" / "002-next.json"
+        journal.parent.mkdir(parents=True)
+        members_body = base + f"\nMember-Reviewed-HEAD: web@{'b' * 40}\nMember: web {'c' * 40} milestone/demo-002-next"
+
+        unclosed = self.run_guard("ship: M002 — next", base)
+        self.assertEqual(1, unclosed.returncode)
+        self.assertIn("close-members", unclosed.stderr)
+        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        self.assertIn("close-members", self.run_guard("ship: M002 — next", members_body).stderr)
+        row.update(status="integrated", merge="c" * 40, tag="milestone/demo-002-next")
+        journal.write_text(json.dumps({"schema": "gsd-path/member-close/v1", "members": [row]}), encoding="utf-8")
+        self.assertEqual(1, self.run_guard("ship: M002 — next", base).returncode)
+        closed = self.run_guard("ship: M002 — next", members_body)
+        self.assertEqual(0, closed.returncode, closed.stderr)
 
     def test_allows_only_the_staged_state_archive_during_ship(self):
         self.git("branch", "-m", "gsd-path/M002")

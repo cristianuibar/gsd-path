@@ -283,6 +283,30 @@ def check_member(
     return remote
 
 
+MEMBER_CLOSE_SCHEMA = "gsd-path/member-close/v1"
+
+
+def member_close_path(common: Path, archive_name: str) -> Path:
+    """Ship's member-close journal; outside the archive so the archive inventory is unchanged."""
+    return common / "gsd-path" / "member-close" / f"{archive_name}.json"
+
+
+def read_member_close(common: Path, archive_name: str) -> list[dict]:
+    path = member_close_path(common, archive_name)
+    if not path.is_file():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("schema") != MEMBER_CLOSE_SCHEMA or not isinstance(data.get("members"), list):
+        raise MembersError(f"member-close journal is invalid: {path}")
+    return data["members"]
+
+
+def write_member_close(common: Path, archive_name: str, rows: list[dict]) -> None:
+    path = member_close_path(common, archive_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _common.atomic_write(path, json.dumps({"schema": MEMBER_CLOSE_SCHEMA, "members": rows}, indent=2) + "\n")
+
+
 def require_origin_main(checkout: Path) -> None:
     baseline = _common.run_git(
         checkout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"

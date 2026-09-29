@@ -1736,3 +1736,70 @@ def validate_member_integrated(coordinator: Path, member: str, archive_path: str
             raise ArchiveError(f"member {member} tag {tag_name} is not published")
         require_annotated_tag(checkout, tracking, merge, f"member tag {tag_name}")
     return {"member": member, "merge": merge, "tag": tag_name, "tag_object": published}
+
+
+def close_members(repo: Path) -> dict:
+    """Close each locked member in lock order before the coordinator ship commit; resumable."""
+    try:
+        import check_handoffs
+        import members
+        from pipeline_git import ship_commit_body
+    except ImportError:  # pragma: no cover - package import used by tests
+        from scripts import check_handoffs, members
+        from scripts.pipeline_git import ship_commit_body
+    project = repo.resolve()
+    state, _, _ = archive_milestone.strict_state(project)
+    if (state.phase, state.status) != ("ship", "active") or state.archive is None:
+        raise ArchiveError("close-members requires ship/active with a prepared archive")
+    archive = project / state.archive
+    final_text = (archive / "review" / "FINAL.md").read_text(encoding="utf-8")
+    reviewed = check_handoffs._reviewed_head(final_text, "FINAL.md")
+    lock = archive / "build" / "members.json"
+    locked = json.loads(lock.read_text(encoding="utf-8"))["members"] if lock.is_file() else []
+    try:
+        heads = check_handoffs.member_reviewed_heads(final_text, "FINAL.md")
+    except check_handoffs.HandoffError as error:
+        raise ArchiveError(str(error)) from error
+    if sorted(heads) != sorted(entry["name"] for entry in locked):
+        raise ArchiveError("FINAL.md Member reviewed HEAD lines must name each locked member")
+    common = Path(archive_milestone.require_git_success(
+        run_git(project, "rev-parse", "--path-format=absolute", "--git-common-dir"), "resolve Git common dir"))
+    archive_name = PurePosixPath(state.archive).name
+    try:
+        modes = {item["name"]: item["integration"] for item in members.read_members(project)} if locked else {}
+        rows = {row["name"]: row for row in members.read_member_close(common, archive_name)}
+    except members.MembersError as error:
+        raise ArchiveError(str(error)) from error
+    def save() -> None:
+        members.write_member_close(common, archive_name, [rows[item["name"]] for item in locked if item["name"] in rows])
+
+    closed = []
+    for entry in locked:
+        name = entry["name"]
+        mode = modes.get(name, "default")
+        mode = state.integration if mode == "default" else mode
+        row = rows.get(name) or {"name": name, "mode": mode, "reviewed_head": heads[name],
+                                 "status": "pending", "merge": None, "tag": None}
+        if row["reviewed_head"] != heads[name] or row["mode"] != mode:
+            raise ArchiveError(f"member-close journal for {name} differs from FINAL.md or MEMBERS.md")
+        if row["status"] == "integrated":
+            result = validate_member_integrated(project, name, state.archive, heads[name])
+            if (result["merge"], result["tag"]) != (row["merge"], row["tag"]):
+                raise ArchiveError(f"member {name} integration differs from its member-close journal")
+            closed.append(row)
+            continue
+        # Journal pending before the member moves; a later member waits for this one.
+        rows[name] = row
+        save()
+        if mode == "direct":
+            result = integrate_member(project, name, state.archive, heads[name])
+        else:
+            result = integrate_member_pull_request(project, name, state.archive, heads[name])
+        if result.get("status") == "awaiting-merge":
+            row["pull_request"] = result["pull_request"]
+            save()
+            return {"status": "awaiting-merge", "member": name, "pull_request": result["pull_request"]}
+        row.update(status="integrated", merge=result["merge"], tag=result["tag"])
+        save()
+        closed.append(row)
+    return {"status": "integrated", "members": closed, "body": ship_commit_body(state.archive, reviewed, closed)}
