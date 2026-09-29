@@ -32,6 +32,16 @@ class MemberFixtureTests(unittest.TestCase):
         request = scenario["request"].format(member="/m", plugin="/p", repo="/r")
         self.assertIn("--member-of /r --project /m", request)
 
+    def test_only_the_release_scenario_carries_the_receipt_addendum(self) -> None:
+        if git(evaluate_host.ROOT, "status", "--porcelain"):
+            self.skipTest("prepare needs a committed candidate")
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            evaluate_host.prepare("claude", base / "multi", evaluate_host.ROOT, "multi-repo")
+            prompt = (base / "multi" / "multi-repo" / "prompt.txt").read_text(encoding="utf-8")
+            self.assertIn("close-members", prompt)
+            self.assertNotIn("RELEASE-EVIDENCE ADDENDUM", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

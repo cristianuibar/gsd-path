@@ -114,7 +114,7 @@ At each named checkpoint, stop and identify the canonical artifacts for capture.
 Use python3 {plugin / 'tests/evaluate_codex.py'} activity --arm {arm} --category
 <implementation|verification|review> -- <command> for measured shell work. That
 wrapper starts in the primary repo: select a sidecar cwd explicitly when needed.
-""" + RELEASE_ADDENDUM
+""" + (RELEASE_ADDENDUM if scenario == "quick" else "")
     (arm / "prompt.txt").write_bytes(prompt.encode("utf-8"))
     (directory / "manifest.json").write_bytes((json.dumps({"schema": "gsd-path/feature-evaluation/v1", "candidate": revision,
                                                         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
