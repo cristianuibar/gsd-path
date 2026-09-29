@@ -564,11 +564,15 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     if viewed.returncode != 0:
         if "Could not resolve to a Repository" not in f"{viewed.stdout}\n{viewed.stderr}":
             raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
+        if recorded["step"] != "create":
+            raise MembersError(f"GitHub repository {github} disappeared after creation; refusing to create it again")
         if occupied:
             raise MembersError(f"member checkout {resolved} is a clone of a missing repository: {github}")
         created = _gh("repo", "create", github, f"--{visibility}", "--add-readme")
         if created.returncode != 0:
             raise MembersError(f"could not create {github}: {(created.stderr or created.stdout).strip()}")
+        recorded["step"] = "clone"
+        _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
         viewed = _gh("repo", "view", github, "--json", "visibility")
     if viewed.returncode != 0:
         raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")

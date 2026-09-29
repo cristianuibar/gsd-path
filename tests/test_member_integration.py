@@ -32,6 +32,10 @@ class MemberIntegrationTests(unittest.TestCase):
     def remote_ref(self, ref: str) -> str:
         return git(self.remote, "rev-parse", "--verify", "--quiet", ref, check=False)
 
+    def test_github_repository_uses_configured_origin_with_rewrite(self) -> None:
+        self.assertEqual(git(self.member, "remote", "get-url", "origin"), str(self.remote))
+        self.assertEqual(integration.github_repository(self.member), "acme/web")
+
     def integrate(self) -> dict:
         return integration.integrate_member(self.root, "web", ARCHIVE, self.member_tip)
 

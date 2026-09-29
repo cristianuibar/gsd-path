@@ -176,6 +176,20 @@ class MemberCreateTests(unittest.TestCase):
         self.assertFalse(self.remote.exists())
         self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
 
+    def test_missing_remote_after_clone_step_does_not_recreate(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        self.journal().parent.mkdir(parents=True)
+        self.journal().write_text(json.dumps({
+            "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
+            "checkout": str(self.checkout), "integration": "default", "step": "clone"}), encoding="utf-8")
+        shutil.rmtree(self.remote)
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "refusing to create it again"):
+            self.create()
+        self.assertEqual([call[:2] for call in self.calls], [("repo", "view")])
+        self.assertFalse(self.remote.exists())
+        self.assertTrue(self.journal().exists())
+
     def test_nested_checkout_blocks_before_gh(self) -> None:
         self.checkout = self.coordinator / "web"
         with self.assertRaisesRegex(members.MembersError, "nested with the coordinator"):
