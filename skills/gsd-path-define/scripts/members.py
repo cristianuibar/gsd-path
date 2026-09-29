@@ -181,7 +181,10 @@ def member_role(checkout: Path) -> Optional[dict[str, object]]:
 def detect_member(checkout: Path) -> dict[str, object]:
     """Whether a repo is a member: its coordinator, name, and whether its marker is current."""
     checkout = Path(checkout).resolve()
-    named = marker_coordinator(checkout)
+    try:
+        named = marker_coordinator(checkout)
+    except MembersError as error:
+        return {"member": True, "current": False, "checkout": str(checkout), "reason": str(error)}
     if named is None:
         return {"member": False, "checkout": str(checkout)}
     try:
@@ -526,27 +529,57 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
               "checkout": str(resolved), "integration": integration}
     common = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
     journal = common / "gsd-path" / "member-create" / f"{name}.json"
+    url = f"https://github.com/{github}.git"
     if journal.is_file():
-        if json.loads(journal.read_text(encoding="utf-8")) != target:
+        recorded = json.loads(journal.read_text(encoding="utf-8"))
+        if {key: recorded.get(key) for key in target} != target or recorded.get("step") not in {"create", "clone", "join"}:
             raise MembersError(f"member-create journal for {name} holds a different approved target: {journal}")
     else:
         if any(member["name"] == name for member in read_members(root)):
             raise MembersError(f"member already recorded: {name}")
-        if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
-            raise MembersError(f"member checkout path is occupied: {resolved}")
+    if resolved.is_symlink() or (resolved.exists() and not resolved.is_dir()):
+        raise MembersError(f"member checkout path is occupied: {resolved}")
+    occupied = resolved.exists() and any(resolved.iterdir())
+    if occupied and _common.run_git(resolved, "rev-parse", "--show-toplevel").stdout.strip() != str(resolved):
+        raise MembersError(f"member checkout path is occupied: {resolved}")
+    if occupied and _git(resolved, "config", "--get", "remote.origin.url") != url:
+        raise MembersError(f"member checkout {resolved} is not a clone of {url}")
+    if not journal.is_file():
         journal.parent.mkdir(parents=True, exist_ok=True)
-        _common.atomic_write(journal, json.dumps(target, indent=2, sort_keys=True) + "\n")
-    url = f"https://github.com/{github}.git"
-    if _gh("repo", "view", github, "--json", "name").returncode != 0:
+        recorded = {**target, "step": "create"}
+        _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+    listed = [member for member in read_members(root) if member["name"] == name]
+    if listed:
+        if (len(listed) != 1 or listed[0] != {"name": name, "checkout": str(resolved), "remote": url,
+                                            "integration": integration}
+                or member_role(resolved) != {"coordinator": root, "project": state.project, "name": name}):
+            raise MembersError(f"member already recorded with a different checkout or marker: {name}")
+        journal.unlink()
+        return read_members(root)
+    viewed = _gh("repo", "view", github, "--json", "visibility")
+    if viewed.returncode != 0:
+        if "Could not resolve to a Repository" not in f"{viewed.stdout}\n{viewed.stderr}":
+            raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
         created = _gh("repo", "create", github, f"--{visibility}", "--add-readme")
         if created.returncode != 0:
             raise MembersError(f"could not create {github}: {(created.stderr or created.stdout).strip()}")
-    if not resolved.exists() or not any(resolved.iterdir()):
+        viewed = _gh("repo", "view", github, "--json", "visibility")
+    if viewed.returncode != 0:
+        raise MembersError(f"could not inspect {github}: {(viewed.stderr or viewed.stdout).strip()}")
+    try:
+        actual_visibility = json.loads(viewed.stdout)["visibility"].lower()
+    except (ValueError, KeyError, AttributeError) as error:
+        raise MembersError(f"could not read {github} visibility") from error
+    if actual_visibility != visibility:
+        raise MembersError(f"GitHub repository visibility is {actual_visibility}, not {visibility}")
+    recorded["step"] = "clone"
+    _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
+    if not occupied:
         cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))
         if cloned.returncode != 0:
             raise MembersError(f"could not clone {url}: {(cloned.stderr or cloned.stdout).strip()}")
-    elif _git(resolved, "config", "--get", "remote.origin.url") != url:
-        raise MembersError(f"member checkout {resolved} is not a clone of {url}")
+    recorded["step"] = "join"
+    _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
     joined = add_member(root, name, resolved, integration)
     journal.unlink()
     return joined
@@ -621,6 +654,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             members = create_member(arguments.repo, arguments.name, arguments.checkout,
                                     arguments.integration, arguments.create, arguments.visibility)
         elif arguments.command == "add":
+            if arguments.visibility is not None:
+                raise MembersError("--visibility requires --create")
             members = add_member(
                 arguments.repo, arguments.name, arguments.checkout, arguments.integration
             )

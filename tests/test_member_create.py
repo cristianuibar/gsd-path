@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import subprocess
@@ -49,7 +50,9 @@ class MemberCreateTests(unittest.TestCase):
     def gh(self, *arguments: str) -> subprocess.CompletedProcess:
         self.calls.append(arguments)
         if arguments[:2] == ("repo", "view"):
-            return subprocess.CompletedProcess(arguments, 0 if self.remote.exists() else 1, "", "")
+            if self.remote.exists():
+                return subprocess.CompletedProcess(arguments, 0, '{"visibility":"PRIVATE"}', "")
+            return subprocess.CompletedProcess(arguments, 1, "", "Could not resolve to a Repository")
         if arguments[:2] == ("repo", "create"):
             git(self.base, "init", "-q", "--bare", "-b", "main", str(self.remote))
             seed = self.base / "seed"
@@ -82,7 +85,7 @@ class MemberCreateTests(unittest.TestCase):
         self.journal().parent.mkdir(parents=True)
         self.journal().write_text(json.dumps({
             "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
-            "checkout": str(self.checkout), "integration": "default"}), encoding="utf-8")
+            "checkout": str(self.checkout), "integration": "default", "step": "create"}), encoding="utf-8")
         self.calls.clear()
         self.create()
         self.assertNotIn("create", [call[1] for call in self.calls])
@@ -92,7 +95,7 @@ class MemberCreateTests(unittest.TestCase):
         self.journal().parent.mkdir(parents=True)
         self.journal().write_text(json.dumps({
             "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/other", "visibility": "private",
-            "checkout": str(self.checkout), "integration": "default"}), encoding="utf-8")
+            "checkout": str(self.checkout), "integration": "default", "step": "create"}), encoding="utf-8")
         with self.assertRaisesRegex(members.MembersError, "approved target"):
             self.create()
         self.assertEqual(self.calls, [])
@@ -103,6 +106,51 @@ class MemberCreateTests(unittest.TestCase):
         with self.assertRaisesRegex(members.MembersError, "checkout"):
             self.create()
         self.assertEqual(self.calls, [])
+        self.assertFalse(self.journal().exists())
+
+    def test_resume_after_join_removes_journal_without_rejoining(self) -> None:
+        self.create()
+        self.journal().write_text(json.dumps({
+            "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
+            "checkout": str(self.checkout), "integration": "default", "step": "join"}), encoding="utf-8")
+        self.calls.clear()
+        self.assertEqual(len(self.create()), 1)
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.journal().exists())
+
+    def test_lookup_failure_does_not_create_repository(self) -> None:
+        with mock.patch.object(members, "_gh", return_value=subprocess.CompletedProcess([], 1, "", "authentication failed")):
+            with self.assertRaisesRegex(members.MembersError, "could not inspect"):
+                members.create_member(self.coordinator, "web", self.checkout, "default", "acme/web", "private")
+        self.assertFalse(self.remote.exists())
+        self.assertTrue(self.journal().exists())
+
+    def test_existing_repository_with_other_visibility_blocks_before_clone(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        self.calls.clear()
+        with mock.patch.object(members, "_gh", return_value=subprocess.CompletedProcess([], 0, '{"visibility":"PUBLIC"}', "")):
+            with self.assertRaisesRegex(members.MembersError, "visibility is public, not private"):
+                members.create_member(self.coordinator, "web", self.checkout, "default", "acme/web", "private")
+        self.assertFalse(self.checkout.exists())
+
+    def test_resume_occupied_checkout_blocks_before_gh(self) -> None:
+        self.journal().parent.mkdir(parents=True)
+        self.journal().write_text(json.dumps({
+            "schema": members.MEMBER_CREATE_SCHEMA, "name": "web", "github": "acme/web", "visibility": "private",
+            "checkout": str(self.checkout), "integration": "default", "step": "create"}), encoding="utf-8")
+        self.checkout.mkdir()
+        (self.checkout / "notes.txt").write_text("mine\n", encoding="utf-8")
+        with self.assertRaisesRegex(members.MembersError, "checkout"):
+            self.create()
+        self.assertEqual(self.calls, [])
+
+    def test_visibility_without_create_is_rejected(self) -> None:
+        with mock.patch.object(members, "_gh", side_effect=AssertionError("unexpected gh call")):
+            with mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                result = members.main(["add", "--repo", str(self.coordinator), "--name", "web",
+                                       "--checkout", str(self.checkout), "--visibility", "private"])
+        self.assertEqual(result, 1)
+        self.assertIn("--visibility requires --create", stderr.getvalue())
         self.assertFalse(self.journal().exists())
 
 
@@ -133,6 +181,14 @@ class MemberDetectTests(unittest.TestCase):
         found = self.detect(self.checkout)
         self.assertEqual((found["member"], found["current"], found["coordinator"]),
                          (True, False, str(self.coordinator)))
+        self.assertIn("members.py repair", found["reason"])
+
+    def test_detect_reports_malformed_marker_as_stale_json(self) -> None:
+        self.create()
+        (Path(git(self.checkout, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+         / "gsd-path" / "member.json").write_text("{broken", encoding="utf-8")
+        found = self.detect(self.checkout)
+        self.assertEqual((found["member"], found["current"]), (True, False))
         self.assertIn("members.py repair", found["reason"])
 
 
