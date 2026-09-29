@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -508,7 +509,8 @@ VISIBILITIES = ("public", "private", "internal")
 
 
 def _gh(*arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *arguments], capture_output=True, text=True, check=False)
+    return subprocess.run(["gh", *arguments], capture_output=True, text=True, check=False,
+                          env={**os.environ, "GH_HOST": "github.com"})
 
 
 def create_member(repo: Path, name: str, checkout: Path, integration: str, github: str,
@@ -587,9 +589,12 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
     recorded["step"] = "clone"
     _common.atomic_write(journal, json.dumps(recorded, indent=2, sort_keys=True) + "\n")
     if occupied:
-        fetched = _common.run_git(resolved, "fetch", "-q", "origin")
+        fetched = _common.run_git(resolved, "fetch", "-q", "--prune", "origin")
         if fetched.returncode != 0:
             raise MembersError(f"could not fetch member checkout {resolved}: {(fetched.stderr or fetched.stdout).strip()}")
+        default = _common.run_git(resolved, "remote", "set-head", "origin", "--auto")
+        if default.returncode != 0 or _git(resolved, "symbolic-ref", "--short", "refs/remotes/origin/HEAD") != "origin/main":
+            raise MembersError(f"member remote default must be main: {resolved}")
         baseline = _common.run_git(resolved, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
         if baseline.returncode != 0:
             raise MembersError(f"member checkout {resolved} has no current origin/main")
@@ -598,7 +603,6 @@ def create_member(repo: Path, name: str, checkout: Path, integration: str, githu
             if _common.run_git(resolved, "merge-base", "--is-ancestor", "HEAD", "origin/main").returncode != 0:
                 raise MembersError(f"member checkout {resolved} has history unrelated to current origin/main")
         else:
-            _git(resolved, "remote", "set-head", "origin", "-a")
             _git(resolved, "checkout", "-B", "main", "origin/main")
     else:
         cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))

@@ -215,6 +215,27 @@ class MemberCreateTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse(self.journal().exists())
 
+    def test_gh_pins_github_com_host(self) -> None:
+        fake_gh = self.base / "gh"
+        fake_gh.write_text("#!/bin/sh\nprintf '%s\\n' \"$GH_HOST\"\n", encoding="utf-8")
+        fake_gh.chmod(0o755)
+        with mock.patch.dict(os.environ, {"GH_HOST": "enterprise.example", "PATH": f"{self.base}:{os.environ['PATH']}"}):
+            result = members._gh("repo", "view", "acme/web")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "github.com")
+
+    def test_deleted_main_is_not_reused_from_stale_tracking_ref(self) -> None:
+        self.gh("repo", "create", "acme/web", "--private", "--add-readme")
+        git(self.base, "clone", "-q", URL, str(self.checkout))
+        git(self.remote, "branch", "next", "main")
+        git(self.remote, "symbolic-ref", "HEAD", "refs/heads/next")
+        git(self.remote, "branch", "-D", "main")
+        self.calls.clear()
+        with self.assertRaisesRegex(members.MembersError, "remote default must be main"):
+            self.create()
+        self.assertEqual([call[:2] for call in self.calls], [("repo", "view")])
+        self.assertFalse((self.coordinator / ".project" / "MEMBERS.md").exists())
+
     def test_recreated_remote_does_not_adopt_unrelated_clone(self) -> None:
         self.gh("repo", "create", "acme/web", "--private", "--add-readme")
         git(self.base, "clone", "-q", URL, str(self.checkout))
