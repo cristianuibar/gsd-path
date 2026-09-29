@@ -139,6 +139,25 @@ test("Node and Python installers share target ownership locks", async () => {
   await runInstall([installer.targetPlan("claude", target)]);
 });
 
+test("Node and Python lock identities agree for Windows 8.3 short names", {
+  skip: process.platform !== "win32" && "Windows short names only",
+}, () => {
+  const target = path.join(root, "long-directory-name", "skills");
+  fs.mkdirSync(target, { recursive: true });
+  const lookup = spawnSync("cmd", ["/d", "/s", "/c", `"for %I in ("${target}") do @echo %~sI"`], {
+    encoding: "utf8", windowsVerbatimArguments: true,
+  });
+  assert.equal(lookup.status, 0, lookup.stderr);
+  // Volumes with 8.3 names disabled return the long path; the check still holds.
+  const short = lookup.stdout.trim();
+  const probe = spawnSync(installer.detectPythonInterpreter(), ["-B", "-c",
+    "import sys; from pathlib import Path; from scripts.install import _install_lock_path; print(_install_lock_path(Path(sys.argv[1])))",
+    short,
+  ], { cwd: REPO_ROOT, encoding: "utf8" });
+  assert.equal(probe.status, 0, probe.stderr);
+  assert.equal(installer.installLockPath(short), probe.stdout.trim());
+});
+
 test("project adapter receives install options and doctor roots", async () => {
   const calls = [];
   installer.hooks.projectAdapter = (...args) => { calls.push(args); return ["receipt"]; };

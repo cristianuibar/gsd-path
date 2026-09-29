@@ -462,12 +462,17 @@ function materializedResourceBytes(source, destination) {
   return Buffer.from(rewriteRouterAliasSkill(data.toString("utf8"), alias, canonical));
 }
 
+// The JavaScript realpath keeps Windows 8.3 short names (C:\Users\LONGNA~1);
+// Python's resolve() expands them, and both installers must hash one lock
+// identity per target, so Windows asks the OS for the final path as Python does.
+const realpath = process.platform === "win32" ? fs.realpathSync.native : fs.realpathSync;
+
 function resolveNonStrict(value) {
   let prefix = path.resolve(value);
   const suffix = [];
   for (;;) {
     try {
-      return path.join(fs.realpathSync(prefix), ...suffix);
+      return path.join(realpath(prefix), ...suffix);
     } catch {
       const parent = path.dirname(prefix);
       if (parent === prefix) return path.join(prefix, ...suffix);

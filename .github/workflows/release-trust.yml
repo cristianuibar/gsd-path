@@ -14,6 +14,14 @@ concurrency:
 jobs:
   verify-release-evidence:
     runs-on: ubuntu-latest
+    env:
+      # Detached automatic gc and maintenance race temporary-repository cleanup
+      # in the tests ("Directory not empty"); scripts/dev/py.mjs appends to these.
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: gc.autoDetach
+      GIT_CONFIG_VALUE_0: "false"
+      GIT_CONFIG_KEY_1: maintenance.autoDetach
+      GIT_CONFIG_VALUE_1: "false"
     steps:
       - uses: actions/checkout@v4
         with:

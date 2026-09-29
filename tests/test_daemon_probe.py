@@ -189,6 +189,26 @@ class ParseStateTests(unittest.TestCase):
         self.assertTrue(probe.is_project_root(self.root))
         self.assertFalse(probe.is_project_root(Path(self.tmp.name)))
 
+    def test_windows_state_read_retries_a_replace_in_progress(self) -> None:
+        state = self.root / ".project" / "STATE.md"
+        real = Path.read_text
+        attempts = []
+
+        def read_text(path, *args, **kwargs):
+            attempts.append(path)
+            if len(attempts) < 3:
+                raise PermissionError(13, "Access is denied")
+            return real(path, *args, **kwargs)
+
+        with mock.patch.object(probe.os, "name", "nt"), \
+                mock.patch.object(probe.time, "sleep"), \
+                mock.patch.object(Path, "read_text", read_text):
+            self.assertTrue(probe.is_project_root(self.root))
+        self.assertEqual(len(attempts), 3)
+        with mock.patch.object(probe.os, "name", "posix"), \
+                mock.patch.object(Path, "read_text", side_effect=PermissionError(13, "denied")):
+            self.assertEqual(probe.parse_state_file(state), {})
+
 
 class ParseTaskTests(unittest.TestCase):
     def setUp(self) -> None:
