@@ -1129,7 +1129,7 @@ def _classify_plan_drift(
         for name in active_members:
             member_changes[name] = [
                 item for item in pipeline_state._run_git(
-                    checkouts[name], "diff", "--name-only", "-z", bases[name], merges[name]
+                    checkouts[name], "diff", "--no-renames", "--name-only", "-z", bases[name], merges[name]
                 ).stdout.split("\0") if item
             ] if name in merges else []
 

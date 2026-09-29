@@ -57,13 +57,27 @@ class MemberDriftTests(unittest.TestCase):
         (project / "next" / "review" / "PLAN-PANEL.md").write_text("# Plan review panel\n\nStatus: ready\n",
                                                                     encoding="utf-8")
         self.approval_base = run_git(self.member, "rev-parse", "HEAD").stdout.strip()
+
+    def approve(self, *, done: bool = False) -> None:
+        if done:
+            task = self.repo / ".project" / "next" / "tasks" / "T001-change-app.md"
+            task.write_text(
+                task.read_text(encoding="utf-8")
+                .replace("status: pending", "status: done")
+                .replace("agent: null", "agent: coder")
+                .replace("base: null", f"base: {self.approval_base}"),
+                encoding="utf-8",
+            )
         state_checkpoint.checkpoint_approval(self.repo, "plan", run_git(self.repo, "rev-parse", "HEAD").stdout.strip(),
                                              ".project/next")
 
-    def ship(self, changed: str) -> str:
+    def ship(self, changed: str, *, rename_from: str = "") -> str:
         """The shipped milestone merged a member change to `changed` into the member's main."""
         run_git(self.member, "switch", "-c", "gsd-path/demo-M001")
-        (self.member / changed).write_text("changed = True\n", encoding="utf-8")
+        if rename_from:
+            run_git(self.member, "mv", rename_from, changed)
+        else:
+            (self.member / changed).write_text("changed = True\n", encoding="utf-8")
         run_git(self.member, "commit", "-am", "member landing")
         reviewed = run_git(self.member, "rev-parse", "HEAD").stdout.strip()
         run_git(self.member, "switch", "main")
@@ -88,11 +102,13 @@ class MemberDriftTests(unittest.TestCase):
         return integrate
 
     def test_approval_records_the_member_base_the_brief_was_checked_at(self) -> None:
+        self.approve()
         common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
         recorded = json.loads((common / "gsd-path" / "lookahead-member-bases" / "second.json").read_text())
         self.assertEqual(recorded["bases"], {"web": self.approval_base})
 
     def test_member_change_to_a_declared_path_flags_the_task(self) -> None:
+        self.approve()
         integrate = self.ship("app.py")
         result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
         self.assertEqual(result["drift"]["class"], "changed")
@@ -102,11 +118,13 @@ class MemberDriftTests(unittest.TestCase):
         self.assertEqual(again["drift"], result["drift"])
 
     def test_member_change_elsewhere_keeps_the_plan_clean(self) -> None:
+        self.approve()
         integrate = self.ship("other.py")
         result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
         self.assertEqual(result["drift"]["class"], "clean")
 
     def test_missing_member_bases_stay_unverifiable(self) -> None:
+        self.approve()
         common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
         (common / "gsd-path" / "lookahead-member-bases" / "second.json").unlink()
         integrate = self.ship("other.py")
@@ -114,30 +132,22 @@ class MemberDriftTests(unittest.TestCase):
         self.assertEqual(result["drift"]["class"], "unverifiable")
 
     def test_done_member_task_needs_no_recorded_base_at_promotion(self) -> None:
-        task = self.repo / ".project" / "next" / "tasks" / "T001-change-app.md"
-        task.write_text(
-            task.read_text(encoding="utf-8")
-            .replace("status: pending", "status: done")
-            .replace("agent: null", "agent: coder")
-            .replace("base: null", f"base: {self.approval_base}"),
-            encoding="utf-8",
-        )
-        (self.repo / ".project" / "next" / "STATE.md").write_text(
-            state_text(status="active"), encoding="utf-8",
-        )
-        plan = self.repo / ".project" / "next" / "plan" / "PLAN.md"
-        plan.write_text(plan.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-        state_checkpoint.checkpoint_approval(
-            self.repo, "plan", run_git(self.repo, "rev-parse", "HEAD").stdout.strip(),
-            ".project/next",
-        )
+        self.approve(done=True)
         common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
-        (common / "gsd-path" / "lookahead-member-bases" / "second.json").unlink()
+        self.assertFalse((common / "gsd-path" / "lookahead-member-bases" / "second.json").exists())
         integrate = self.ship("app.py")
         result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
         self.assertEqual(result["drift"]["class"], "clean")
         self.assertEqual(result["drift"]["task_ids"], [])
         self.assertEqual(result["drift"]["changed_paths"], [])
+
+    def test_member_rename_of_declared_path_flags_the_task(self) -> None:
+        self.approve()
+        integrate = self.ship("renamed.py", rename_from="app.py")
+        result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
+        self.assertEqual(result["drift"]["class"], "changed")
+        self.assertEqual(result["drift"]["task_ids"], ["T001"])
+        self.assertIn("web:app.py", result["drift"]["changed_paths"])
 
 
 if __name__ == "__main__":
