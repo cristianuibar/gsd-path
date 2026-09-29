@@ -75,8 +75,12 @@ class MemberShipTests(unittest.TestCase):
         proven = {"member": "web", "merge": "c" * 40, "tag": TAG, "tag_object": "e" * 40}
         with mock.patch.object(integration, "validate_member_integrated", return_value=proven) as checked:
             result = integration.integrate(self.repo, "demo")
-        checked.assert_called_with(self.repo.resolve(), "web", self.archive.relative_to(self.repo).as_posix(),
-                                   MEMBER_HEAD)
+            checked.assert_called_with(self.repo.resolve(), "web", self.archive.relative_to(self.repo).as_posix(),
+                                       MEMBER_HEAD, refresh=True)
+            checked.reset_mock()
+            integration.validate_integrated(self.repo, "demo", refresh=False)
+            checked.assert_called_once_with(self.repo.resolve(), "web", self.archive.relative_to(self.repo).as_posix(),
+                                            MEMBER_HEAD, refresh=False)
         self.assertEqual(result["members"], [self.row()])
         with mock.patch.object(integration, "validate_member_integrated", return_value={**proven, "merge": "f" * 40}):
             with self.assertRaisesRegex(ArchiveError, "member web"):
