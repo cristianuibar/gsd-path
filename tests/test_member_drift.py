@@ -113,6 +113,32 @@ class MemberDriftTests(unittest.TestCase):
         result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
         self.assertEqual(result["drift"]["class"], "unverifiable")
 
+    def test_done_member_task_needs_no_recorded_base_at_promotion(self) -> None:
+        task = self.repo / ".project" / "next" / "tasks" / "T001-change-app.md"
+        task.write_text(
+            task.read_text(encoding="utf-8")
+            .replace("status: pending", "status: done")
+            .replace("agent: null", "agent: coder")
+            .replace("base: null", f"base: {self.approval_base}"),
+            encoding="utf-8",
+        )
+        (self.repo / ".project" / "next" / "STATE.md").write_text(
+            state_text(status="active"), encoding="utf-8",
+        )
+        plan = self.repo / ".project" / "next" / "plan" / "PLAN.md"
+        plan.write_text(plan.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        state_checkpoint.checkpoint_approval(
+            self.repo, "plan", run_git(self.repo, "rev-parse", "HEAD").stdout.strip(),
+            ".project/next",
+        )
+        common = Path(run_git(self.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
+        (common / "gsd-path" / "lookahead-member-bases" / "second.json").unlink()
+        integrate = self.ship("app.py")
+        result = state_promote.promote_next(self.repo, "second", "gsd-path/M002", integrate)
+        self.assertEqual(result["drift"]["class"], "clean")
+        self.assertEqual(result["drift"]["task_ids"], [])
+        self.assertEqual(result["drift"]["changed_paths"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1102,10 +1102,15 @@ def _classify_plan_drift(
         task_id: str(check_handoffs._strict_frontmatter(contract.text, contract.path).get("repo") or "")
         for task_id, contract in approved.items()
     }
+    active_member_tasks = {
+        task_id for task_id, name in task_repos.items()
+        if name and check_handoffs._task_scalar(approved[task_id].text, task_id, "status") != "done"
+    }
+    active_members = {task_repos[task_id] for task_id in active_member_tasks}
     member_changes: dict[str, list] = {}
-    if any(task_repos.values()):
+    if active_members:
         bases = _lookahead_member_bases(repo, str(state.milestone)) or {}
-        if any(name and name not in bases for name in task_repos.values()):
+        if any(name not in bases for name in active_members):
             return {
                 "class": "unverifiable",
                 "checkpoint": checkpoint,
@@ -1121,7 +1126,7 @@ def _classify_plan_drift(
             import members
         checkouts = {item["name"]: Path(item["checkout"]) for item in members.read_members(repo)}
         merges = _shipped_member_merges(repo, landing or revision)
-        for name in {name for name in task_repos.values() if name}:
+        for name in active_members:
             member_changes[name] = [
                 item for item in pipeline_state._run_git(
                     checkouts[name], "diff", "--name-only", "-z", bases[name], merges[name]
@@ -1151,6 +1156,8 @@ def _classify_plan_drift(
     product_paths: set[str] = set()
     for task_id, contract in approved.items():
         member = task_repos.get(task_id)
+        if member and task_id not in active_member_tasks:
+            continue
         matches = sorted(
             (f"{member}:{changed_path}" if member else changed_path)
             for changed_path in (member_changes[member] if member else changed)
