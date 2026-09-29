@@ -536,6 +536,7 @@ def _prepare_transaction(
     branch: str,
     archive: Optional[str],
     discussion: Optional[dict[str, bytes]],
+    member_fields: Optional[dict[str, str]] = None,
 ) -> dict[str, object]:
     transaction = {
         "schema": UNDO_TRANSACTION_SCHEMA,
@@ -553,6 +554,8 @@ def _prepare_transaction(
         ),
         "discussion": _encode_discussion(discussion),
     }
+    if member_fields is not None:
+        transaction.update(member_fields)
     _write_json(_git_path(repo, UNDO_TRANSACTION_NAME), transaction)
     return transaction
 
@@ -649,7 +652,7 @@ def _transaction_recovery_stage(
     expected_head = str(transaction["expected_head"])
     parent = str(transaction["parent"])
     current = _optional_rev(repo, "HEAD")
-    if transaction["kind"] == "checkpoint":
+    if transaction["kind"] in {"checkpoint", "member-task"}:
         allowed = {expected_head, parent}
     else:
         allowed = {expected_head}
@@ -691,6 +694,8 @@ def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
         return
     if tip != transaction["landing"]:
         raise UndoError(f"member {member} bound branch moved during undo")
+    if _member_undo_parent(repo, member, str(transaction["landing"])) != transaction["member_parent"]:
+        raise UndoError(f"member {member} landing parent changed during undo")
     bound = Path(isolation.member_bound_checkout(repo, member)["checkout"])
     if _run_git(bound, "status", "--porcelain", "--untracked-files=all").stdout:
         raise UndoError(f"member {member} bound checkout is dirty")
@@ -698,6 +703,14 @@ def _undo_member_landing(repo: Path, transaction: dict[str, object]) -> None:
 
 
 def _finish_transaction(repo: Path, transaction: dict[str, object]) -> None:
+    if transaction["kind"] == "member-task":
+        with isolation._member_landing_lock(repo):
+            _finish_transaction_locked(repo, transaction)
+        return
+    _finish_transaction_locked(repo, transaction)
+
+
+def _finish_transaction_locked(repo: Path, transaction: dict[str, object]) -> None:
     if transaction["kind"] == "member-task":
         _undo_member_landing(repo, transaction)
     stage = _transaction_recovery_stage(repo, transaction)
@@ -1037,11 +1050,10 @@ def apply_undo(repo: Path, kind: str, expected_head: str) -> dict[str, object]:
             raise UndoError("worktree changed after member task undo preview")
         _require_unpublished_reset(resolved, str(target["branch"]))
         transaction = _prepare_transaction(
-            resolved, kind, expected_head, str(target["parent"]), str(target["branch"]), None, None
+            resolved, kind, expected_head, str(target["parent"]), str(target["branch"]), None, None,
+            {"member": str(target["member"]), "landing": str(target["landing"]),
+             "member_parent": str(target["member_parent"])},
         )
-        transaction.update(member=target["member"], landing=target["landing"],
-                           member_parent=target["member_parent"])
-        _write_json(_git_path(resolved, UNDO_TRANSACTION_NAME), transaction)
         _finish_transaction(resolved, transaction)
     elif kind == "task":
         parent = target["parent"]
