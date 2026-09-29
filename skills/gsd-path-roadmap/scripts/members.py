@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 
 # Runtime helpers must not modify their immutable installation.
@@ -177,6 +178,21 @@ def member_role(checkout: Path) -> Optional[dict[str, object]]:
     raise stale
 
 
+def detect_member(checkout: Path) -> dict[str, object]:
+    """Whether a repo is a member: its coordinator, name, and whether its marker is current."""
+    checkout = Path(checkout).resolve()
+    named = marker_coordinator(checkout)
+    if named is None:
+        return {"member": False, "checkout": str(checkout)}
+    try:
+        role = member_role(checkout)
+    except MembersError as error:
+        return {"member": True, "current": False, "checkout": str(checkout),
+                "coordinator": str(named), "reason": str(error)}
+    return {"member": True, "current": True, "checkout": str(checkout), "coordinator": str(role["coordinator"]),
+            "project": role["project"], "name": role["name"]}
+
+
 def read_members(coordinator: Path) -> list[dict[str, str]]:
     """Parse MEMBERS.md; an absent file means a single-repo project."""
     path = coordinator / ".project" / MEMBERS_FILE
@@ -254,7 +270,8 @@ def check_member(
         raise MembersError("the coordinator cannot be its own member")
     if _git(checkout, "status", "--porcelain", "--untracked-files=all"):
         raise MembersError(f"member has uncommitted changes: {checkout}")
-    remote = _git(checkout, "remote", "get-url", "origin")
+    # The configured URL, not `get-url`, which expands local insteadOf rewrites.
+    remote = _git(checkout, "config", "--get", "remote.origin.url")
     if not GITHUB_REMOTE_RE.fullmatch(remote):
         raise MembersError(f"member requires a GitHub.com origin: {remote}")
     if recorded_remote is not None and remote != recorded_remote:
@@ -418,7 +435,7 @@ def lock_build_members(coordinator: Path) -> Optional[list[dict[str, str]]]:
         if role is None or role["coordinator"] != root or role["name"] != member["name"]:
             raise MembersError(f"member marker for {member['name']} is missing or stale; "
                                f"run members.py repair --repo {root}")
-        remote = _git(checkout, "remote", "get-url", "origin")
+        remote = _git(checkout, "config", "--get", "remote.origin.url")
         if remote != member["remote"]:
             raise MembersError(f"member origin changed: {member['remote']} -> {remote}")
         require_origin_main(checkout)
@@ -483,6 +500,58 @@ def add_member(repo: Path, name: str, checkout: Path, integration: str) -> list[
     return members
 
 
+MEMBER_CREATE_SCHEMA = "gsd-path/member-create/v1"
+VISIBILITIES = ("public", "private", "internal")
+
+
+def _gh(*arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *arguments], capture_output=True, text=True, check=False)
+
+
+def create_member(repo: Path, name: str, checkout: Path, integration: str, github: str,
+                  visibility: str) -> list[dict[str, str]]:
+    """Greenfield member: create the approved GitHub repo, clone it, then join it.
+
+    A journal in the coordinator Git directory keeps the approved target before any
+    external action; a rerun resumes each step and never creates a second repo."""
+    root, state = _coordinator(repo)
+    if state.phase in {"build", "ship"}:
+        raise MembersError("members change only at a milestone boundary, not during build or ship")
+    if not NAME_RE.fullmatch(name) or not re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", github):
+        raise MembersError(f"invalid member name or GitHub repository: {name!r} {github!r}")
+    if visibility not in VISIBILITIES:
+        raise MembersError(f"visibility must be one of {', '.join(VISIBILITIES)}")
+    resolved = checkout.resolve()
+    target = {"schema": MEMBER_CREATE_SCHEMA, "name": name, "github": github, "visibility": visibility,
+              "checkout": str(resolved), "integration": integration}
+    common = Path(_git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+    journal = common / "gsd-path" / "member-create" / f"{name}.json"
+    if journal.is_file():
+        if json.loads(journal.read_text(encoding="utf-8")) != target:
+            raise MembersError(f"member-create journal for {name} holds a different approved target: {journal}")
+    else:
+        if any(member["name"] == name for member in read_members(root)):
+            raise MembersError(f"member already recorded: {name}")
+        if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
+            raise MembersError(f"member checkout path is occupied: {resolved}")
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        _common.atomic_write(journal, json.dumps(target, indent=2, sort_keys=True) + "\n")
+    url = f"https://github.com/{github}.git"
+    if _gh("repo", "view", github, "--json", "name").returncode != 0:
+        created = _gh("repo", "create", github, f"--{visibility}", "--add-readme")
+        if created.returncode != 0:
+            raise MembersError(f"could not create {github}: {(created.stderr or created.stdout).strip()}")
+    if not resolved.exists() or not any(resolved.iterdir()):
+        cloned = _common.run_git(resolved.parent, "clone", "-q", url, str(resolved))
+        if cloned.returncode != 0:
+            raise MembersError(f"could not clone {url}: {(cloned.stderr or cloned.stdout).strip()}")
+    elif _git(resolved, "config", "--get", "remote.origin.url") != url:
+        raise MembersError(f"member checkout {resolved} is not a clone of {url}")
+    joined = add_member(root, name, resolved, integration)
+    journal.unlink()
+    return joined
+
+
 def validate_members(repo: Path) -> list[dict[str, str]]:
     root, state = _coordinator(repo)
     members = read_members(root)
@@ -528,8 +597,13 @@ def parser() -> argparse.ArgumentParser:
     add.add_argument("--name", required=True)
     add.add_argument("--checkout", required=True, type=Path)
     add.add_argument("--integration", choices=INTEGRATIONS, default="default")
+    add.add_argument("--create", metavar="OWNER/NAME",
+                     help="greenfield: create this GitHub repo and clone it to --checkout first")
+    add.add_argument("--visibility", choices=VISIBILITIES, help="visibility for --create")
     validate = commands.add_parser("validate", help="check MEMBERS.md and every member")
     validate.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
+    detect = commands.add_parser("detect", help="report whether a repo is a member, and of which coordinator")
+    detect.add_argument("--checkout", required=True, type=Path, help="repository to inspect")
     repair = commands.add_parser("repair", help="rewrite missing or stale member markers")
     repair.add_argument("--repo", required=True, type=Path, help="coordinator Git root")
     return result
@@ -538,7 +612,15 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        if arguments.command == "add":
+        if arguments.command == "detect":
+            print(json.dumps(detect_member(arguments.checkout), sort_keys=True))
+            return 0
+        if arguments.command == "add" and arguments.create:
+            if arguments.visibility is None:
+                raise MembersError("--create requires --visibility")
+            members = create_member(arguments.repo, arguments.name, arguments.checkout,
+                                    arguments.integration, arguments.create, arguments.visibility)
+        elif arguments.command == "add":
             members = add_member(
                 arguments.repo, arguments.name, arguments.checkout, arguments.integration
             )
