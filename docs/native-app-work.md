@@ -24,10 +24,10 @@ they write through the existing installer and helpers.
 | A0 Same-origin writes | Every daemon POST route (`/api/plugin/*`, `/api/config/parents`, `/api/refresh`) refuses a foreign Host, a cross-site Origin, and a non-JSON body, like `/api/path-config`. Update the dashboard's bodyless `/api/refresh` POST to send JSON. Tracked as its own task; it lands before any app build is published. |
 | A1 Shell and backend | Tauri 2 project in `daemon/app/`. On first run the app checks Python 3.9+ and Git and shows a static setup page with the fix when one is missing. Otherwise it creates or reuses `~/.gsd-path/venv`, installs the bundled daemon package, starts `gsd_daemon serve` when needed, and loads the dashboard. A daemon already running on the port is reused, not duplicated. On quit, the app stops only a daemon process it launched; a reused daemon keeps running. Tray menu matches the Swift app: project count and attention count, Open dashboard, Open in browser, Start, Stop, Restart, Quit, update notice. Launch at login uses Tauri autostart. |
 | A2 Builds | CI builds the app on macOS (arm64 and x64), Windows, and Linux, and attaches `.dmg`, `.msi`, `.deb`, and AppImage files to a GitHub pre-release tagged `app-v<version>` for testers. macOS builds are ad-hoc signed. OS code signing is required before the first non-prerelease app release. |
-| A3 Self-update | The Tauri updater reads a static `latest.json` from GitHub Releases. CI signs update artifacts with the owner's updater key, stored as a repository secret. The app checks on launch and from the tray, and asks before installing. |
+| A3 Self-update | The Tauri updater reads `latest.json` from the fixed `app-latest` GitHub pre-release at `https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json`. CI replaces that asset after each `app-v*` release and signs update artifacts with the owner's updater key, stored as a repository secret. The app checks on launch and from the tray, and asks before installing. |
 | A4 Install view | One page: hosts × installed skill version × latest, with Install and Update. Per project: runtime version, guard hooks present, and Update. For a coordinator with `.project/MEMBERS.md`: each member's marker, member hooks, and `origin/main`, with **Install hooks** (`install.py --member-of`) and **Repair** (`members.py repair`). Each failed check shows the exact fix. All data comes from installer and helper output; the daemon adds no rule of its own. |
 | A5 Stats | Charts from data the daemon already records: tokens and cost over time, time per phase, task throughput per wave, verify pass and fail history. Missing data shows as missing, never as zero. |
-| A6 Retire Swift | Remove `daemon/macos` and the autostart code in `gsd_daemon install` that the app replaces. On first launch, reuse `gsd_daemon uninstall` cleanup to retire old LaunchAgent, Startup shortcut, systemd unit, and Swift app login item registrations; keep this cleanup after removing the old install path. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
+| A6 Retire Swift | Remove `daemon/macos` and the autostart code in `gsd_daemon install` that the app replaces. On first launch, reuse `gsd_daemon uninstall` cleanup to retire old LaunchAgent, Startup shortcut, systemd unit, and Swift app login item registrations; keep this cleanup after removing the old install path. Check that each old registration is gone before enabling app autostart, regardless of the uninstall exit status. If cleanup fails, show the user the manual fix. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
 
 A0 and A1 come first. A2 needs A1. A3 needs A2. A4 and A5 need only A1 and
 can run in parallel. A6 comes last.
@@ -46,17 +46,19 @@ can run in parallel. A6 comes last.
 - A2: the release workflow produces all listed files, and each installs and
   launches on a clean machine or VM for that OS. Unsigned builds are available
   only through pre-releases; the first non-prerelease build has OS signing.
-- A3: an app at version N updates to N+1 from a test release; an update with
-  a bad signature is refused.
+- A3: after a newer npm `v*` release exists, an app at N updates to N+1
+  through `app-latest`; an update with a bad signature is refused.
 - A4: a two-repo fixture with one member missing hooks shows that member as
   unguarded; **Install hooks** fixes it; a moved coordinator shows a stale
   marker and **Repair** fixes it.
 - A5: a sample project renders every chart; a project without a usage ledger
   shows the missing state.
 - A6: upgrade from an old daemon install on each OS, including the Swift app
-  on macOS. On first launch, the new app removes the old startup registration
-  and Swift login item, then starts the dashboard; only the new app starts at
-  login. Run `gsd_daemon install` and confirm it no longer registers autostart.
+  on macOS. On first launch, check that every old startup registration and
+  Swift login item is gone after uninstall; the dashboard launches and only
+  the new app starts at login. Simulate a failed cleanup and see the manual
+  fix with no new app autostart. Run `gsd_daemon install` and confirm it no
+  longer registers autostart.
   Separately review active docs and install messages for correct app download
   and startup instructions.
 
@@ -71,6 +73,9 @@ can run in parallel. A6 comes last.
 - Remove autostart from `gsd_daemon install` in A6. Scripted installs lose
   startup behavior; the app becomes the only autostart path (owner ruling
   2026-09-29).
+- App updates use the fixed `app-latest` GitHub pre-release asset
+  `https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json`;
+  CI replaces it on each `app-v*` release (owner ruling 2026-09-29).
 - The daemon runs from a venv, not a frozen binary; see the ADR.
 - The app has its own version and `app-v*` release tags, separate from the
   npm package (owner ruling 2026-09-29). The npm release workflow triggers

@@ -18,7 +18,8 @@ the plugin and the app, and see project stats.
   when needed and stops only a process it launched. A daemon it reuses stays
   running on quit. On first launch, the app uses the daemon's existing
   uninstall cleanup to retire the old LaunchAgent, Startup shortcut, systemd
-  unit, and Swift app login item. Tauri autostart then takes over.
+  unit, and Swift app login item. It checks that each old registration is gone
+  before enabling Tauri autostart and shows a manual fix if cleanup fails.
 - **Backend.** The Python daemon stays the backend. The app creates
   `~/.gsd-path/venv` with the user's Python 3.9+ and installs the bundled
   daemon package into it, as `gsd_daemon install` does today. It does not
@@ -35,10 +36,11 @@ the plugin and the app, and see project stats.
   like `/api/path-config`. The app never writes pipeline state. Multi-repo
   actions are member hook install and marker repair; joining a member stays
   in the router.
-- **Updates.** The app updates through the Tauri updater from a static
-  `latest.json` on GitHub Releases. Tauri requires signed update artifacts;
-  the key is a free keypair the owner holds, not OS code signing. The plugin
-  updates through the daemon's existing plugin manager.
+- **Updates.** The app updates through the Tauri updater from `latest.json`
+  on the fixed `app-latest` GitHub pre-release. CI replaces that asset after
+  each `app-v*` release. Tauri requires signed update artifacts; the key is a
+  free keypair the owner holds, not OS code signing. The plugin updates through
+  the daemon's existing plugin manager.
 - **Signing.** Unsigned `app-v*` builds are GitHub pre-releases for testers only.
   macOS builds carry an ad-hoc signature, which Apple Silicon requires; users
   still approve the app once in Privacy & Security. Windows shows a SmartScreen
