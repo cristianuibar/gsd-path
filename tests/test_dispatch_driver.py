@@ -10,8 +10,9 @@ import tempfile
 import textwrap
 import time
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
+from typing import Iterator
 from unittest import mock
 
 from scripts import dispatch_driver, pipeline_state
@@ -153,6 +154,29 @@ class DispatchDriverTests(unittest.TestCase):
 
     def head(self, root: Path) -> str:
         return run_git(root, "rev-parse", "HEAD").stdout.strip()
+
+    @contextmanager
+    def holding_wrappers(self) -> Iterator[None]:
+        """Keep the wrappers an in-process driver call starts, and wait for them on exit.
+
+        spawn() drops its Popen handle because the wrapper is meant to outlive the
+        driver command. In the test process that handle is collected while the
+        wrapper still runs (ResourceWarning: subprocess N is still running), and
+        the wrapper may still be writing receipts under the temporary directory.
+        """
+        started = []
+        popen = subprocess.Popen
+
+        def start(*args, **kwargs):
+            started.append(popen(*args, **kwargs))
+            return started[-1]
+
+        try:
+            with mock.patch.object(dispatch_driver.subprocess, "Popen", side_effect=start):
+                yield
+        finally:
+            for process in started:
+                process.wait(timeout=60)
 
     def fixture(self, root: Path, deps_t002: str = "[]", wave_t002: int = 1,
                 state: tuple = ("build", "active")) -> str:
@@ -886,7 +910,7 @@ class DispatchDriverTests(unittest.TestCase):
                                      child_command=f"{sys.executable} {root / 'fake_reviewer.py'}",
                                      child_timeout=None)
         review = dispatch_driver.Review(root, options)
-        with mock.patch.object(review, "settle"):
+        with self.holding_wrappers(), mock.patch.object(review, "settle"):
             self.assertEqual(review.run()["status"], "in-flight")
         states = review.current_states(["contract", "adversarial"])
         for state in states.values():
@@ -1023,8 +1047,9 @@ class DispatchDriverTests(unittest.TestCase):
                                              template=PROJECT_ROOT / "skills/gsd-path-build/templates/wave-review.md",
                                              child_command=f"{sys.executable} {root / 'fake_reviewer.py'}",
                                              child_timeout=None)
-                with mock.patch.object(dispatch_driver.isolation, helper,
-                                       side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
+                with self.holding_wrappers(), \
+                        mock.patch.object(dispatch_driver.isolation, helper,
+                                          side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
                     receipt = dispatch_driver.Review(root, options).run()
                 self.assertEqual(receipt["status"], "blocked", receipt)
                 self.assertEqual(sorted(receipt["lenses"]), ["adversarial", "contract"])
@@ -1382,8 +1407,9 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(self.round(root, "--wait", "60")["status"], "done")
         self.assertEqual(self.review(root, "--wait", "60")["status"], "pass")
         options = self.panel_options()
-        with mock.patch.object(dispatch_driver.isolation, "retire",
-                               side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
+        with self.holding_wrappers(), \
+                mock.patch.object(dispatch_driver.isolation, "retire",
+                                  side_effect=dispatch_driver.isolation.IsolationError("cleanup failed")):
             panel = dispatch_driver.Panel(root, options)
             receipt = panel.run()
         self.assertEqual(receipt["status"], "blocked", receipt)
