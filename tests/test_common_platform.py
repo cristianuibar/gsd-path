@@ -72,19 +72,22 @@ class ReplaceTests(unittest.TestCase):
     def test_non_busy_error_is_not_retried(self) -> None:
         error = PermissionError(13, "denied")
         error.winerror = 1920
+        # Build paths before patching os.name: pathlib picks WindowsPath from it.
+        source, destination = Path("a"), Path("b")
         with mock.patch.object(_common.os, "name", "nt"), \
                 mock.patch.object(_common.os, "replace", side_effect=error) as replace:
             with self.assertRaises(PermissionError):
-                _common.replace(Path("a"), Path("b"))
+                _common.replace(source, destination)
         self.assertEqual(replace.call_count, 1)
 
     def test_busy_error_is_retried(self) -> None:
         error = PermissionError(13, "busy")
         error.winerror = 32
+        source, destination = Path("a"), Path("b")
         with mock.patch.object(_common.os, "name", "nt"), \
                 mock.patch.object(_common.time, "sleep"), \
                 mock.patch.object(_common.os, "replace", side_effect=[error, error, None]) as replace:
-            _common.replace(Path("a"), Path("b"))
+            _common.replace(source, destination)
         self.assertEqual(replace.call_count, 3)
 
 
