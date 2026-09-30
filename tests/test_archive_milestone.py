@@ -3410,6 +3410,19 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             ).encode("utf-8"),
         )
 
+    def enable_external_landing_integration(self, repo: Path) -> None:
+        state = repo / ".project" / "STATE.md"
+        state.write_bytes(
+            state.read_text(encoding="utf-8")
+            .replace(
+                "archive: null\n",
+                "archive: null\n"
+                "integration_default: external-landing\n"
+                "integration: external-landing\n",
+            )
+            .encode("utf-8")
+        )
+
     def is_associated_pull_request_query(self, arguments: tuple[str, ...]) -> bool:
         return (
             len(arguments) >= 5
@@ -3590,6 +3603,95 @@ Carried forward: 1 DOCS-AUDIT ruling(s)
             },
             "body": integration.PR_CREDIT_LINE,
         }
+
+    def test_external_landing_publishes_bound_branch_and_waits(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            _archive_name, ship_sha = self.ship_canonical_bound(repo)
+            baseline = self.git(remote, "rev-parse", "main").stdout.strip()
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["status"], "awaiting-merge")
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["commit"], ship_sha)
+            self.assertEqual(self.git(remote, "rev-parse", "main").stdout.strip(), baseline)
+            self.assertEqual(
+                self.git(remote, "rev-parse", "gsd-path/M001").stdout.strip(),
+                ship_sha,
+            )
+            self.assertNotEqual(self.git(remote, "show-ref", "--tags", "--quiet").returncode, 0)
+
+    def test_external_landing_resume_after_external_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+
+            waiting = integration.integrate(repo, "demo")
+            self.assertEqual(waiting["status"], "awaiting-merge")
+
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(repo, archive_name, ship_sha, tag=False)
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+            self.git(repo, "push", "-q", "origin", "--delete", "gsd-path/M001")
+
+            result = integration.integrate(repo, "demo")
+
+            self.assertEqual(result["mode"], "external-landing")
+            self.assertEqual(result["landing"], merge_sha)
+            self.assertEqual(
+                self.git(
+                    remote, "rev-parse", f"milestone/{archive_name}^{{commit}}"
+                ).stdout.strip(),
+                merge_sha,
+            )
+            message = self.git(
+                repo,
+                "for-each-ref",
+                "--format=%(contents)",
+                f"refs/tags/milestone/{archive_name}",
+            ).stdout
+            self.assertIn("Mode: external-landing", message)
+            self.assertIn(f"Ship: {ship_sha}", message)
+            self.assertIn(f"Landing: {merge_sha}", message)
+
+            validated = integration.validate_integrated(repo, "demo")
+            self.assertEqual(validated["landing"], merge_sha)
+
+    def test_external_landing_rejects_noncanonical_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            repo = root / "primary"
+            repo.mkdir()
+            remote = root / "origin.git"
+            self.make_publishable_bound_repo(repo, remote)
+            self.enable_external_landing_integration(repo)
+            archive_name, ship_sha = self.ship_canonical_bound(repo)
+            self.git(repo, "push", "-q", "origin", "gsd-path/M001")
+            merge_sha = self.integrate_bound(
+                repo,
+                archive_name,
+                ship_sha,
+                tag=False,
+                subject="integrate: wrong subject",
+            )
+            self.git(repo, "push", "-q", "origin", f"{merge_sha}:refs/heads/main")
+
+            with self.assertRaisesRegex(
+                archive_milestone.ArchiveError,
+                pipeline_git.integrate_subject(archive_name, "main"),
+            ):
+                integration.integrate(repo, "demo")
 
     def test_pull_request_integration_creates_pr_after_publishing_ship(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

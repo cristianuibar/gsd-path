@@ -82,7 +82,7 @@ INTEGRATION_STATE_FIELDS = LEGACY_STATE_FIELDS | {
     "integration",
 }
 PROVENANCE_STATE_FIELDS = INTEGRATION_STATE_FIELDS | {"integration_source"}
-INTEGRATION_MODES = {"direct", "pull-request"}
+INTEGRATION_MODES = {"direct", "pull-request", "external-landing"}
 INTEGRATION_SOURCES = {"default", "milestone"}
 
 
