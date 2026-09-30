@@ -732,6 +732,61 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stderr)
         self.assertIn("STATE is ship", result.stderr)
 
+    def test_shell_product_writes_refused_outside_build(self):
+        self.enter_build(phase="plan")
+        installed = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parents[1] / "scripts" / "install.py"),
+                "--hooks-init",
+                "--all",
+                "--project",
+                str(self.repo),
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertEqual(0, installed.returncode, installed.stderr)
+        guard = self.repo / ".gsd-path" / "guard_hook.py"
+        denied = subprocess.run(
+            [sys.executable, str(guard)],
+            cwd=self.repo,
+            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo x > app.py"}}),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertEqual(2, denied.returncode, denied.stderr)
+        self.assertIn("GSD Path is plan", denied.stderr)
+
+    def test_shell_product_writes_allowed_in_routed_build(self):
+        self.enter_build()
+        installed = subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).resolve().parents[1] / "scripts" / "install.py"),
+                "--hooks-init",
+                "--all",
+                "--project",
+                str(self.repo),
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertEqual(0, installed.returncode, installed.stderr)
+        guard = self.repo / ".gsd-path" / "guard_hook.py"
+        allowed = subprocess.run(
+            [sys.executable, str(guard)],
+            cwd=self.repo,
+            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo x > app.py"}}),
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertEqual(0, allowed.returncode, allowed.stderr)
+
     def test_pre_commit_refuses_product_files_outside_build_without_a_message(self):
         self.enter_build(phase="ship", status="blocked")
         self.stage_product_change()
