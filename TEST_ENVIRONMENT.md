@@ -16,7 +16,9 @@ the default offline suite.
 | **bash** (Windows only) | Git for Windows | windows-latest default | Verify commands run in Git for Windows' `bash.exe`, never the System32 WSL launcher (`GSD_PATH_BASH` overrides) |
 
 The `windows` CI job runs the same gate natively on `windows-latest` with
-Python 3.9 and 3.12, and blocks like the POSIX jobs.
+Python 3.9 and 3.12, and blocks like the POSIX jobs. Each Python version runs
+as four shards; `node scripts/dev/py.mjs -m tests.ci_shard INDEX TOTAL` runs
+one shard locally and prints each test module's time.
 
 On Windows, fixture projects' Verify commands call `python3`, as POSIX projects
 do, so the test run needs a real `python3` on PATH. CI copies `python.exe` to

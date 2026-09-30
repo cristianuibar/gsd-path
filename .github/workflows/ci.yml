@@ -36,15 +36,25 @@ jobs:
         run: npm pack --dry-run --json > /dev/null
 
   windows:
+    # The serial Python suite took ~70 minutes on one Windows runner; each
+    # shard runs a quarter of the test modules (tests/ci_shard.py).
+    name: windows (${{ matrix.python-version }}, shard ${{ matrix.shard }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.12"]
+        shard: [0, 1, 2, 3]
     defaults:
       run:
         shell: bash
     steps:
+      - name: Turn off Defender real-time scanning
+        # Scanning slows the suite's many git subprocesses and small files.
+        # The runner is disposable; a refusal only costs speed.
+        continue-on-error: true
+        shell: pwsh
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
       - name: Check out LF and allow long paths
         run: |
           git config --global core.autocrlf false
@@ -75,13 +85,15 @@ jobs:
         run: npm run check:prereqs
       # The same suites as `npm run verify`, split so each reports even when
       # another fails. No PYTHONUTF8: encoding defaults must not decide results.
+      # Node tests and the sync check are fast, so shard 0 alone runs them.
       - name: Node tests
+        if: matrix.shard == 0
         run: npm test
       - name: Python tests
         if: ${{ !cancelled() }}
-        run: npm run test:python
+        run: node scripts/dev/py.mjs -m tests.ci_shard ${{ matrix.shard }} 4
       - name: Skill resource sync
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         run: npm run test:sync
 
   daemon:
