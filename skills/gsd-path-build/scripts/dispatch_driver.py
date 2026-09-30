@@ -128,7 +128,7 @@ def _reload_pinned_modules(runtime_root: Path) -> None:
         import scripts
         path = str(runtime_root)
         if path not in scripts.__path__:
-            scripts.__path__.insert(0, path)
+            scripts.__path__ = [path, *[entry for entry in scripts.__path__ if entry != path]]
         for name in _RUNTIME_ACTIVATION_ORDER:
             module = sys.modules.get(f"scripts.{name}")
             if module is not None:
