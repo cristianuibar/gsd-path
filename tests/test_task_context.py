@@ -80,12 +80,12 @@ class TaskContextTests(unittest.TestCase):
             self.assertIn('Mode: full-intent', result.stdout)
             self.assertIn(ambiguous, result.stdout)
 
-            # Provenance hashes identify source bytes, including CRLF files.
+            # Provenance hashes use normalized text (CRLF on disk becomes LF before hash).
             windows_source = original.replace('\n', '\r\n').encode()
             intent.write_bytes(windows_source)
             result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(hashlib.sha256(windows_source).hexdigest(), result.stdout)
+            self.assertIn(hashlib.sha256(original.encode()).hexdigest(), result.stdout)
 
             task.write_bytes('## Intent coverage\n\n- SC99\n'.encode("utf-8"))
             result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
