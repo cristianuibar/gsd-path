@@ -77,6 +77,54 @@ RECOVERY_BLOCKED = "recovery blocked"
 BLOCKING_STOPS = {"dependency-deadlock": "dependency deadlock", RECOVERY_BLOCKED: "blocked recovery"}
 
 
+def _activate_pinned_runtime(repo: Path) -> None:
+    """Load helper modules from the project's pinned runtime when configured."""
+    global isolation, build_state, task_context, contracts, pipeline_state
+    global archive_milestone, review_findings, review_panel, workflow_run, model_policy
+    global STOP_ERRORS
+    launcher = repo / ".gsd-path/status_runtime.py"
+    if not (repo / ".gsd-path/runtime.json").is_file() or not launcher.is_file():
+        return
+    completed = subprocess.run(
+        [sys.executable, "-B", str(launcher), "--repo", str(repo), "--runtime-path"],
+        cwd=repo,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if completed.returncode:
+        return
+    runtime = Path(completed.stdout.strip())
+    if not runtime.is_dir():
+        return
+    entry = str(runtime)
+    while entry in sys.path:
+        sys.path.remove(entry)
+    sys.path.insert(0, entry)
+    import importlib
+
+    isolation = importlib.import_module("isolation")
+    build_state = importlib.import_module("build_state")
+    task_context = importlib.import_module("task_context")
+    contracts = importlib.import_module("check_handoffs")
+    pipeline_state = importlib.import_module("pipeline_state")
+    archive_milestone = importlib.import_module("archive_milestone")
+    review_findings = importlib.import_module("review_findings")
+    review_panel = importlib.import_module("review_panel")
+    workflow_run = importlib.import_module("workflow_run")
+    model_policy = importlib.import_module("model_policy")
+    STOP_ERRORS = (
+        DriverStop,
+        isolation.IsolationError,
+        build_state.BuildStateError,
+        contracts.HandoffError,
+        review_findings.ReviewFindingsError,
+        pipeline_state.PipelineStateError,
+        archive_milestone.ArchiveError,
+        model_policy.PolicyError,
+    )
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -2026,6 +2074,7 @@ def main(argv=None) -> int:
     if arguments.action == "_child":
         return child_main(arguments.state)
     primary = arguments.repo.resolve()
+    _activate_pinned_runtime(primary)
     lock = None
     try:
         if arguments.action != "status":
