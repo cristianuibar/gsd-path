@@ -439,8 +439,9 @@ def collect_artifact_recoveries(primary: Path) -> list[Dict[str, object]]:
 
 
 def _git_file(repo: Path, revision: str, path: str) -> bytes:
+    git_path = PurePosixPath(path.replace("\\", "/")).as_posix()
     result = subprocess.run(
-        ("git", "-C", str(repo), "show", f"{revision}:{path}"),
+        ("git", "-C", str(repo), "show", f"{revision}:{git_path}"),
         capture_output=True,
         check=False,
     )

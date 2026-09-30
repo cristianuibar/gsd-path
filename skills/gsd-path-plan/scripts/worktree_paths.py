@@ -15,11 +15,14 @@ from pathlib import Path
 
 if __package__:
     from . import _common
+    from . import pipeline_git
 else:
     try:
         import _common
+        import pipeline_git
     except ImportError:
         from scripts import _common
+        from scripts import pipeline_git
 
 
 def _git(primary: Path, *args: str) -> str:
@@ -91,9 +94,13 @@ def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> 
     legacy = (primary.parent / f".{primary.name}-gsd-path-integrate-{name}"
               if kind == "integrate" else primary.parent / f"{primary.name}.gsd-path" / kind / name)
     branch = f"refs/heads/gsd-path-{kind}/{name}"
-    records = _git(primary, "worktree", "list", "--porcelain", "-z").split("\0\0")
+    output, nul_separated = pipeline_git.worktree_list_porcelain(primary)
+    if nul_separated:
+        records = output.split("\0\0")
+    else:
+        records = [block for block in output.strip().split("\n\n") if block.strip()]
     for record in records:
-        fields = record.split("\0")
+        fields = record.split("\0") if nul_separated else record.splitlines()
         # Compare as paths: git prints forward slashes on Windows.
         worktrees = [Path(field[len("worktree "):]) for field in fields if field.startswith("worktree ")]
         if legacy in worktrees and f"branch {branch}" in fields:
