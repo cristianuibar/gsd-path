@@ -146,6 +146,29 @@ def ship_commit_body(archive_path: str, reviewed_head: str, members: Sequence[di
     )
 
 
+_TRAILER_LINE = re.compile(r"^[A-Za-z-]+:\s")
+
+
+def ship_body_matches(body: str, expected_body: str) -> bool:
+    """True when body equals the contract or adds only optional git trailers after it."""
+    normalized = body.rstrip("\n")
+    expected = expected_body.rstrip("\n")
+    if normalized == expected:
+        return True
+    prefix = expected + "\n"
+    if not normalized.startswith(prefix):
+        return False
+    remainder = normalized[len(prefix):]
+    if not remainder:
+        return True
+    for line in remainder.splitlines():
+        if not line.strip():
+            return False
+        if not _TRAILER_LINE.match(line):
+            return False
+    return True
+
+
 def integrate_commit_body(
     archive_path: str,
     ship_commit: str,

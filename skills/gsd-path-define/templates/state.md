@@ -10,7 +10,7 @@ branch: null        # bound per milestone as gsd-path/M00N; after integration
                     # the router rebinds before any next-milestone file change
                     # the bound branch is never main; ship integrates it there
 archive: null       # persisted archive transaction path; never recomputed
-integration_default: direct # direct | pull-request; project setting
+integration_default: direct # direct | pull-request | external-landing; project setting
 integration: direct # current milestone; may override the default before build
 integration_source: default # default | milestone; preserves override provenance
 ---
