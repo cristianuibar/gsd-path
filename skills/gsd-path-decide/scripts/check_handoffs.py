@@ -181,7 +181,7 @@ def _read(root: Path, relative: str) -> str:
     path = root / relative
     if not path.is_file() or path.is_symlink():
         raise HandoffError(f"missing real hand-off file: {relative}")
-    return path.read_text(encoding="utf-8")
+    return _common.read_user_text(path)
 
 
 def _require_pipeline(root: Path, project_dir: str) -> Dict[str, str]:

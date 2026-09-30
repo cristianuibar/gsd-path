@@ -150,6 +150,11 @@ def verify_ledger_entries(path: Path) -> list:
     return parse_verify_ledger(path.read_text(encoding="utf-8"))
 
 
+def read_user_text(path: Path) -> str:
+    """Read a user-edited text file with CRLF normalized to LF."""
+    return path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def parse_verify_ledger(text: str) -> list:
     entries = []
     for number, line in enumerate(text.splitlines(), start=1):
