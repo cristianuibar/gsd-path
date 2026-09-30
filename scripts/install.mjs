@@ -1037,7 +1037,7 @@ async function applyTarget(plan, stagedRoot, transaction) {
     const destination = path.join(plan.root, name);
     hooks.reserveDirectory(destination);
     transaction.installed.push(destination);
-    fs.cpSync(path.join(stagedRoot, name), destination, { recursive: true, errorOnExist: true, force: false });
+    copyIntoReservedDirectory(path.join(stagedRoot, name), destination);
     await tick();
   }
   if (cursorAgent !== null) {
@@ -1049,6 +1049,18 @@ async function applyTarget(plan, stagedRoot, transaction) {
 
 function reserveDirectory(destination) {
   fs.mkdirSync(destination);
+}
+
+// Node 26 rejects recursive cpSync when the destination directory already exists
+// and errorOnExist is set. Reserve the skill directory, then copy each staged entry.
+export function copyIntoReservedDirectory(source, destination) {
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    fs.cpSync(path.join(source, entry.name), path.join(destination, entry.name), {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+  }
 }
 
 function reserveFile(destination) {
