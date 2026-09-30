@@ -903,6 +903,49 @@ class PipelineStateTests(unittest.TestCase):
                     result = pipeline_state.transition_state(repo, expected, changes, event)
                     self.assertEqual(result["state"]["status"], changes["status"])
 
+    def test_define_done_transition_requires_complete_probe_tables(self) -> None:
+        criteria = "## Success criteria\n\n1. First outcome.\n2. Second outcome.\n"
+        head = (
+            "## Edge coverage\n\n"
+            "| Edge | Criterion | Category | Disposition | Detail |\n"
+            "|------|-----------|----------|-------------|--------|\n"
+        )
+        incomplete = head + "| E1 | SC1 | none | dismissed | static |\n"
+        complete = incomplete + "| E2 | SC2 | none | dismissed | static |\n"
+        expected = {"phase": "define", "status": "active", "branch": "gsd-path/M001", "archive": None}
+        changes = {"status": "done"}
+        event = "intent approved"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            state = project / "STATE.md"
+            intent = project / "intent/INTENT.md"
+            active = state_text(phase="define", status="active", branch="gsd-path/M001").encode("utf-8")
+            state.write_bytes(active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + incomplete).encode("utf-8"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "define handoff failed"):
+                pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(state.read_bytes(), active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + complete).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # An intent written before the probe carries no tables and still passes.
+            state.write_bytes(active)
+            intent.write_bytes(("# Intent\n\n" + criteria).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # Program mode has a CHARTER and no INTENT.md.
+            state.write_bytes(active)
+            intent.unlink()
+            (project / "CHARTER.md").write_bytes(b"# Charter\n")
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
     def test_transition_compares_expected_state_before_atomic_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

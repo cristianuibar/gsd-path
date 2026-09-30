@@ -83,6 +83,21 @@ Walkthrough:
 |-----------|------|------------|
 | SC1 | T001 | AC1 |
 
+## Held-out checks
+
+<!-- Required when INTENT.md Edge coverage has a held-out edge; omit the
+     section entirely when it has none. One row per held-out edge, given to
+     the task that owns the edge's criterion. Test is a file listed in that
+     task's files (optionally `path::test_name`); the task's Verify runs it
+     and its Acceptance
+     criteria state the edge id and the ruling from INTENT.md Detail. Final
+     review cites this test's recorded result for the edge.
+     `scripts/check_handoffs.py plan` gates this table. -->
+
+| Edge | Task | Test |
+|------|------|------|
+| E1 | T001 | <test path from T001 files> |
+
 ## Dependency notes
 
 <Per non-obvious edge: the exact data or landed effect that makes X precede Y,

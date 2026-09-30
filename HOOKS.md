@@ -133,7 +133,8 @@ See [UPDATE.md](UPDATE.md).
   `git checkout -- .`/`git restore .`
 - shell writes (redirections, `tee`, `cp`, `mv`, `rm`, `sed -i`, ...) that
   target a routing control (`.git`, `.project/STATE.md`, `.project/next`,
-  `.gsd-path`) while `.project/STATE.md` exists
+  `.gsd-path`) while `.project/STATE.md` exists, or target a product file
+  outside the routed build phase (same rule as direct file-edit tools)
 - repeated assignments to the same shell variable within one command; split
   these into separate tool calls so write targets can be resolved
 - copies whose destinations, including nested recursive-copy entries, resolve
@@ -266,8 +267,10 @@ writes nor verifies that wiring. To add it yourself, register
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
 | Zed | no hook API — git hooks only | — |
 
-**Caveats:** The hook cannot prove which skill initiated a shell command or a
-build-phase edit, so AGENTS.md owns those re-entry cases. Grok and Kimi
+**Caveats:** The hook cannot prove which skill initiated a build-phase edit
+when the routed build phase is already active. Shell product writes use the
+same phase gate as file-edit tools; AGENTS.md still owns plain-prompt re-entry
+when no `.project/STATE.md` exists. Grok and Kimi
 fail-open on hook errors by design. Copilot, Kimi, Kiro, and Antigravity may
 not intercept subagent tools — treat coverage as orchestrator-level.
 

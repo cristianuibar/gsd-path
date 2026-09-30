@@ -13,7 +13,11 @@ Reviewed HEAD: <full SHA>
 Overall verdict: <pass | blocked>
 
 <!-- pass only when every criterion is met; blocked when any criterion is
-     not-met or unverifiable. -->
+     not-met or unverifiable.
+     A criterion with a held-out edge (E#) or judgment prohibition (N#) in
+     INTENT.md is met only when Check, Observed, or Reference cites every such
+     id with its evidence; otherwise it is unverifiable with
+     `Finding: insufficient spec evidence: <id> ...`. -->
 
 ## Success criteria
 

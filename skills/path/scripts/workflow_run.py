@@ -257,6 +257,9 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                         ruled.add(row[0])
                 if any(len(row) == 6 and row[4] == "NEEDS-USER" and row[0] not in ruled for row in queue):
                     raise StepFailed("DOCS-AUDIT.md has NEEDS-USER rows without a user ruling")
+            if kind == "intent":
+                # Malformed or incomplete spec-probe tables are not a pre-approvable draft.
+                step("check_handoffs.py", "intent", *common)
             if kind == "plan":
                 if gate_plan()["mode"] != "off":
                     raise StepFailed("pre-approval requires review_panel off")
