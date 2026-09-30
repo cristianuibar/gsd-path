@@ -21,11 +21,11 @@ if __package__:
     from .isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 else:
     try:
-        from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
-    except ModuleNotFoundError as error:
-        if error.name != "scripts.isolation" and error.name != "isolation":
-            raise
         from isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
+    except ModuleNotFoundError as error:  # pragma: no cover - package imports used by tests
+        if error.name != "isolation":
+            raise
+        from scripts.isolation import IsolationError, checkpoint as isolation_checkpoint, require_commit, require_full_sha, PROJECT_ENTRIES
 
 
 if __package__:
