@@ -483,6 +483,17 @@ def directory_flags() -> int:
     )
 
 
+def listdir_anchored(dir_fd: int) -> list[str]:
+    """List names through a fresh directory descriptor under dir_fd."""
+    fresh = os.open(".", directory_flags(), dir_fd=dir_fd)
+    try:
+        if not os.path.samestat(os.fstat(fresh), os.fstat(dir_fd)):
+            raise DetectError("anchored directory listing lost its identity")
+        return os.listdir(fresh)
+    finally:
+        os.close(fresh)
+
+
 def file_flags() -> int:
     return (
         os.O_RDONLY
@@ -865,7 +876,7 @@ def iter_from_dir_fd(
     dir_fd: int, relative_dir: str, root: Path
 ) -> Iterable[str]:
     try:
-        names = os.listdir(dir_fd)
+        names = listdir_anchored(dir_fd)
     except OSError as error:
         raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
     for name in names:
@@ -1341,7 +1352,7 @@ def close_file_descriptors(
 
 def project_entries(project_fd: int, project: Path) -> set:
     """Names in .project without ignored OS junk (Finder may add .DS_Store at any time)."""
-    entries = set(os.listdir(project_fd))
+    entries = set(listdir_anchored(project_fd))
     for name in entries & _common.OS_JUNK_NAMES:
         try:
             status = os.stat(name, dir_fd=project_fd, follow_symlinks=False)
@@ -1452,12 +1463,12 @@ def write_state_anchored(
                 follow_symlinks=False,
             )
         except FileNotFoundError as error:
-            if "STATE.md" in os.listdir(project_fd):
+            if "STATE.md" in listdir_anchored(project_fd):
                 raise DetectError("STATE.md already exists") from error
             raise DetectError("temporary STATE.md disappeared") from error
         if not os.path.samestat(created_status, named_temporary):
             raise DetectError("temporary STATE.md changed before writing")
-        if "STATE.md" in os.listdir(project_fd):
+        if "STATE.md" in listdir_anchored(project_fd):
             raise DetectError("STATE.md already exists")
         os.ftruncate(state_fd, 0)
         write_all(state_fd, payload)

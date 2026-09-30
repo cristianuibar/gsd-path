@@ -1551,6 +1551,38 @@ class DetectProjectTests(unittest.TestCase):
             self.assertIn("phase: define", state)
             self.assertIn("pipeline: gsd-path/v2", state)
 
+    @unittest.skipUnless(
+        ANCHORED_STATE_CREATE_AVAILABLE,
+        "anchored state creation is unavailable",
+    )
+    def test_initialize_succeeds_when_reused_fd_listdir_is_stale(self) -> None:
+        real_listdir = os.listdir
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            template = ROOT / "skills" / "gsd-path" / "templates" / "state.md"
+            project_fd: list[int] = []
+
+            real_open = os.open
+
+            def open_wrapper(path, *args, **kwargs):
+                descriptor = real_open(path, *args, **kwargs)
+                if path == ".project" and kwargs.get("dir_fd") is not None:
+                    project_fd.append(descriptor)
+                return descriptor
+
+            def listdir(path: object) -> list[str]:
+                if project_fd and isinstance(path, int) and path == project_fd[0]:
+                    return []
+                return real_listdir(path)
+
+            with mock.patch.object(detect_project.os, "open", open_wrapper), mock.patch.object(
+                detect_project.os, "listdir", listdir
+            ):
+                payload = detect_project.initialize(repo, template)
+            self.assertTrue(payload["wrote_state"])
+            self.assertTrue((repo / ".project" / "STATE.md").is_file())
+
     def test_initialize_reports_verdict_without_anchored_create(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
