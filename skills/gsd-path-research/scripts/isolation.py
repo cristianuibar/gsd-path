@@ -27,11 +27,6 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, Iterator, Optional, Sequence, Set, Tuple
 
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import fcntl
-
 if __package__:
     from .pipeline_git import (
         attest_commit_body,
@@ -1050,25 +1045,8 @@ def _member_journal_path(coordinator: Path, task_id: str) -> Path:
 @contextlib.contextmanager
 def _member_landing_lock(coordinator: Path) -> Iterator[None]:
     path = common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, ".lock")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b") as handle:
-        if sys.platform == "win32":
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            if sys.platform == "win32":
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with _common.exclusive_lock(path):
+        yield
 
 
 def _require_member_coordinator_branch(coordinator: Path) -> None:

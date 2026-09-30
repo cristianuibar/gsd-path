@@ -514,16 +514,28 @@ def run_shell(command: str, timeout: float) -> tuple[Optional[int], str]:
     """Run one spec command; a hung command counts as failed (exit None).
 
     POSIX runs /bin/sh as shell=True did; Windows runs Git for Windows bash, not
-    cmd.exe. A timeout kills the whole process group, so a grandchild cannot
-    keep the output pipes open.
+    cmd.exe. A timeout kills the whole process group when possible; if output
+    pipes stay open, drain them with a short grace timeout and then close them.
     """
     argv = _common.bash_argv(command) if os.name == "nt" else ["/bin/sh", "-c", command]
     process = _common.popen_group(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout = b""
+    stderr = b""
     try:
         stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as expired:
         _common.kill_tree(process)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired as drained:
+            stdout = drained.stdout or expired.stdout or b""
+            stderr = drained.stderr or expired.stderr or b""
+            if process.stdout:
+                process.stdout.close()
+            if process.stderr:
+                process.stderr.close()
+            process.kill()
+            process.wait(timeout=5)
         output = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
         return None, f"{output}\ntimed out at the admitted wall-clock deadline"
     return process.returncode, (stdout + stderr).decode("utf-8", errors="replace")
