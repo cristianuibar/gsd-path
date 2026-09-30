@@ -1791,8 +1791,10 @@ def iter_worktree_files_windows_anchored(root: Path) -> Iterable[str]:
 def iter_from_windows_dir_fd(
     dir_fd: int, relative_dir: str, root: Path, win: _WindowsHandles
 ) -> Iterable[str]:
+    scan_dir = root if not relative_dir else root.joinpath(*PurePosixPath(relative_dir).parts)
     try:
-        names = os.listdir(dir_fd)
+        # Windows CPython cannot listdir(dir_fd); paths come from the pinned walk.
+        names = os.listdir(scan_dir)
     except OSError as error:
         raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
     for name in names:
