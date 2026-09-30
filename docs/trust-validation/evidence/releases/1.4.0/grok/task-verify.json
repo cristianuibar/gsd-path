@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0f031-e8e3-73e1-ad75-f32822a81a85",
+  "result": "pass",
+  "step": "task-verify",
+  "command": "python3 test_count.py",
+  "output": "{\"command\": \"python3 test_count.py\", \"commit\": \"863d880bb32147a23c5625c1c838aa4c327dc725\", \"execution\": {\"evidence\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo/.git/gsd-path/dispatch/gsd-path-M001/T001/manual-2026-09-30T030728+0000/verify.json\", \"exit_code\": 0, \"location\": \"sidecar gsd-path-verify/task-t001-verify\", \"stderr\": \"........\\n----------------------------------------------------------------------\\nRan 8 tests in 0.381s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo\"}, \"recorded_at\": \"2026-09-30T03:07:29+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n{\"command\": \"python3 -m unittest test_count.py\", \"commit\": \"38bd948b1010563d8977577e4fcb80e6db66d4f8\", \"execution\": {\"branch\": \"gsd-path-verify/project-verify\", \"exit_code\": 0, \"stderr\": \"........\\n----------------------------------------------------------------------\\nRan 8 tests in 0.371s\\n\\nOK\\n\", \"stdout\": \"\", \"worktree\": \"/Users/jeremymcspadden/.gsd-path/projects/777813e5d0307a924f33d7b7a69f6b1a8187fdc3df11505cdd2f6804779ca653/5f40846ff439b6747e9837ca1bea52ca955cf3e7eb4a59d92057468eb4c74937/verify/project-verify\"}, \"recorded_at\": \"2026-09-30T03:27:23+00:00\", \"result\": \"pass\", \"schema\": \"gsd-path/verify-ledger/v2\"}\n",
+  "verify_artifact": ".project/archive/001-widget-count/build/verify-ledger.jsonl",
+  "verify_exit_code": 0
+}

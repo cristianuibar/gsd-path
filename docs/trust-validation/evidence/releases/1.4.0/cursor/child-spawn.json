@@ -1,0 +1,44 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.4.0-6d3e38e",
+  "result": "pass",
+  "step": "child-spawn",
+  "command": "Task",
+  "child_api": "Task",
+  "child_id": "build_T001",
+  "child_status": "completed",
+  "output": {
+    "child_id": "build_T001",
+    "status": "completed",
+    "child_api": "Task",
+    "run": "run-20260930T025048635694Z",
+    "session_id": "4d53c471-9e51-40b7-b632-4accb40ccaa8",
+    "tool_key": "taskToolCall",
+    "tool_use": {
+      "id": "tool_bd85712d-5beb-4b35-b3c3-81f21fdbe0a",
+      "input": {
+        "description": "build_T001",
+        "subagentType": {
+          "custom": {
+            "name": "gsd-path"
+          }
+        },
+        "model": "composer-2.5",
+        "agentId": "24daeba1-3ceb-46ac-b91e-b7078af14a8d",
+        "attachments": [],
+        "mode": "TASK_MODE_UNSPECIFIED",
+        "respondingToMessageIds": [],
+        "environment": "SUBAGENT_EXECUTION_ENVIRONMENT_UNSPECIFIED",
+        "machine": {
+          "sameMachine": {}
+        }
+      },
+      "prompt_sha256": "eb0d28958d183182700839d2732a33b8613f9ddda589395246fa44b2cc97be3d"
+    },
+    "tool_result": {
+      "is_error": false,
+      "content": "{\"success\": {\"conversationSteps\": [{\"assistantMessage\": {\"text\": \"Reading the coder role brief and task specification, then inspecting the current code.\\nImplementing `count.py` and creating `tests/test_count_cli.py`.\\nTreating negative count tokens like `-2` as integers instead of flags.\\n**T001** \\u2014 `count.py` CLI (text/JSON stdout, argv grammar, `int()` counts including negatives) and `tests/test_count_cli.py` subprocess coverage.\\n\\n**Verify:** `test -f count.py && test -f tests/test_count_cli.py && python3 -m unittest tests.test_count_cli -v` \\u2192 exit 0, 9 tests OK.\\n\\n**Changed:** `count.py`, `tests/test_count_cli.py`\\n\\nRESULT: T001 ready\"}}], \"agentId\": \"23f6d6c7-bf2d-43c1-aaff-280ea0b77290\", \"isBackground\": false, \"durationMs\": \"40133\", \"backgroundReason\": \"SUBAGENT_BACKGROUND_REASON_UNSPECIFIED\"}}"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_d18b29e3-f78f-4471-a748-f1d4228f390a",
+  "result": "pass",
+  "step": "reviews",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/check_handoffs.py final --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/kimi/quick/repo",
+  "output": "# Review \u2014 wave 1, cycle 1\n\nReviewed HEAD: bdcf791a9def77e5e28ff0c34918760505ee3c40\nReview scope: final\nWave verdict: pass\nCycle: 1\n# Final Review \u2014 reused full wave\n\nReviewed HEAD: f4f8d3d7f16fdcd7256359a681d291bb18699a49\nOverall verdict: pass\nSource review: .project/review/wave-1.cycle1.md\nSource commit: bdcf791a9def77e5e28ff0c34918760505ee3c40",
+  "wave_review_artifact": ".project/archive/001-count-cli-json/review/wave-1.cycle1.md",
+  "final_review_artifact": ".project/archive/001-count-cli-json/review/FINAL.md"
+}
