@@ -16,7 +16,8 @@ class PsQuotingTests(unittest.TestCase):
     def test_single_quoted_path_doubles_embedded_apostrophe(self):
         path = Path("/Users/o'brien/.gsd-path/venv/Scripts/pythonw.exe")
         quoted = Installer._ps_single_quoted(path)
-        self.assertEqual(quoted, "'/Users/o''brien/.gsd-path/venv/Scripts/pythonw.exe'")
+        expected = "'" + str(path).replace("'", "''") + "'"
+        self.assertEqual(quoted, expected)
 
 
 class SessionPathTests(unittest.TestCase):
