@@ -9,15 +9,17 @@ from pathlib import Path
 
 try:
     from scripts import check_handoffs as contracts
+    from scripts import _common
 except ImportError:
     import check_handoffs as contracts
+    import _common
 
 
 def render(repo: Path, task: Path) -> str:
     intent_path = repo.resolve() / '.project/intent/INTENT.md'
     task = task.resolve()
-    intent = intent_path.read_bytes().decode('utf-8')
-    task_text = task.read_bytes().decode('utf-8')
+    intent = _common.read_user_text(intent_path)
+    task_text = _common.read_user_text(task)
     owned = contracts._owned_criteria(task_text, task.stem)
     criteria = contracts._success_criteria(intent)
     unknown = set(owned) - set(criteria)
