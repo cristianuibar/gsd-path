@@ -14,6 +14,19 @@ re-run PLAN.md's project Verify; cite the orchestrator's recorded
 project-verify sidecar output. `pass`
 requires every criterion to be `met`.
 
+When INTENT.md `## Edge coverage` or `## Prohibitions` tags a criterion with a
+`held-out` edge or a `judgment` prohibition, grade that criterion on cited
+evidence for every tag (see the [spec-reach probes](spec-probes.md)). Name
+each id in Check, Observed, or Reference with its evidence: the held-out
+test's recorded passing output from the PLAN.md `## Held-out checks` test, or
+the observed behavior judged against the prohibition's Detail. When a tag's
+evidence is missing, did not run, or cannot be judged, record `unverifiable`
+with `Finding: insufficient spec evidence: <id> <what is missing>` and a Fix
+direction naming the check to add or run. Never mark such a criterion `met`
+on inference or on code that merely looks right; the ship gate refuses a
+`met` verdict that does not cite every tag. Grade untagged criteria as usual:
+the trigger is the INTENT.md tag, never your own doubt.
+
 ## Final gap mode
 
 Use only gap-review.md. Check the one cross-wave risk in the brief against the

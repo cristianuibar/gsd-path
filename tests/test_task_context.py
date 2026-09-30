@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts import dispatch_driver
+from scripts import dispatch_driver, task_context
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +114,40 @@ class TaskContextTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn("\r", result.stdout)
             self.assertIn("1. First.", result.stdout)
+
+
+    def test_probe_tables_name_every_criterion_without_selecting_them(self):
+        criteria = ('## Success criteria\n\n1. First outcome text.\n'
+                    '2. Second outcome text.\n3. Third outcome text.\n\n')
+
+        def edges(sc1_disposition):
+            return ('## Edge coverage\n\n'
+                    '| Edge | Criterion | Category | Disposition | Detail |\n'
+                    '|------|-----------|----------|-------------|--------|\n'
+                    f'| E1 | SC1 | boundary | {sc1_disposition} | stated there |\n'
+                    '| E2 | SC2 | none | dismissed | static |\n'
+                    '| E3 | SC3 | none | dismissed | static |\n')
+
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            intent = repo / '.project/intent/INTENT.md'
+            intent.parent.mkdir(parents=True)
+            task = repo / 'T001.md'
+            task.write_bytes('## Intent coverage\n\n- SC1\n'.encode('utf-8'))
+
+            intent.write_bytes(('# Intent\n\n' + criteria + edges('dismissed')).encode('utf-8'))
+            rendered = task_context.render(repo, task)
+            self.assertIn('Mode: owned-criteria', rendered)
+            self.assertIn('1. First outcome text.', rendered)
+            self.assertNotIn('2. Second outcome text.', rendered)
+            self.assertNotIn('3. Third outcome text.', rendered)
+
+            intent.write_bytes(('# Intent\n\n' + criteria + edges('criterion SC3')).encode('utf-8'))
+            rendered = task_context.render(repo, task)
+            self.assertIn('Mode: owned-criteria', rendered)
+            self.assertIn('1. First outcome text.', rendered)
+            self.assertIn('3. Third outcome text.', rendered)
+            self.assertNotIn('2. Second outcome text.', rendered)
 
 
 if __name__ == '__main__':
