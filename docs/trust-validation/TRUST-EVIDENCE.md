@@ -1,6 +1,6 @@
 # GSD Path — Trust Evidence Log
 
-Current release evidence: [1.1.0 candidate](#release-evidence-2026-09-18--110).
+Current release evidence: [1.4.0 candidate](#release-evidence-2026-09-30--140).
 Earlier sections remain historical observations.
 
 **Date:** 2026-08-05 (reconciled 2026-08-11 — dispatch-smoke rows downgraded; see notes)  
@@ -273,3 +273,28 @@ separate them from passing proof. No product or host contract changed after
 the candidate. The complete `verify:release` gate is required before publication.
 The owner authorized completing and publishing 1.1.0; receipts themselves do
 not grant publication authority.
+
+---
+
+## Release evidence (2026-09-30 — 1.4.0)
+
+Candidate: `6d3e38ed525831217cf7d4790674feebd8afc75f`, frozen from main after
+PRs #240 (native member-task retry) and #241 (version 1.4.0). Codex, Claude
+Code, Grok, OpenCode, Antigravity, Cursor, and Kimi have validated
+current-candidate receipts under `evidence/releases/1.4.0/` and pass the
+external counter CLI oracle 6/6. See [HOST-MATRIX.md](HOST-MATRIX.md) for each
+receipt.
+
+Each receipt binds a native child to the landed task, isolated Task Verify,
+review, committed archive, local-origin integration, and Git guard results.
+Claude Code and Cursor also passed fresh native guard probes. No attempt was
+invalid and no candidate defect was found.
+
+GitHub Copilot CLI was not evaluated: its account quota was exhausted on every
+model, including zero-premium models. The maintainer excluded it from the 1.4.0
+live-check scope; exclusion is not a live-test pass. Output-token usage per
+session was recorded; sessions over 30,000 tokens are findings, not failures,
+by owner ruling. [Run notes](evidence/releases/1.4.0/notes/RUNS.md) list gate
+corrections, token usage, and hardening gaps. The complete `verify:release`
+gate is required before publication; receipts do not grant publication
+authority.

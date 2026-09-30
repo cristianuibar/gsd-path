@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "grok",
+  "run_id": "01a0f031-e8e3-73e1-ad75-f32822a81a85",
+  "result": "pass",
+  "step": "task-landing",
+  "command": "python3 -B /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo/.grok/skills/gsd-path/scripts/dispatch_driver.py finish --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/grok/quick/repo --task-id T001",
+  "output": "commit 863d880bb32147a23c5625c1c838aa4c327dc725\nAuthor:     Feature Evaluation <evaluation@example.invalid>\nAuthorDate: Tue Sep 29 22:07:28 2026 -0500\nCommit:     Feature Evaluation <evaluation@example.invalid>\nCommitDate: Tue Sep 29 22:07:28 2026 -0500\n\n    T001: Extend count.py with JSON output, useful errors, and CLI tests\n    \n    Task: .project/tasks/T001-widget-count-cli.md\n    Base: 28734d3ea45eedefb8d6730fb138778d620baf26\n    Files:\n    - .project/tasks/T001-widget-count-cli.md\n    - count.py\n    - test_count.py\n\n .project/tasks/T001-widget-count-cli.md | 15 ++++--\n count.py                                | 40 +++++++++++++++-\n test_count.py                           | 85 +++++++++++++++++++++++++++++++++\n 3 files changed, 135 insertions(+), 5 deletions(-)",
+  "fixture_bundle": "grok/fixture.bundle",
+  "run_manifest": ".project/archive/001-widget-count/trust-run-manifest.json",
+  "fixture_base_commit": "28734d3ea45eedefb8d6730fb138778d620baf26",
+  "task_branch": "gsd-path-verify/task-t001-verify",
+  "task_worktree": "/Users/jeremymcspadden/.gsd-path/projects/777813e5d0307a924f33d7b7a69f6b1a8187fdc3df11505cdd2f6804779ca653/5f40846ff439b6747e9837ca1bea52ca955cf3e7eb4a59d92057468eb4c74937/verify/task-t001-verify",
+  "landing_commit": "863d880bb32147a23c5625c1c838aa4c327dc725",
+  "isolation_mode": "serial",
+  "isolation_note": "A one-task wave uses the helper's serial mode: the coder worked on the bound branch in the primary worktree at the recorded base, and the named branch and worktree are the isolated Task Verify sidecar created for this task and retired after landing."
+}
