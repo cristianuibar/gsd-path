@@ -36,9 +36,9 @@ Copilot was not evaluated: every Copilot-routed model, including zero-premium
 models, returned HTTP 402 `quota_exceeded` for the account. The maintainer
 excluded Copilot, first for 1.4.0; it stays excluded until the maintainer
 restores it by removing it from `EXCLUDED_EVALUATION_HOSTS` before the next
-release's evaluation. Exclusion is not a live-test pass. Per-session output-token usage over 30,000 is recorded as a
-finding and did not stop a run (owner ruling). See
-[run notes](evidence/releases/1.4.0/notes/RUNS.md) for gate corrections,
+release's evaluation. Exclusion is not a live-test pass. Per-session
+output-token usage over 30,000 is recorded as a finding and did not stop a run
+(owner ruling). See [run notes](evidence/releases/1.4.0/notes/RUNS.md) for gate corrections,
 token usage, and hardening gaps.
 
 ## 1.1.0 results
