@@ -15,14 +15,32 @@ from pathlib import Path
 
 if __package__:
     from . import _common
-    from . import pipeline_git
 else:
     try:
         import _common
-        import pipeline_git
     except ImportError:
         from scripts import _common
-        from scripts import pipeline_git
+
+
+def _worktree_list_porcelain(primary: Path) -> tuple[str, bool]:
+    try:
+        if __package__:
+            from . import pipeline_git as pg
+        else:
+            from scripts import pipeline_git as pg
+    except ImportError:
+        try:
+            import pipeline_git as pg
+        except ImportError:
+            pg = None
+    if pg is not None:
+        return pg.worktree_list_porcelain(primary)
+    try:
+        output = _git(primary, "worktree", "list", "--porcelain", "-z")
+        return output, True
+    except ValueError:
+        output = _git(primary, "worktree", "list", "--porcelain")
+        return output, False
 
 
 def _git(primary: Path, *args: str) -> str:
@@ -94,7 +112,7 @@ def worktree_path(primary: Path, kind: str, name: str, *, pin: bool = False) -> 
     legacy = (primary.parent / f".{primary.name}-gsd-path-integrate-{name}"
               if kind == "integrate" else primary.parent / f"{primary.name}.gsd-path" / kind / name)
     branch = f"refs/heads/gsd-path-{kind}/{name}"
-    output, nul_separated = pipeline_git.worktree_list_porcelain(primary)
+    output, nul_separated = _worktree_list_porcelain(primary)
     if nul_separated:
         records = output.split("\0\0")
     else:
