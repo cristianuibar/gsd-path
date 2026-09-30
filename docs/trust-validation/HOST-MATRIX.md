@@ -19,7 +19,7 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 | Claude Code | automated | fail-closed project hook + Git hooks | [claude.md](evidence/releases/1.4.0/claude.md) | **pass** on `6d3e38e` |
 | Grok | automated | not installed; Git hooks | [grok.md](evidence/releases/1.4.0/grok.md) | **pass** on `6d3e38e` |
 | OpenCode | automated | not installed; Git hooks | [opencode.md](evidence/releases/1.4.0/opencode.md) | **pass** on `6d3e38e` |
-| GitHub Copilot CLI | automated | not installed; Git hooks | not run: account quota exhausted | excluded from 1.4.0 at the maintainer's request |
+| GitHub Copilot CLI | automated | not installed; Git hooks | not run: account quota exhausted | excluded at the maintainer's request until restored |
 | Antigravity CLI | automated | not installed; Git hooks | [antigravity.md](evidence/releases/1.4.0/antigravity.md) | **pass** on `6d3e38e` |
 | Cursor | automated | fail-closed project hook + Git hooks | [cursor.md](evidence/releases/1.4.0/cursor.md) | **pass** on `6d3e38e` |
 | Kimi Code | automated | not installed; Git hooks | [kimi.md](evidence/releases/1.4.0/kimi.md) | **pass** on `6d3e38e` |
@@ -33,8 +33,10 @@ under `evidence/releases/<version>/` and are never inferred from smoke runs.
 ## 1.4.0 run notes
 
 Copilot was not evaluated: every Copilot-routed model, including zero-premium
-models, returned HTTP 402 `quota_exceeded` for the account. Exclusion is not a
-live-test pass. Per-session output-token usage over 30,000 is recorded as a
+models, returned HTTP 402 `quota_exceeded` for the account. The maintainer
+excluded Copilot, first for 1.4.0; it stays excluded until the maintainer
+restores it by removing it from `EXCLUDED_EVALUATION_HOSTS` before the next
+release's evaluation. Exclusion is not a live-test pass. Per-session output-token usage over 30,000 is recorded as a
 finding and did not stop a run (owner ruling). See
 [run notes](evidence/releases/1.4.0/notes/RUNS.md) for gate corrections,
 token usage, and hardening gaps.

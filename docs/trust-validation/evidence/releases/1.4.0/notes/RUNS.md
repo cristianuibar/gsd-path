@@ -14,7 +14,9 @@ Cursor, and Kimi. Each has a validated receipt, zero invalid attempts, and a
 GitHub Copilot CLI was not evaluated. Its first attempt stopped after 41 seconds
 with HTTP 402 `quota_exceeded`; probes with `gpt-5-mini`, `gpt-5.4-mini`, and
 `claude-haiku-4.5` returned the same error, so the quota block was account-wide.
-The maintainer excluded Copilot from the 1.4.0 live-check scope. Qwen, Kiro,
+The maintainer excluded Copilot from the live-check scope, first for 1.4.0; it
+stays excluded until the maintainer restores it by removing it from
+`EXCLUDED_EVALUATION_HOSTS` before the next release's evaluation. Qwen, Kiro,
 and Zed stay excluded for API cost. Exclusion is not a live-test pass.
 
 ## Owner gates

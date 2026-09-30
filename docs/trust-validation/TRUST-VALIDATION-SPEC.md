@@ -27,8 +27,11 @@ Every release is trusted only when:
 Release evaluations cover Codex, Claude, Grok, OpenCode, Antigravity, Cursor,
 and Kimi. Qwen, Kiro, and Zed are excluded at the maintainer's request
 because their live runs require API credits. Copilot is excluded at the
-maintainer's request from 1.4.0 because its account quota was exhausted on
-every model during that release's evaluation. Their installer support and
+maintainer's request, first for the 1.4.0 evaluation because its account quota
+was exhausted on every model, and stays excluded until the maintainer restores
+it. Restoring Copilot means removing it from `EXCLUDED_EVALUATION_HOSTS` in
+`scripts/check_trust_evidence.py` before the next release's evaluation. Their
+installer support and
 offline contract tests remain. Exclusion is not a live-test pass; historical
 receipts and failed attempts remain unchanged. The preparation script uses the
 same host selection as the validator and does not prepare these four hosts.

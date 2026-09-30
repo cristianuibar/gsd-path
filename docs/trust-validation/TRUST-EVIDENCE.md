@@ -291,8 +291,10 @@ Claude Code and Cursor also passed fresh native guard probes. No attempt was
 invalid and no candidate defect was found.
 
 GitHub Copilot CLI was not evaluated: its account quota was exhausted on every
-model, including zero-premium models. The maintainer excluded it from the 1.4.0
-live-check scope; exclusion is not a live-test pass. Output-token usage per
+model, including zero-premium models. The maintainer excluded it from the
+live-check scope, first for 1.4.0; it stays excluded until the maintainer
+restores it by removing it from `EXCLUDED_EVALUATION_HOSTS` before the next
+release's evaluation. Exclusion is not a live-test pass. Output-token usage per
 session was recorded; sessions over 30,000 tokens are findings, not failures,
 by owner ruling. [Run notes](evidence/releases/1.4.0/notes/RUNS.md) list gate
 corrections, token usage, and hardening gaps. The complete `verify:release`
