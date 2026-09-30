@@ -378,6 +378,7 @@ class PopenDetachedTests(unittest.TestCase):
 
 
 class GitDrvfsWorkaroundTests(unittest.TestCase):
+    @posix_only
     def test_drvfs_mount_adds_index_workaround_flags(self) -> None:
         mounts = "/dev/sda1 /mnt/c drvfs rw,relatime 0 0\n"
         repo = Path("/mnt/c/Users/demo/repo")
@@ -388,6 +389,7 @@ class GitDrvfsWorkaroundTests(unittest.TestCase):
                 ("-c", "core.preloadindex=false", "-c", "index.threads=1"),
             )
 
+    @posix_only
     def test_native_linux_mount_has_no_workaround(self) -> None:
         mounts = "/dev/sda1 / ext4 rw 0 0\n"
         repo = Path("/home/demo/repo")
