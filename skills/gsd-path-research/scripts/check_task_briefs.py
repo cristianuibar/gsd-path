@@ -381,6 +381,58 @@ def validate_task_briefs(
     return {"base": resolved_base, "checked": checked, "tasks": len(task_files)}
 
 
+def validate_plan_task_briefs(
+    root: Path,
+    base: str,
+    project_dir: str = ".project",
+    tasks_dir: Optional[str] = None,
+) -> Dict[str, object]:
+    """Plan gate validation with dependency files and landed historical bases."""
+    if __package__:
+        from . import check_handoffs
+        from .isolation import IsolationError, require_commit, require_full_sha
+    else:
+        try:
+            import check_handoffs
+            from isolation import IsolationError, require_commit, require_full_sha
+        except ModuleNotFoundError as error:
+            if error.name not in {"check_handoffs", "isolation"}:
+                raise
+            from scripts import check_handoffs
+            from scripts.isolation import IsolationError, require_commit, require_full_sha
+    tasks, dependency_files = check_handoffs.plan_brief_inputs(root, project_dir)
+    landed_bases: Dict[str, str] = {}
+    member_base = _member_bases(root)
+    for task_id, text in tasks.items():
+        if check_handoffs._task_scalar(text, task_id, "status") != "done":
+            continue
+        agent = check_handoffs._task_scalar(text, task_id, "agent")
+        if agent in {"", "null"}:
+            raise BriefError(f"{task_id} landed task has no recorded agent")
+        member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
+        base_repo = root
+        if member is not None:
+            located = member_base(member) if isinstance(member, str) and member else None
+            if located is None:
+                raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
+            base_repo = located[0]
+        recorded_base = check_handoffs._task_scalar(text, task_id, "base")
+        try:
+            landed_bases[task_id] = require_commit(base_repo, require_full_sha(recorded_base))
+        except IsolationError as error:
+            raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
+        dependency_files[task_id] = set()
+    resolved_tasks_dir = tasks_dir or f"{project_dir}/tasks"
+    return validate_task_briefs(
+        root,
+        base,
+        resolved_tasks_dir,
+        dependency_files=dependency_files,
+        landed_bases=landed_bases,
+        member_base=member_base,
+    )
+
+
 def _tasks_dir(value: str) -> str:
     """Argparse type for --tasks-dir: a relative POSIX-style path."""
 
@@ -411,15 +463,29 @@ def parser() -> argparse.ArgumentParser:
         help="relative POSIX-style directory under --repo holding the task files "
         "(default: .project/tasks)",
     )
+    argument_parser.add_argument(
+        "--project-dir",
+        default=None,
+        help="when set, apply plan-approval dependency files and landed-task bases "
+        "(same rules as state_checkpoint plan approval)",
+    )
     return argument_parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        result = validate_task_briefs(
-            arguments.repo.resolve(), arguments.base, arguments.tasks_dir
-        )
+        if arguments.project_dir is not None:
+            result = validate_plan_task_briefs(
+                arguments.repo.resolve(),
+                arguments.base,
+                arguments.project_dir,
+                None if arguments.tasks_dir == DEFAULT_TASKS_DIR else arguments.tasks_dir,
+            )
+        else:
+            result = validate_task_briefs(
+                arguments.repo.resolve(), arguments.base, arguments.tasks_dir
+            )
     except BriefError as error:
         print(f"task brief validation failed: {error}", file=sys.stderr)
         return 1
