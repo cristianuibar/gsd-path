@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "cursor",
+  "run_id": "cursor-1.4.0-6d3e38e",
+  "result": "pass",
+  "step": "archive",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py validate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/cursor/quick/repo",
+  "output": "{\"archive\": \".project/archive/001-widget-cli-json\", \"commit\": \"ca97f2b5e74ddc8d76ace74f83761a099bf43c34\"}",
+  "archive_path": ".project/archive/001-widget-cli-json",
+  "validation_exit_code": 0
+}

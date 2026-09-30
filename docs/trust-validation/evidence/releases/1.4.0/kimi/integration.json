@@ -1,0 +1,17 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "kimi",
+  "run_id": "session_d18b29e3-f78f-4471-a748-f1d4228f390a",
+  "result": "pass",
+  "step": "integration",
+  "command": "python3 -B /Users/jeremymcspadden/.gsd-path/runtimes/be5a45e54aceb02b95ac1d23d52a19a56bcd981f5980ddc6445e5c5797930c67/archive_milestone.py integrate --repo /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/kimi/quick/repo --slug count-cli-json",
+  "output": "{\"archive\": \".project/archive/001-count-cli-json\", \"base\": \"1c471b3899529bb6cbc879ab91d9294bae98740f\", \"commit\": \"03ba963cecf58fbcf1218819273e85a51fa0d7a2\", \"integrate\": \"1c471b3899529bb6cbc879ab91d9294bae98740f\", \"landing\": \"1c471b3899529bb6cbc879ab91d9294bae98740f\", \"mode\": \"direct\", \"tag\": \"milestone/001-count-cli-json\"}",
+  "fixture_bundle": "kimi/fixture.bundle",
+  "run_manifest": ".project/archive/001-count-cli-json/trust-run-manifest.json",
+  "ship_commit": "03ba963cecf58fbcf1218819273e85a51fa0d7a2",
+  "bound_branch": "gsd-path/M001",
+  "default_branch": "main",
+  "pre_integration_default_commit": "8cd984c0aace57e085bb3021e6d67780b021f9e4",
+  "integration_commit": "1c471b3899529bb6cbc879ab91d9294bae98740f",
+  "milestone_tag": "milestone/001-count-cli-json"
+}

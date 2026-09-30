@@ -1,0 +1,11 @@
+{
+  "schema": "gsd-path/live-step-evidence/v1",
+  "host": "opencode",
+  "run_id": "ses_f0fce4c38ffeHJCuaACqSHlp8J",
+  "result": "pass",
+  "step": "worktrees",
+  "command": "git worktree list --porcelain",
+  "output": "worktree /Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/opencode/quick/repo\nHEAD 321fc2ebf3f9edad745539f5bb8a1967c025ffdd\nbranch refs/heads/gsd-path/M001\n",
+  "primary_worktree": "/Users/jeremymcspadden/orca/evaluations/gsd-path-release-1.4.0-6d3e38ed/opencode/quick/repo",
+  "integration_worktree": "/Users/jeremymcspadden/.gsd-path/projects/55e569aa0c5a0b3d1d3d8d1aaae679f2f5dc218ddece85ca377ef41329c71743/222b3c02c8a69f9e2b8dfd0f9e340c868b3f342ab96c9f8cff6fde4cee220f04/integrate/M001"
+}

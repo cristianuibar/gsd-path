@@ -24,12 +24,17 @@ Every release is trusted only when:
 
 ### Live-check scope
 
-Release evaluations cover Codex, Claude, Grok, OpenCode, Copilot, Antigravity,
-Cursor, and Kimi. Qwen, Kiro, and Zed are excluded at the maintainer's request
-because their live runs require API credits. Their installer support and
-offline contract tests remain. Exclusion is not a live-test pass; historical
-receipts and failed attempts remain unchanged. The preparation script uses the
-same host selection as the validator and does not prepare these three hosts.
+Release evaluations cover Codex, Claude, Grok, OpenCode, Antigravity, Cursor,
+and Kimi. Qwen, Kiro, and Zed are excluded at the maintainer's request
+because their live runs require API credits. Copilot is excluded at the
+maintainer's request, first for the 1.4.0 evaluation because its account quota
+was exhausted on every model, and stays excluded until the maintainer restores
+it. Restoring Copilot means removing it from `EXCLUDED_EVALUATION_HOSTS` in
+`scripts/check_trust_evidence.py` before the next release's evaluation. The
+excluded hosts' installer support and offline contract tests remain. Exclusion
+is not a live-test pass; historical receipts and failed attempts remain
+unchanged. The preparation script uses the
+same host selection as the validator and does not prepare these four hosts.
 
 `scripts/check_trust_evidence.py --plan` reports `required_runs`, reasons,
 accepted receipt paths, original versions, and original candidate SHAs. The
