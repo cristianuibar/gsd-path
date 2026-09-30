@@ -277,6 +277,11 @@ class GitGuardEndToEndTests(unittest.TestCase):
         self.assertIn("ship commit body does not match", commented.stderr)
         cleaned = self.run_guard("ship: M002 — next", body.replace("\n", "  \n") + "  \n\n")
         self.assertEqual(0, cleaned.returncode, cleaned.stderr)
+        with_trailer = self.run_guard(
+            "ship: M002 — next",
+            body + "\nCo-Authored-By: Example <example@example.com>",
+        )
+        self.assertEqual(0, with_trailer.returncode, with_trailer.stderr)
         ordinary = self.run_guard("feat: not a ship")
         self.assertEqual(1, ordinary.returncode)
         self.assertIn("requires a ship commit", ordinary.stderr)
