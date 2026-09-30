@@ -17,8 +17,8 @@ the default offline suite.
 
 The `windows` CI job runs the same gate natively on `windows-latest` with
 Python 3.9 and 3.12, and blocks like the POSIX jobs. Each Python version runs
-as four shards; `python -m tests.ci_shard INDEX TOTAL` runs one shard locally
-and prints each test module's time.
+as four shards; `node scripts/dev/py.mjs -m tests.ci_shard INDEX TOTAL` runs
+one shard locally and prints each test module's time.
 
 On Windows, fixture projects' Verify commands call `python3`, as POSIX projects
 do, so the test run needs a real `python3` on PATH. CI copies `python.exe` to
