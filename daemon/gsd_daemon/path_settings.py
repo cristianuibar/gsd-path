@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from . import subprocess_platform
+
 
 def configure(plugin, projects, request, write=False):
     allowed = {'scope', 'root', 'key', 'value', 'action'} if write else {'scope', 'root'}
@@ -20,7 +22,7 @@ def configure(plugin, projects, request, write=False):
         launcher = Path(root) / '.gsd-path/status_runtime.py'
         if not launcher.is_file() or launcher.is_symlink():
             raise ValueError('Update this project runtime before editing Path settings.')
-        resolved = subprocess.run(command + [str(launcher), '--repo', root, '--runtime-path'],
+        resolved = subprocess_platform.run(command + [str(launcher), '--repo', root, '--runtime-path'],
                                   capture_output=True, text=True)
         if resolved.returncode:
             raise ValueError(resolved.stderr.strip() or 'Cannot resolve project runtime.')
@@ -44,7 +46,7 @@ def configure(plugin, projects, request, write=False):
             if not isinstance(value, str) or value.startswith('-'):
                 raise ValueError('setting value must be a string')
             args.insert(2, value)
-    result = subprocess.run(command + [str(helper)] + args, capture_output=True, text=True)
+    result = subprocess_platform.run(command + [str(helper)] + args, capture_output=True, text=True)
     try:
         payload = json.loads(result.stdout)
     except ValueError:

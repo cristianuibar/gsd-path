@@ -9,6 +9,8 @@ import stat
 import subprocess
 from typing import Optional
 
+from . import subprocess_platform
+
 
 class FileAccessError(ValueError):
     def __init__(self, message, code=400, status='failed'):
@@ -27,9 +29,12 @@ def _path(value):
 
 
 def _git(root, *args):
-    return subprocess.run(['git', '--literal-pathspecs', '-C', str(root), *args],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          env={**os.environ, 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_REPLACE_OBJECTS': '1'})
+    return subprocess_platform.run(
+        ['git', '--literal-pathspecs', '-C', str(root), *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={**os.environ, 'GIT_OPTIONAL_LOCKS': '0', 'GIT_NO_REPLACE_OBJECTS': '1'},
+    )
 
 
 def _git_output(root, *args):
@@ -41,6 +46,16 @@ def _git_output(root, *args):
 
 def _read_current(root, relative):
     """Walk with directory descriptors so a swapped parent symlink cannot escape."""
+    if os.name == "nt":
+        from . import windows_handles
+
+        try:
+            data, mtime = windows_handles.read_regular_file(root, relative)
+            return data, mtime
+        except FileNotFoundError:
+            raise FileAccessError('File is not present in the working tree.', 404, 'missing')
+        except OSError as error:
+            raise FileAccessError('Cannot read this file safely: ' + str(error), 403)
     if os.open not in os.supports_dir_fd or not hasattr(os, 'O_NOFOLLOW'):
         raise FileAccessError('Secure local file reading is unsupported on this platform.', 415, 'unsupported')
     parts = PurePosixPath(relative).parts

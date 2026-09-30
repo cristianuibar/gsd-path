@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from .serve import DEFAULT_PORT
+from . import subprocess_platform
 
 LAUNCH_AGENT_LABEL = "org.gsd-path.daemon"
 TRAY_APP_NAME = "GSDPathTray"
@@ -23,7 +24,7 @@ class Runner:
     dry-run can intercept and tests can inject a fake."""
 
     def run(self, cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, check=check, capture_output=True, text=True)
+        return subprocess_platform.run(cmd, check=check, capture_output=True, text=True)
 
     def which(self, name: str) -> Optional[str]:
         return shutil.which(name)
@@ -104,6 +105,15 @@ class Installer:
     @property
     def shortcut_path(self) -> Path:
         return self.startup_dir / WINDOWS_SHORTCUT_NAME
+
+    @property
+    def start_menu_programs_dir(self) -> Path:
+        appdata = os.environ.get("APPDATA", str(self.home / "AppData" / "Roaming"))
+        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+
+    @property
+    def toast_shortcut_path(self) -> Path:
+        return self.start_menu_programs_dir / "GSD Path Daemon.lnk"
 
     @property
     def unit_path(self) -> Path:
@@ -203,13 +213,35 @@ class Installer:
             "WantedBy=default.target\n"
         )
 
-    def windows_shortcut_script(self) -> str:
+    def windows_shortcut_script(self, destination: Path) -> str:
+        target = self._ps_single_quoted(self.venv_pythonw)
+        work = self._ps_single_quoted(self.venv_dir / "Scripts")
+        shortcut = self._ps_single_quoted(destination)
         return (
-            f"$s = (New-Object -COM WScript.Shell).CreateShortcut('{self.shortcut_path}'); "
-            f"$s.TargetPath = '{self.venv_pythonw}'; "
+            f"$s = (New-Object -COM WScript.Shell).CreateShortcut({shortcut}); "
+            f"$s.TargetPath = {target}; "
             f"$s.Arguments = '-m gsd_daemon tray --serve'; "
-            f"$s.WorkingDirectory = '{self.venv_dir / 'Scripts'}'; "
+            f"$s.WorkingDirectory = {work}; "
             "$s.Save()"
+        )
+
+    @staticmethod
+    def _ps_single_quoted(path: Path) -> str:
+        return "'" + str(path).replace("'", "''") + "'"
+
+    def windows_toast_registration_script(self) -> str:
+        app_id = subprocess_platform.TOAST_APP_ID
+        menu = self._ps_single_quoted(self.toast_shortcut_path)
+        return (
+            f"New-Item -ItemType Directory -Force -Path {self._ps_single_quoted(self.start_menu_programs_dir)} | Out-Null; "
+            f"$s = (New-Object -COM WScript.Shell).CreateShortcut({menu}); "
+            f"$s.TargetPath = {self._ps_single_quoted(self.venv_pythonw)}; "
+            f"$s.Arguments = '-m gsd_daemon tray --serve'; "
+            f"$s.WorkingDirectory = {self._ps_single_quoted(self.venv_dir / 'Scripts')}; "
+            "$s.Save(); "
+            f"New-Item -Path 'HKCU:\\Software\\Classes\\AppUserModelId\\{app_id}' -Force | Out-Null; "
+            "Set-ItemProperty -Path "
+            f"'HKCU:\\Software\\Classes\\AppUserModelId\\{app_id}' -Name DisplayName -Value 'GSD Path'"
         )
 
     # -- install --------------------------------------------------------------
@@ -283,7 +315,10 @@ class Installer:
             self._step("Create the Startup-folder shortcut (autostart)")
             self._mkdir(self.startup_dir)
             self._exec(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                        "-Command", self.windows_shortcut_script()])
+                        "-Command", self.windows_shortcut_script(self.shortcut_path)])
+            self._mkdir(self.start_menu_programs_dir)
+            self._exec(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                        "-Command", self.windows_toast_registration_script()])
         else:
             self._step("Install the systemd user service (autostart, best-effort)")
             self._write_text(self.unit_path, self.linux_unit())
