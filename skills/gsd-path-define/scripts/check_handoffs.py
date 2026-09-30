@@ -1083,6 +1083,11 @@ def _validate_task_graph(
                 continue
             overlap = sorted(set(task_files[left]) & set(task_files[right]))
             if overlap:
+                if (
+                    _task_scalar(tasks[left], left, "status") == "done"
+                    and _task_scalar(tasks[right], right, "status") == "done"
+                ):
+                    continue
                 raise HandoffError(
                     f"same-wave file overlap between {left} and {right}: {', '.join(overlap)}"
                 )

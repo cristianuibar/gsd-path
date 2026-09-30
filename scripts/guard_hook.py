@@ -182,7 +182,7 @@ STATUS_STATE_FIELDS = frozenset(
         "integration_source",
     }
 )
-STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request"})
+STATUS_INTEGRATION_MODES = frozenset({"direct", "pull-request", "external-landing"})
 STATUS_INTEGRATION_SOURCES = frozenset({"default", "milestone"})
 STATUS_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 STATUS_BRANCH = re.compile(r"^gsd-path/M(\d{3,})$")
