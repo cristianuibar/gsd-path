@@ -1794,6 +1794,15 @@ class PipelineStateTests(unittest.TestCase):
             self.assertNotEqual(run_git(repo, "rev-parse", "HEAD").stdout.strip(), expected_head)
             self.assertFalse(pipeline_state._git_path(repo, pipeline_state.CHECKPOINT_JOURNAL_NAME).exists())
 
+    def test_plan_approval_allows_runtime_model_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, expected_head = self._approval_repo(tmp, "plan")
+            (repo / ".project" / "model-policy.json").write_bytes(
+                b'{"roles": {"coder": {"model": "inherit"}}}\n'
+            )
+            result = state_checkpoint.checkpoint_approval(repo, "plan", expected_head)
+            self.assertEqual(result["status"], "approved")
+
     def test_roadmap_approval_owns_selection_state_and_checkpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, expected_head = self._approval_repo(tmp, "roadmap")

@@ -91,7 +91,7 @@ STATE_FIELDS = (
     "integration_source",
 )
 LEGACY_STATE_FIELDS = STATE_FIELDS[:7]
-INTEGRATION_MODES = ("direct", "pull-request")
+INTEGRATION_MODES = ("direct", "pull-request", "external-landing")
 INTEGRATION_SOURCES = ("default", "milestone")
 NULL = "null"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
