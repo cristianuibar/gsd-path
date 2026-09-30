@@ -1329,6 +1329,37 @@ def shell_write_targets(tokens, working_directories, assignments=None):
                     yield argument, directories
 
 
+def shell_write_needs_build_phase_gate(targets):
+    """Phase-gate shell product writes only on bound milestone branches in-tree."""
+    repo = repository_root()
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if branch.returncode or not STATUS_BRANCH.fullmatch(branch.stdout.strip()):
+        return False
+    for path, working_directories in targets:
+        for target in dict.fromkeys(target_paths(path, working_directories, repo)):
+            directory = (
+                target
+                if target.is_dir() and not is_link_like(target)
+                else target.parent
+            )
+            while not directory.exists() and directory != directory.parent:
+                directory = directory.parent
+            root = subprocess.run(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if root.returncode != 0 or Path(root.stdout.strip()) != repo:
+                return False
+    return True
+
+
 def protected_shell_write_reason(tokens, working_directories):
     assignments = shell_assignment_values(tokens)
     targets = []
@@ -1352,7 +1383,9 @@ def protected_shell_write_reason(tokens, working_directories):
     for target, kind in classified[2]:
         if kind == "protected":
             return f"{PROTECTED_SHELL_WRITE_REASON} {target}"
-    return pipeline_product_phase_reason(classified)
+    if shell_write_needs_build_phase_gate(targets):
+        return pipeline_product_phase_reason(classified)
+    return None
 
 
 def environment_parameter_value(match, assignments):
