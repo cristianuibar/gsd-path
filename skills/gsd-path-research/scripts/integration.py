@@ -797,6 +797,36 @@ def pull_request_tag_metadata(project: Path, tag_ref: str) -> dict[str, str]:
     return fields
 
 
+def external_landing_tag_message(
+    archive_name: str, ship_commit: str, landing: str
+) -> str:
+    return (
+        f"milestone {archive_name}\n\n"
+        "Mode: external-landing\n"
+        f"Ship: {ship_commit}\n"
+        f"Landing: {landing}"
+    )
+
+
+def external_landing_tag_metadata(project: Path, tag_ref: str) -> dict[str, str]:
+    message = archive_milestone.require_git_success(
+        run_git(project, "for-each-ref", "--format=%(contents)", tag_ref),
+        "inspect external-landing milestone tag",
+    )
+    fields: dict[str, str] = {}
+    for line in message.splitlines():
+        match = re.fullmatch(r"(Mode|Ship|Landing): (.+)", line)
+        if match:
+            if match.group(1) in fields:
+                raise ArchiveError("external-landing milestone tag repeats metadata")
+            fields[match.group(1)] = match.group(2)
+    if set(fields) != {"Mode", "Ship", "Landing"}:
+        raise ArchiveError("external-landing milestone tag is missing metadata")
+    if fields["Mode"] != "external-landing":
+        raise ArchiveError("external-landing milestone tag has the wrong mode")
+    return fields
+
+
 def require_pull_request_merge(
     project: Path,
     merge_commit: str,
@@ -1021,6 +1051,78 @@ def integrate_pull_request(
     return validate_integrated(project, archive_milestone.milestone_slug(state))
 
 
+def integrate_external_landing(
+    project: Path,
+    state: PipelineState,
+    archive_path: str,
+    archive_name: str,
+    ship_commit: str,
+    remote_default: str,
+    default_name: str,
+    bound_branch: str,
+) -> dict:
+    if state.branch is None:
+        raise ArchiveError("external-landing integration requires a bound branch")
+    publishable_bound_branch(project, bound_branch, ship_commit)
+    contains_ship = run_git(
+        project, "merge-base", "--is-ancestor", ship_commit, remote_default
+    )
+    if contains_ship.returncode == 1:
+        publish_bound_branch(project, bound_branch, ship_commit)
+        return {
+            "status": "awaiting-merge",
+            "mode": "external-landing",
+            "archive": archive_path,
+            "commit": ship_commit,
+        }
+    if contains_ship.returncode != 0:
+        archive_milestone.require_git_success(
+            contains_ship, "inspect ship ancestry on the remote default"
+        )
+        raise AssertionError("unreachable")
+
+    merge_commit = find_integrate_commit(
+        project, remote_default, archive_name, ship_commit
+    )
+    require_generated_integration_commit(
+        project,
+        merge_commit,
+        archive_path,
+        archive_name,
+        ship_commit,
+        default_name,
+        bound_branch,
+    )
+    tag_name = f"milestone/{archive_name}"
+    message = external_landing_tag_message(archive_name, ship_commit, merge_commit)
+    tag_object, tag_published = ensure_integration_tag(
+        project,
+        tag_name,
+        merge_commit,
+        message,
+    )
+    if not tag_published:
+        archive_milestone.require_git_success(
+            run_git(
+                project,
+                "push",
+                "origin",
+                f"refs/tags/{tag_name}:refs/tags/{tag_name}",
+            ),
+            "push milestone tag",
+        )
+        archive_milestone.require_git_success(
+            run_git(
+                project,
+                "update-ref",
+                f"refs/remotes/origin/tags/{tag_name}",
+                tag_object,
+            ),
+            "refresh local milestone-tag ref",
+        )
+    return validate_integrated(project, archive_milestone.milestone_slug(state))
+
+
 def integrate(repo: Path, slug: str) -> dict:
     project = repo.resolve()
     active_root = archive_milestone.require_project_layout(project)
@@ -1069,6 +1171,17 @@ def integrate(repo: Path, slug: str) -> dict:
             archive_path,
             archive_name,
             ship_commit,
+        )
+    if state.integration == "external-landing":
+        return integrate_external_landing(
+            project,
+            state,
+            archive_path,
+            archive_name,
+            ship_commit,
+            remote_default,
+            default_name,
+            bound_branch,
         )
     publishable_bound_branch(project, bound_branch, ship_commit)
     integration_branch, worktree = integration_names(project, archive_name, pin=True)
@@ -1345,6 +1458,32 @@ def validate_integrated(
                 merge_commit,
             ),
         )
+    elif state.integration == "external-landing":
+        merge_commit = find_integrate_commit(
+            project, remote_default, archive_name, ship_commit
+        )
+        archive_milestone.require_canonical_commit_body(
+            project,
+            merge_commit,
+            integrate_subject(archive_name, default_name),
+            integrate_commit_body(configured, ship_commit, default_name, bound_branch),
+            "integration",
+        )
+        require_pull_request_merge(project, merge_commit, ship_commit, remote_default)
+        if run_git(project, "rev-parse", "--verify", "--quiet", tag_ref).returncode != 0:
+            raise ArchiveError(f"missing milestone tag: {tag_name}")
+        metadata = external_landing_tag_metadata(project, tag_ref)
+        if metadata["Ship"] != ship_commit:
+            raise ArchiveError("external-landing milestone tag names the wrong ship commit")
+        if metadata["Landing"] != merge_commit:
+            raise ArchiveError("external-landing milestone tag names the wrong landing")
+        require_annotated_tag(
+            project,
+            tag_ref,
+            merge_commit,
+            f"milestone tag {tag_name}",
+            external_landing_tag_message(archive_name, ship_commit, merge_commit),
+        )
     else:
         merge_commit = find_integrate_commit(
             project, remote_default, archive_name, ship_commit
@@ -1381,7 +1520,8 @@ def validate_integrated(
         ship_commit,
         tag_name,
         merge_commit,
-        allow_missing_bound=state.integration == "pull-request" or (historical and has_origin),
+        allow_missing_bound=state.integration in ("pull-request", "external-landing")
+        or (historical and has_origin),
         retired=historical,
     )
 
