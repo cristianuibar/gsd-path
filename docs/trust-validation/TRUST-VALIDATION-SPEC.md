@@ -33,8 +33,10 @@ it. Restoring Copilot means removing it from `EXCLUDED_EVALUATION_HOSTS` in
 `scripts/check_trust_evidence.py` before the next release's evaluation. The
 excluded hosts' installer support and offline contract tests remain. Exclusion
 is not a live-test pass; historical receipts and failed attempts remain
-unchanged. The preparation script uses the
-same host selection as the validator and does not prepare these four hosts.
+unchanged. Muse Code is also excluded: the Muse delegation adapter was added
+from live tool schemas; no recorded live release evidence yet. Restoring it
+means removing it from `EXCLUDED_EVALUATION_HOSTS`. The preparation script uses
+the same host selection as the validator and does not prepare these five hosts.
 
 `scripts/check_trust_evidence.py --plan` reports `required_runs`, reasons,
 accepted receipt paths, original versions, and original candidate SHAs. The

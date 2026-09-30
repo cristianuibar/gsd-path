@@ -13,7 +13,7 @@ sys.dont_write_bytecode = True
 ROLES = ('coder', 'reviewer', 'review_panel', 'skeptic', 'inspect_codebase',
          'inspect_docs', 'docs_audit', 'research', 'decide', 'roadmap', 'plan', 'plan_patch')
 HOSTS = ('codex', 'claude', 'grok', 'opencode', 'copilot', 'qwen', 'antigravity',
-         'cursor', 'zed', 'kiro', 'kimi')
+         'cursor', 'zed', 'kiro', 'kimi', 'muse')
 
 
 def sibling(name):

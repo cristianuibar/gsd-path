@@ -290,6 +290,11 @@ review, committed archive, local-origin integration, and Git guard results.
 Claude Code and Cursor also passed fresh native guard probes. No attempt was
 invalid and no candidate defect was found.
 
+Muse Code was not evaluated: the Muse delegation adapter was added from live
+tool schemas; no recorded live release evidence yet. It is excluded from the
+live-check scope via `EXCLUDED_EVALUATION_HOSTS` until evidence is recorded.
+Exclusion is not a live-test pass.
+
 GitHub Copilot CLI was not evaluated: its account quota was exhausted on every
 model, including zero-premium models. The maintainer excluded it from the
 live-check scope, first for 1.4.0; it stays excluded until the maintainer

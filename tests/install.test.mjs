@@ -218,6 +218,7 @@ test("default path resolution", () => {
   const home = os.homedir();
   assert.equal(installer.defaultRoot("codex", {}), path.join(home, ".agents", "skills"));
   assert.equal(installer.defaultRoot("zed", {}), path.join(home, ".agents", "skills"));
+  assert.equal(installer.defaultRoot("muse", {}), path.join(home, ".agents", "skills"));
   assert.equal(installer.defaultRoot("copilot", { COPILOT_HOME: "/tmp/copilot" }), path.resolve("/tmp/copilot/skills"));
   assert.equal(installer.defaultRoot("qwen", { QWEN_HOME: "/tmp/qwen" }), path.resolve("/tmp/qwen/skills"));
   assert.equal(installer.defaultRoot("kiro", { KIRO_HOME: "/tmp/kiro" }), path.resolve("/tmp/kiro/skills"));
@@ -385,6 +386,7 @@ test("local root resolution", () => {
     zed: ".agents/skills",
     kiro: ".kiro/skills",
     kimi: ".kimi-code/skills",
+    muse: ".agents/skills",
   });
   assert.equal(installer.localRoot("claude", project), path.join(project, ".claude", "skills"));
   assert.throws(() => installer.localRoot("bogus", project));
@@ -424,9 +426,9 @@ test("all platform transforms", () => {
         assert.ok(!agentsKept, label);
       } else if (target === installer.SHARED_AGENT_PROFILE) {
         assert.match(content, /\$gsd-path \(Codex\)/, label);
-        assert.match(content, /\/gsd-path \(Antigravity\/Zed\)/, label);
+        assert.match(content, /\/gsd-path \(Antigravity\/Zed\/Muse\)/, label);
         assert.match(dispatch, /shared dispatch for \$gsd-path \(Codex\)/, label);
-        assert.match(dispatch, /\/gsd-path \(Antigravity\/Zed\)/, label);
+        assert.match(dispatch, /\/gsd-path \(Antigravity\/Zed\/Muse\)/, label);
         assert.ok(agentsKept, label);
       } else {
         assert.match(content, /\/gsd-path/, label);
@@ -469,19 +471,20 @@ test("staging from the real repo applies the real platform adapter to every skil
     assert.ok(checked >= 2, `expected multiple dispatch-bearing skills, saw ${checked}`);
     if (target === installer.SHARED_AGENT_PROFILE) {
       const router = fs.readFileSync(path.join(staged, "gsd-path", "SKILL.md"), "utf8");
-      const invocation = "`$gsd-path status` (Codex) or `/gsd-path status` (Antigravity/Zed)";
+      const invocation = "`$gsd-path status` (Codex) or `/gsd-path status` (Antigravity/Zed/Muse)";
       assert.equal(router.split(invocation).length - 1, 1);
       assert.doesNotMatch(router, /\(other hosts\)/);
     }
   }
 });
 
-test("all targets install with shared codex+zed root", async () => {
+test("all targets install with shared codex+zed+muse root", async () => {
   const roots = {};
   for (const target of installer.TARGETS) {
     roots[target] = path.join(root, target, "skills");
   }
   roots.zed = roots.codex;
+  roots.muse = roots.codex;
   const plans = installer.TARGETS.map((target) => installer.targetPlan(target, roots[target]));
   const results = await runInstall(plans);
   const distinct = new Set(Object.values(roots));
@@ -494,7 +497,7 @@ test("all targets install with shared codex+zed root", async () => {
   const joined = results.join("\n");
   assert.match(
     joined,
-    new RegExp(`codex\\+zed: installed ${installer.SKILL_NAMES.length} shared skills`)
+    new RegExp(`codex\\+zed\\+muse: installed ${installer.SKILL_NAMES.length} shared skills`)
   );
   assert.match(joined, /custom subagent/);
   assert.match(joined, /OpenCode stable discovers/);
@@ -539,12 +542,13 @@ test("shared agent hosts use one deployment and back up existing entries", async
     installer.targetPlan("codex", shared),
     installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
+    installer.targetPlan("muse", shared),
   ]);
   assert.deepEqual(deployments, [
     {
       profile: installer.SHARED_AGENT_PROFILE,
       root: shared,
-      targets: ["codex", "antigravity", "zed"],
+      targets: ["codex", "antigravity", "zed", "muse"],
     },
   ]);
   fs.mkdirSync(path.join(shared, "gsd-path-old"), { recursive: true });
@@ -553,6 +557,7 @@ test("shared agent hosts use one deployment and back up existing entries", async
     installer.targetPlan("codex", shared),
     installer.targetPlan("antigravity", shared),
     installer.targetPlan("zed", shared),
+    installer.targetPlan("muse", shared),
   ]);
   const joined = results.join("\n");
   const sharedInstall = new RegExp(
@@ -564,10 +569,10 @@ test("shared agent hosts use one deployment and back up existing entries", async
   assert.ok(fs.statSync(path.join(path.dirname(shared), "disabled-gsd-skills", "gsd-path-old")).isDirectory());
   const content = fs.readFileSync(path.join(shared, "gsd-path", "SKILL.md"), "utf8");
   assert.match(content, /disable-model-invocation: true/);
-  assert.match(content, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\)/);
+  assert.match(content, /\$gsd-path \(Codex\) or \/gsd-path \(Antigravity\/Zed\/Muse\)/);
   assert.match(
     content,
-    /\$gsd-path status \(Codex\) or \/gsd-path status \(Antigravity\/Zed\)/
+    /\$gsd-path status \(Codex\) or \/gsd-path status \(Antigravity\/Zed\/Muse\)/
   );
   assert.ok(fs.existsSync(path.join(shared, "gsd-path", "agents", "openai.yaml")));
 });

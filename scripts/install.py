@@ -505,9 +505,9 @@ HOST_NOTES = {
     "kiro": KIRO_NOTE,
 }
 EXPLICIT_ONLY_TARGETS = frozenset(
-    {"claude", "grok", "copilot", "qwen", "cursor", "zed", "kimi", "shared-agents"}
+    {"claude", "grok", "copilot", "qwen", "cursor", "zed", "kimi", "muse", "shared-agents"}
 )
-SHARED_AGENT_TARGETS = frozenset({"codex", "antigravity", "zed"})
+SHARED_AGENT_TARGETS = frozenset({"codex", "antigravity", "zed", "muse"})
 SHARED_AGENT_PROFILE = "shared-agents"
 CURSOR_AGENT_FILENAME = "gsd-path.md"
 CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md"
@@ -533,7 +533,7 @@ def _shared_invocations(text: str) -> str:
         others = f"{hosts['antigravity']['invocation_prefix']}{skill}"
         return (
             f"{quote}{codex}{arguments}{quote} (Codex) or "
-            f"{quote}{others}{arguments}{quote} (Antigravity/Zed)"
+            f"{quote}{others}{arguments}{quote} (Antigravity/Zed/Muse)"
         )
 
     return re.sub(
@@ -542,7 +542,7 @@ def _shared_invocations(text: str) -> str:
         r"(?: \(Codex\) (?:and|or) (?P<paired_quote>`?)/"
         r"(?P<paired_skill>gsd-path(?:-[a-z0-9]+)*|path)"
         r"(?P<paired_arguments> status)?(?P=paired_quote)"
-        r" \((?:other hosts|Antigravity/Zed)\))?",
+        r" \((?:other hosts|Antigravity/Zed/Muse)\))?",
         replace,
         text,
     )
@@ -620,7 +620,7 @@ def default_root(target: str, environ: Optional[Mapping[str, str]] = None) -> Pa
         return absolute_path(Path("~/.gemini/antigravity-cli/skills"))
     if target == "cursor":
         return absolute_path(Path("~/.cursor/skills"))
-    if target == "zed":
+    if target in ("zed", "muse"):
         return absolute_path(Path("~/.agents/skills"))
     if target == "kiro":
         return absolute_path(Path(env.get("KIRO_HOME") or "~/.kiro") / "skills")
@@ -2259,7 +2259,7 @@ def _deployment_plans(plans: Sequence[TargetPlan]) -> List[DeploymentPlan]:
             if not target_set <= SHARED_AGENT_TARGETS:
                 labels = ", ".join(targets)
                 raise InstallerError(
-                    "only Codex, Antigravity, and Zed may share a skills root: "
+                    "only Codex, Antigravity, Zed, and Muse may share a skills root: "
                     f"{labels}"
                 )
             profile = SHARED_AGENT_PROFILE

@@ -265,6 +265,7 @@ writes nor verifies that wiring. To add it yourself, register
 | Antigravity | `.agents/hooks.json` `PreToolUse` | [Antigravity hooks](https://antigravity.google/docs/hooks) |
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
 | Zed | no hook API — git hooks only | — |
+| Muse Code | no GSD Path hook integration — git hooks only | — |
 
 **Caveats:** The hook cannot prove which skill initiated a shell command or a
 build-phase edit, so AGENTS.md owns those re-entry cases. Grok and Kimi

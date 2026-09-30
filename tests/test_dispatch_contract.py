@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def dispatch_adapters():
-    """Every platform dispatch adapter that exists (codex/zed/antigravity use the shared profile)."""
+    """Every platform dispatch adapter that exists (codex/zed/antigravity/muse use the shared profile)."""
     return sorted((PROJECT_ROOT / "platforms").glob("*/dispatch.md"))
 
 

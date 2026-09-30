@@ -106,7 +106,7 @@ node scripts/install.mjs --codex --claude --cursor
 
 | Flag | Skills root |
 | --- | --- |
-| `--codex`, `--zed` | `~/.agents/skills` (shared bundle) |
+| `--codex`, `--zed`, `--muse` | `~/.agents/skills` (shared bundle) |
 | `--claude` | `~/.claude/skills` |
 | `--grok` | `~/.grok/skills` |
 | `--opencode` | OpenCode config `skills/` |
@@ -176,7 +176,7 @@ also print a one-line update notice (24h cache, fail-silent).
 - Validates synchronized package before writing
 - Uses the [managed-skill backup and collision rules](UPDATE.md#what-auto-updates)
 - Rolls back **all** selected targets if any one fails
-- Codex, Antigravity, and Zed share one local physical root — installed once
+- Codex, Antigravity, Zed, and Muse share one local physical root — installed once
   with a shared host-aware bundle
 
 Restart the host session after install if skills do not appear.
@@ -432,6 +432,7 @@ your skills:
 | Antigravity | `invoke_subagent` | |
 | Cursor | `Task` | installed `gsd-path` subagent |
 | Zed | `spawn_agent` | |
+| Muse Code | `muse.subagent_spawn` | trusted workspace required |
 | Kiro | subagent facility | |
 | Kimi | `Agent` | `coder` child type |
 
