@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import errno
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -71,58 +72,88 @@ class DriverStop(RuntimeError):
 STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
                contracts.HandoffError, review_findings.ReviewFindingsError,
                pipeline_state.PipelineStateError, archive_milestone.ArchiveError, model_policy.PolicyError)
+_RUNTIME_ACTIVATION_ORDER = (
+    "_common",
+    "pipeline_git",
+    "worktree_paths",
+    "build_recovery",
+    "pipeline_state",
+    "check_task_briefs",
+    "isolation",
+    "build_state",
+    "check_handoffs",
+    "task_context",
+    "archive_milestone",
+    "review_findings",
+    "model_policy",
+)
 RECOVERY_BLOCKED = "recovery blocked"
 # The stops the build contract answers with build/blocked when the round raises them (steps 1 and 2);
 # the same stops from review, panel, or skeptics stay with the parent.
 BLOCKING_STOPS = {"dependency-deadlock": "dependency deadlock", RECOVERY_BLOCKED: "blocked recovery"}
 
 
-def _activate_pinned_runtime(repo: Path) -> None:
-    """Load helper modules from the project's pinned runtime when configured."""
-    global isolation, build_state, task_context, contracts, pipeline_state
-    global archive_milestone, review_findings, review_panel, workflow_run, model_policy
-    global STOP_ERRORS
-    launcher = repo / ".gsd-path/status_runtime.py"
-    if not (repo / ".gsd-path/runtime.json").is_file() or not launcher.is_file():
-        return
-    completed = subprocess.run(
-        [sys.executable, "-B", str(launcher), "--repo", str(repo), "--runtime-path"],
-        cwd=repo,
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if completed.returncode:
-        return
-    runtime = Path(completed.stdout.strip())
-    if not runtime.is_dir():
-        return
-    entry = str(runtime)
-    while entry in sys.path:
-        sys.path.remove(entry)
-    sys.path.insert(0, entry)
-    import importlib
+def _bundled_helpers() -> bool:
+    return "scripts.isolation" not in sys.modules
 
-    isolation = importlib.import_module("isolation")
-    build_state = importlib.import_module("build_state")
-    task_context = importlib.import_module("task_context")
-    contracts = importlib.import_module("check_handoffs")
-    pipeline_state = importlib.import_module("pipeline_state")
-    archive_milestone = importlib.import_module("archive_milestone")
-    review_findings = importlib.import_module("review_findings")
-    review_panel = importlib.import_module("review_panel")
-    workflow_run = importlib.import_module("workflow_run")
-    model_policy = importlib.import_module("model_policy")
-    STOP_ERRORS = (
-        DriverStop,
-        isolation.IsolationError,
-        build_state.BuildStateError,
-        contracts.HandoffError,
-        review_findings.ReviewFindingsError,
-        pipeline_state.PipelineStateError,
-        archive_milestone.ArchiveError,
-        model_policy.PolicyError,
-    )
+
+def _refresh_stop_errors() -> None:
+    global STOP_ERRORS
+    STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
+                   contracts.HandoffError, review_findings.ReviewFindingsError,
+                   pipeline_state.PipelineStateError, archive_milestone.ArchiveError,
+                   model_policy.PolicyError)
+
+
+def _reload_pinned_modules(runtime_root: Path) -> None:
+    global isolation, build_state, task_context, contracts, pipeline_state
+    global archive_milestone, review_findings, model_policy
+    if _bundled_helpers():
+        path = str(runtime_root)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+        for name in _RUNTIME_ACTIVATION_ORDER:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+        isolation = sys.modules["isolation"]
+        build_state = sys.modules["build_state"]
+        task_context = sys.modules["task_context"]
+        contracts = sys.modules["check_handoffs"]
+        pipeline_state = sys.modules["pipeline_state"]
+        archive_milestone = sys.modules["archive_milestone"]
+        review_findings = sys.modules["review_findings"]
+        model_policy = sys.modules["model_policy"]
+    else:
+        import scripts
+        path = str(runtime_root)
+        if path not in scripts.__path__:
+            scripts.__path__ = [path, *[entry for entry in scripts.__path__ if entry != path]]
+        for name in _RUNTIME_ACTIVATION_ORDER:
+            module = sys.modules.get(f"scripts.{name}")
+            if module is not None:
+                importlib.reload(module)
+        isolation = scripts.isolation
+        build_state = scripts.build_state
+        task_context = scripts.task_context
+        contracts = scripts.check_handoffs
+        pipeline_state = scripts.pipeline_state
+        archive_milestone = scripts.archive_milestone
+        review_findings = scripts.review_findings
+        model_policy = scripts.model_policy
+    _refresh_stop_errors()
+
+
+def _activate_pinned_runtime(repo: Path) -> None:
+    if not os.path.lexists(repo / ".gsd-path/runtime.json"):
+        return
+    resolved = subprocess.run(
+        [sys.executable, "-B", str(repo / ".gsd-path/status_runtime.py"),
+         "--repo", str(repo), "--runtime-path"],
+        cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
+    if resolved.returncode:
+        raise DriverStop(resolved.stderr.strip() or "pinned runtime resolution failed")
+    _reload_pinned_modules(Path(resolved.stdout.strip()))
 
 
 def now() -> str:
