@@ -73,6 +73,23 @@ SURFACE_HEADING = re.compile(
     r"(?m)^### (?P<surface>\S.*?) — (?P<task>T\d{3})\s*$"
 )
 SURFACE_CONTRACT_HEADING = re.compile(r"(?m)^## Surface contract\s*$")
+# Spec-reach probes (see references/spec-probes.md). The closed edge taxonomy
+# names the classic black-box categories; `none` records a criterion with no
+# data-shape edge and must be dismissed with a reason.
+EDGE_CATEGORIES = (
+    "boundary",
+    "adjacency",
+    "empty",
+    "encoding",
+    "ordering",
+    "precision",
+    "idempotency",
+    "concurrency",
+)
+EDGE_ID_PATTERN = re.compile(r"^E[1-9]\d*$")
+PROHIBITION_ID_PATTERN = re.compile(r"^N[1-9]\d*$")
+CRITERION_DISPOSITION_PATTERN = re.compile(r"^criterion\s+(SC[1-9]\d*)$")
+TABLE_SEPARATOR_PATTERN = re.compile(r"^:?-+:?$")
 GAP_NAME_PATTERN = re.compile(r"^final-gap-(?P<number>[1-9]\d*)\.md$")
 GAP_HEADING_PATTERN = re.compile(
     r"^# Gap Review — (?P<number>[1-9]\d*): (?P<risk>\S.*)$"
@@ -790,6 +807,338 @@ def _coverage_rows(plan: str) -> List[Tuple[str, str, str]]:
     return rows
 
 
+def _probe_table(
+    body: str, label: str, header: str, id_pattern: "re.Pattern[str]", width: int
+) -> List[List[str]]:
+    """Rows of one fixed-width probe table; the last cell keeps any `|` it holds."""
+
+    rows: List[List[str]] = []
+    for line in _strip_comments(body).splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            # A row that lost its leading pipe would otherwise vanish silently.
+            if "|" in stripped and id_pattern.fullmatch(_unquoted(stripped.split("|", 1)[0])):
+                raise HandoffError(f"{label} row must start with |: {stripped}")
+            continue
+        cells = [_unquoted(cell) for cell in stripped.strip("|").split("|")]
+        first = cells[0] if cells else ""
+        if first.casefold() == header.casefold() or all(
+            TABLE_SEPARATOR_PATTERN.fullmatch(cell) for cell in cells if cell
+        ):
+            continue
+        if not id_pattern.fullmatch(first):
+            raise HandoffError(f"{label} has an invalid row: {stripped}")
+        if len(cells) < width:
+            raise HandoffError(f"{label} {first} needs {width} cells")
+        rows.append(cells[: width - 1] + ["|".join(cells[width - 1 :]).strip()])
+    ids = [row[0] for row in rows]
+    repeated = sorted({value for value in ids if ids.count(value) > 1})
+    if repeated:
+        raise HandoffError(f"{label} repeats " + ", ".join(repeated))
+    # id_pattern fixes a one-letter prefix, so the ids sort by their number.
+    expected = [f"{ids[0][0]}{number}" for number in range(1, len(ids) + 1)] if ids else []
+    if sorted(ids, key=lambda value: int(value[1:])) != expected:
+        raise HandoffError(f"{label} ids must be contiguous from 1")
+    return rows
+
+
+def _probe_section(text: str, heading: str, label: str) -> Optional[str]:
+    """Body of one exact `## <heading>` section; a near-miss heading is an error.
+
+    The probe gates key on this heading, so a misspelled or re-levelled one
+    must fail loudly instead of reading as an intent written before the probe.
+    """
+
+    live = _strip_comments(text)
+    exact = re.findall(rf"(?m)^## {re.escape(heading)}[ \t]*$", live)
+    near = [
+        line.strip()
+        for line in re.findall(rf"(?im)^[ \t]*#{{1,6}}[ \t]*{re.escape(heading)}\b.*$", live)
+        if not re.fullmatch(rf"## {re.escape(heading)}", line.strip())
+    ]
+    if near:
+        raise HandoffError(f"{label} heading {near[0]!r} must be exactly '## {heading}'")
+    if len(exact) > 1:
+        raise HandoffError(f"{label} repeats ## {heading}")
+    if not exact:
+        return None
+    return _common.section_body(live, heading)
+
+
+def _criterion_disposition(
+    value: str, criteria: Dict[str, str], label: str
+) -> Optional[str]:
+    match = CRITERION_DISPOSITION_PATTERN.fullmatch(" ".join(value.split()))
+    if match is None:
+        return None
+    target = match.group(1)
+    if target not in criteria:
+        raise HandoffError(f"{label} names unknown {target}")
+    return target
+
+
+def edge_coverage(
+    intent: str, criteria: Dict[str, str]
+) -> Optional[Dict[str, Dict[str, str]]]:
+    """INTENT.md `## Edge coverage`, or None for an intent written before the probe.
+
+    Each row rules on one applicable edge of one success criterion:
+    `criterion SCn` (the edge is stated in a success criterion), `held-out`
+    (a named test must pin the ruling in Detail), or `dismissed` (Detail says
+    why it does not apply). Every criterion appears at least once, so a
+    skipped walk is visible rather than silent.
+    """
+
+    label = "INTENT.md Edge coverage"
+    body = _probe_section(intent, "Edge coverage", label)
+    if body is None:
+        return None
+    edges: Dict[str, Dict[str, str]] = {}
+    seen: Set[Tuple[str, str, str, str]] = set()
+    categories: Dict[str, Set[str]] = {}
+    for edge_id, criterion, category, disposition, detail in _probe_table(
+        body, label, "Edge", EDGE_ID_PATTERN, 5
+    ):
+        row_label = f"{label} {edge_id}"
+        if criterion not in criteria:
+            raise HandoffError(f"{row_label} names unknown criterion {criterion or 'none'}")
+        category = category.casefold()
+        if category not in EDGE_CATEGORIES + ("none",):
+            raise HandoffError(f"{row_label} has unknown category {category or 'none'}")
+        disposition = " ".join(disposition.split())
+        key = (criterion, category, disposition, _normalize_ws(detail))
+        if key in seen:
+            raise HandoffError(f"{row_label} repeats an earlier row")
+        seen.add(key)
+        categories.setdefault(criterion, set()).add(category)
+        target = _criterion_disposition(disposition, criteria, row_label)
+        if target is None and disposition not in {"held-out", "dismissed"}:
+            raise HandoffError(
+                f"{row_label} disposition must be criterion SCn, held-out, or dismissed"
+            )
+        if category == "none" and disposition != "dismissed":
+            raise HandoffError(f"{row_label} category none must be dismissed")
+        if target is None:
+            detail = _non_placeholder(detail, f"{row_label} Detail")
+        elif detail:
+            _reject_placeholder(detail, f"{row_label} Detail")
+        edges[edge_id] = {
+            "criterion": criterion,
+            "category": category,
+            "disposition": "criterion" if target else disposition,
+            "target": target or "",
+            "detail": detail,
+        }
+    if not edges:
+        raise HandoffError(f"{label} has no rows")
+    for criterion, raised in categories.items():
+        if "none" in raised and len(raised) > 1:
+            raise HandoffError(f"{label} {criterion} mixes category none with edges")
+    walked = {edge["criterion"] for edge in edges.values()}
+    unwalked = [criterion for criterion in criteria if criterion not in walked]
+    if unwalked:
+        raise HandoffError(f"{label} does not walk " + ", ".join(unwalked))
+    return edges
+
+
+def prohibitions(
+    intent: str, criteria: Dict[str, str]
+) -> Optional[Dict[str, Dict[str, str]]]:
+    """INTENT.md `## Prohibitions`, or None for an intent written before the probe.
+
+    Each row names what one criterion must never silently become:
+    `criterion SCn` (stated as a checkable success criterion), `judgment`
+    (the final reviewer judges it; Detail says what to look for), or
+    `dismissed`. Criterion `all` is allowed only for a dismissed row, so work
+    no person touches needs one row instead of one per criterion.
+    """
+
+    label = "INTENT.md Prohibitions"
+    body = _probe_section(intent, "Prohibitions", label)
+    if body is None:
+        return None
+    rows: Dict[str, Dict[str, str]] = {}
+    for prohibition_id, criterion, must_not, disposition, detail in _probe_table(
+        body, label, "Prohibition", PROHIBITION_ID_PATTERN, 5
+    ):
+        row_label = f"{label} {prohibition_id}"
+        disposition = " ".join(disposition.split())
+        if criterion.casefold() == "all":
+            if disposition != "dismissed":
+                raise HandoffError(f"{row_label} criterion all must be dismissed")
+            criterion = "all"
+        elif criterion not in criteria:
+            raise HandoffError(f"{row_label} names unknown criterion {criterion or 'none'}")
+        target = _criterion_disposition(disposition, criteria, row_label)
+        if target is None and disposition not in {"judgment", "dismissed"}:
+            raise HandoffError(
+                f"{row_label} disposition must be criterion SCn, judgment, or dismissed"
+            )
+        if disposition != "dismissed":
+            must_not = _non_placeholder(must_not, f"{row_label} Must not")
+        elif must_not:
+            _reject_placeholder(must_not, f"{row_label} Must not")
+        if target is None:
+            detail = _non_placeholder(detail, f"{row_label} Detail")
+        elif detail:
+            _reject_placeholder(detail, f"{row_label} Detail")
+        rows[prohibition_id] = {
+            "criterion": criterion,
+            "must_not": must_not,
+            "disposition": "criterion" if target else disposition,
+            "target": target or "",
+            "detail": detail,
+        }
+    if not rows:
+        raise HandoffError(f"{label} has no rows")
+    walked = {row["criterion"] for row in rows.values()}
+    if "all" in walked:
+        # `all` records that no person is affected at all, so it stands alone.
+        if len(rows) != 1 or next(iter(rows.values()))["must_not"].casefold() != "none":
+            raise HandoffError(f"{label} criterion all must be the only row, with Must not none")
+        return rows
+    unwalked = [criterion for criterion in criteria if criterion not in walked]
+    if unwalked:
+        raise HandoffError(f"{label} does not walk " + ", ".join(unwalked))
+    return rows
+
+
+def evidence_tags(intent: str, criteria: Dict[str, str]) -> Dict[str, List[str]]:
+    """Per criterion, the held-out edges and judgment prohibitions a `met` verdict must cite."""
+
+    tags: Dict[str, List[str]] = {}
+    for edge_id, edge in (edge_coverage(intent, criteria) or {}).items():
+        if edge["disposition"] == "held-out":
+            tags.setdefault(edge["criterion"], []).append(edge_id)
+    for prohibition_id, row in (prohibitions(intent, criteria) or {}).items():
+        if row["disposition"] == "judgment":
+            tags.setdefault(row["criterion"], []).append(prohibition_id)
+    return tags
+
+
+def _cites(text: str, tag: str) -> bool:
+    """A citation of an E#/N# id as a word, not inside a path, name, or longer id."""
+
+    return re.search(rf"(?<![A-Za-z0-9_./\\-]){re.escape(tag)}(?![A-Za-z0-9_])", text) is not None
+
+
+def _held_out_checks(plan: str) -> Dict[str, Tuple[str, str]]:
+    body = _common.section_body(plan, "Held-out checks")
+    if body is None:
+        return {}
+    label = "PLAN.md Held-out checks"
+    checks: Dict[str, Tuple[str, str]] = {}
+    for line in _strip_comments(body).splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if cells[0].casefold() == "edge" or all(
+            TABLE_SEPARATOR_PATTERN.fullmatch(cell) for cell in cells if cell
+        ):
+            continue
+        if len(cells) != 3 or not EDGE_ID_PATTERN.fullmatch(cells[0]):
+            raise HandoffError(f"{label} has an invalid row: {stripped}")
+        edge_id, task_id, test = (_unquoted(cell) for cell in cells)
+        if edge_id in checks:
+            raise HandoffError(f"{label} repeats {edge_id}")
+        # A pytest-style node id (`tests/x.py::test_y`) names its file before `::`.
+        test = _canonical_repo_path(test.split("::", 1)[0], f"{label} {edge_id} Test")
+        checks[edge_id] = (task_id, test)
+    return checks
+
+
+def _verify_without_comments(task_text: str) -> str:
+    body = _section(task_text, "Verify")
+    block = VERIFY_BLOCK_PATTERN.search(body)
+    if block is None:
+        return ""
+    return _normalize_ws(re.sub(r"(?m)(?:^|\s)#.*$", "", block.group("block")))
+
+
+def _validate_held_out_checks(
+    plan: str,
+    edges: Optional[Dict[str, Dict[str, str]]],
+    tasks: Dict[str, str],
+) -> Dict[str, str]:
+    """Each held-out edge maps to one task whose Verify runs the named test."""
+
+    held_out = sorted(
+        (edge_id for edge_id, edge in (edges or {}).items() if edge["disposition"] == "held-out"),
+        key=lambda value: int(value[1:]),
+    )
+    checks = _held_out_checks(plan)
+    label = "PLAN.md Held-out checks"
+    missing = [edge_id for edge_id in held_out if edge_id not in checks]
+    if missing:
+        raise HandoffError(f"{label} omits held-out " + ", ".join(missing))
+    extra = sorted(set(checks) - set(held_out), key=lambda value: int(value[1:]))
+    if extra:
+        raise HandoffError(f"{label} names edges that are not held-out: " + ", ".join(extra))
+    for edge_id in held_out:
+        task_id, test = checks[edge_id]
+        if task_id not in tasks:
+            raise HandoffError(f"{label} {edge_id} names unknown {task_id}")
+        text = tasks[task_id]
+        criterion = (edges or {})[edge_id]["criterion"]
+        if criterion not in _owned_criteria(text, task_id):
+            raise HandoffError(
+                f"{label} {edge_id} belongs to {criterion}, which {task_id} does not own"
+            )
+        files = [_posix_path(path) for path in _frontmatter_files(text)]
+        if test not in files:
+            raise HandoffError(f"{label} {edge_id} test {test} is not listed in {task_id} files")
+        if any(other != test and other.startswith(test + "/") for other in files):
+            raise HandoffError(f"{label} {edge_id} test {test} names a directory, not a test file")
+        if not _verify_mentions_a_file(_verify_without_comments(text), [test]):
+            raise HandoffError(f"{task_id} Verify must run held-out test {test} for {edge_id}")
+        acceptance = " ".join(_acceptance_items(text, task_id).values())
+        if not _cites(acceptance, edge_id):
+            raise HandoffError(f"{task_id} Acceptance criteria must state held-out {edge_id}")
+    return {edge_id: checks[edge_id][0] for edge_id in held_out}
+
+
+def validate_intent_probes(root: Path, project_dir: str = DEFAULT_PROJECT_DIR) -> None:
+    """Probe-table check for leaving define; a no-op without INTENT.md or its tables."""
+
+    path = root / _intent_path(project_dir)
+    if not path.is_file():
+        return
+    intent = _read(root, _intent_path(project_dir))
+    live = _strip_comments(intent)
+    if not re.search(r"(?im)^[ \t]*#{1,6}[ \t]*(edge coverage|prohibitions)\b", live):
+        return
+    criteria = _success_criteria(intent)
+    edge_coverage(intent, criteria)
+    prohibitions(intent, criteria)
+
+
+def validate_intent(
+    root: Path, project_dir: str = DEFAULT_PROJECT_DIR
+) -> Dict[str, object]:
+    """Check INTENT.md success criteria and its spec-reach probe tables before approval."""
+
+    intent = _read(root, _intent_path(project_dir))
+    criteria = _success_criteria(intent)
+    _surfaces(intent, "INTENT.md")
+    edges = edge_coverage(intent, criteria)
+    rows = prohibitions(intent, criteria)
+    return {
+        "phase": "define",
+        "criteria": sorted(criteria, key=lambda value: int(value[2:])),
+        "edge_coverage": "absent" if edges is None else len(edges),
+        "held_out": sorted(
+            (edge_id for edge_id, edge in (edges or {}).items() if edge["disposition"] == "held-out"),
+            key=lambda value: int(value[1:]),
+        ),
+        "prohibitions": "absent" if rows is None else len(rows),
+        "judgment": sorted(
+            (row_id for row_id, row in (rows or {}).items() if row["disposition"] == "judgment"),
+            key=lambda value: int(value[1:]),
+        ),
+    }
+
+
 def _task_texts(root: Path, project_dir: str) -> Dict[str, str]:
     tasks_dir = root / project_dir / "tasks"
     if not tasks_dir.is_dir():
@@ -1475,6 +1824,9 @@ def validate_plan(
             continue
         if not _verify_mentions_a_file(command, _frontmatter_files(text)):
             raise HandoffError(f"{task_id} Verify must name a path from files")
+    edges = edge_coverage(intent, criteria)
+    prohibitions(intent, criteria)
+    held_out = _validate_held_out_checks(plan, edges, tasks)
     return {
         "phase": "plan",
         "criteria": sorted(criteria),
@@ -1482,6 +1834,7 @@ def validate_plan(
         "tasks": len(tasks),
         "waves": waves,
         "surfaces": {surface: task for surface, (task, _) in owners.items()},
+        "held_out": held_out,
     }
 
 
@@ -1692,6 +2045,7 @@ def validate_final(
     intent = _read(root, _intent_path(project_dir))
     criteria = _success_criteria(intent)
     surface_of = criterion_surfaces(root, project_dir)
+    tags = evidence_tags(intent, criteria)
     relative = f"{project_dir}/review/FINAL.md"
     text = _read(root, relative) if final_text is None else final_text
     reviewed_head = _reviewed_head(text, relative)
@@ -1768,6 +2122,16 @@ def validate_final(
             if finding.casefold() != "none" or fix_direction.casefold() != "none":
                 raise HandoffError(
                     f"FINAL.md {sc_id} met verdict must have no Finding or Fix direction"
+                )
+            # Honest verifier: a spec-tagged criterion is met only on cited
+            # evidence for each tag; otherwise the reviewer records unverifiable.
+            cited = " ".join((check, observed, reference))
+            uncited = [tag for tag in tags.get(sc_id, []) if not _cites(cited, tag)]
+            if uncited:
+                raise HandoffError(
+                    f"FINAL.md {sc_id} is met without cited evidence for "
+                    + ", ".join(uncited)
+                    + "; cite each held-out check or judgment, or record unverifiable"
                 )
         elif finding.casefold() == "none" or fix_direction.casefold() == "none":
             raise HandoffError(
@@ -1910,7 +2274,8 @@ def validate_patch_findings(
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument(
-        "phase", choices=("research", "decide", "roadmap", "patch", "plan", "wave", "final")
+        "phase",
+        choices=("intent", "research", "decide", "roadmap", "patch", "plan", "wave", "final"),
     )
     argument_parser.add_argument("--repo", type=Path, required=True)
     argument_parser.add_argument(
@@ -1938,6 +2303,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             result = validate_wave(repo, arguments.project_dir, arguments.review)
         else:
             validators = {
+                "intent": validate_intent,
                 "research": validate_research,
                 "decide": validate_decide,
                 "roadmap": validate_roadmap,

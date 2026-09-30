@@ -1,3 +1,5 @@
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -2476,6 +2478,687 @@ Waves checked: 1
                 "heading risk does not match Risk field",
             ):
                 check_handoffs.validate_final(root)
+
+
+class SpecReachProbeTests(unittest.TestCase):
+    """Spec-reach probes: Edge coverage, Prohibitions, Held-out checks, honest verifier."""
+
+    write = HandoffValidationTests.write
+    write_state = HandoffValidationTests.write_state
+    write_intent_criteria = HandoffValidationTests.write_intent_criteria
+    write_plan_coverage = HandoffValidationTests.write_plan_coverage
+    write_coverage_task = HandoffValidationTests.write_coverage_task
+    write_plan_handoff = HandoffValidationTests.write_plan_handoff
+    write_final_review = HandoffValidationTests.write_final_review
+
+    EDGE_HEAD = (
+        "## Edge coverage\n\n"
+        "| Edge | Criterion | Category | Disposition | Detail |\n"
+        "|------|-----------|----------|-------------|--------|\n"
+    )
+    PROHIBITION_HEAD = (
+        "## Prohibitions\n\n"
+        "| Prohibition | Criterion | Must not | Disposition | Detail |\n"
+        "|-------------|-----------|----------|-------------|--------|\n"
+    )
+    VALID_EDGES = (
+        "| E1 | SC1 | boundary | held-out | the start date is inclusive |\n"
+        "| E2 | SC1 | empty | dismissed | input is always a non-empty list |\n"
+        "| E3 | SC2 | none | dismissed | static copy, no data shape |\n"
+    )
+    VALID_PROHIBITIONS = (
+        "| N1 | SC2 | shame the user | judgment | wording is neutral, no guilt |\n"
+        "| N2 | SC1 | none | dismissed | nothing else applies |\n"
+    )
+
+    def append_intent(self, root: Path, *sections: str) -> None:
+        path = root / ".project/intent/INTENT.md"
+        text = path.read_text(encoding="utf-8").rstrip("\n") + "\n\n"
+        path.write_bytes((text + "\n".join(sections)).encode("utf-8"))
+
+    def edges(self, rows: str) -> str:
+        return self.EDGE_HEAD + rows
+
+    def prohibitions(self, rows: str) -> str:
+        return self.PROHIBITION_HEAD + rows
+
+    def intent_root(self, root: Path, *sections: str) -> None:
+        self.write_intent_criteria(root)
+        if sections:
+            self.append_intent(root, *sections)
+
+    def assert_intent_error(self, root: Path, pattern: str) -> None:
+        with self.assertRaisesRegex(check_handoffs.HandoffError, pattern):
+            check_handoffs.validate_intent(root)
+
+    # Intent
+
+    def test_intent_without_probe_sections_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(root)
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["edge_coverage"], "absent")
+            self.assertEqual(result["prohibitions"], "absent")
+
+    def test_intent_accepts_valid_probe_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(self.VALID_EDGES),
+                self.prohibitions(self.VALID_PROHIBITIONS),
+            )
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["held_out"], ["E1"])
+            self.assertEqual(result["judgment"], ["N1"])
+            self.assertEqual(result["edge_coverage"], 3)
+            self.assertEqual(result["prohibitions"], 2)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    check_handoffs.main(["intent", "--repo", str(root)]), 0
+                )
+
+    def test_intent_rejects_a_criterion_the_edge_walk_skips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | held-out | the start date is inclusive |\n"
+                ),
+            )
+            self.assert_intent_error(root, "does not walk SC2")
+
+    def test_intent_rejects_an_unknown_edge_category(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | vibes | held-out | some ruling |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "unknown category")
+
+    def test_intent_rejects_category_none_that_is_not_dismissed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | none | held-out | some ruling |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "category none must be dismissed")
+
+    def test_intent_rejects_a_held_out_row_without_detail(self) -> None:
+        for detail in ("none", ""):
+            with self.subTest(detail=detail), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.intent_root(
+                    root,
+                    self.edges(
+                        f"| E1 | SC1 | boundary | held-out | {detail} |\n"
+                        "| E2 | SC2 | none | dismissed | static |\n"
+                    ),
+                )
+                self.assert_intent_error(root, "Detail")
+
+    def test_intent_rejects_a_disposition_naming_an_unknown_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | criterion SC9 | stated there |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "unknown SC9")
+
+    def test_intent_rejects_noncontiguous_edge_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | held-out | the start date is inclusive |\n"
+                    "| E3 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "contiguous")
+
+    def test_intent_rejects_the_template_placeholder_edge_row(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | <category> | <disposition> | <detail> |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "unknown category")
+
+    def test_intent_accepts_a_single_all_dismissed_prohibition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | all | none | dismissed | library, nobody touches it |\n"
+                ),
+            )
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["prohibitions"], 1)
+            self.assertEqual(result["judgment"], [])
+
+    def test_intent_rejects_criterion_all_with_judgment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | all | shame the user | judgment | wording is neutral |\n"
+                ),
+            )
+            self.assert_intent_error(root, "criterion all must be dismissed")
+
+    def test_intent_rejects_a_placeholder_must_not(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | SC1 | <what it must never become> | judgment | wording is neutral |\n"
+                    "| N2 | SC2 | none | dismissed | nothing applies |\n"
+                ),
+            )
+            self.assert_intent_error(root, "Must not")
+
+    # Intent: further probe rules
+
+    def test_intent_prohibitions_must_walk_every_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | SC1 | shame the user | judgment | wording is neutral |\n"
+                ),
+            )
+            self.assert_intent_error(root, "does not walk SC2")
+
+    def test_intent_rejects_an_invalid_prohibition_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | SC1 | shame the user | held-out | wording is neutral |\n"
+                    "| N2 | SC2 | none | dismissed | nothing applies |\n"
+                ),
+            )
+            self.assert_intent_error(
+                root, "disposition must be criterion SCn, judgment, or dismissed"
+            )
+
+    def test_intent_rejects_an_exact_duplicate_edge_row(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | empty | dismissed | always non-empty |\n"
+                    "| E2 | SC1 | empty | dismissed | always non-empty |\n"
+                    "| E3 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "repeats an earlier row")
+
+    def test_intent_accepts_same_criterion_and_category_with_different_rulings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | dismissed | lower bound is fixed |\n"
+                    "| E2 | SC1 | boundary | held-out | the upper bound is inclusive |\n"
+                    "| E3 | SC1 | boundary | dismissed | no other bound applies |\n"
+                    "| E4 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["edge_coverage"], 4)
+            self.assertEqual(result["held_out"], ["E2"])
+
+    def test_intent_rejects_category_none_mixed_with_a_real_category(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | none | dismissed | static |\n"
+                    "| E2 | SC1 | empty | dismissed | always non-empty |\n"
+                    "| E3 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "mixes category none")
+
+    def test_intent_rejects_a_probe_section_without_rows(self) -> None:
+        cases = {
+            "edge header only": (self.EDGE_HEAD, "Edge coverage has no rows"),
+            "prohibition header only": (self.PROHIBITION_HEAD, "Prohibitions has no rows"),
+            "edge comment only": (
+                "## Edge coverage\n\n<!-- | E1 | SC1 | boundary | held-out | x | -->\n",
+                "Edge coverage has no rows",
+            ),
+            "prohibition comment only": (
+                "## Prohibitions\n\n"
+                "<!-- | N1 | SC1 | x | judgment | y | -->\n",
+                "Prohibitions has no rows",
+            ),
+        }
+        for name, (section, pattern) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.intent_root(root, section)
+                self.assert_intent_error(root, pattern)
+
+    def test_intent_rejects_a_near_miss_probe_heading(self) -> None:
+        table = self.EDGE_HEAD + self.VALID_EDGES
+        prohibition_table = self.PROHIBITION_HEAD + self.VALID_PROHIBITIONS
+        cases = {
+            "wrong case": table.replace("## Edge coverage", "## Edge Coverage"),
+            "wrong level": table.replace("## Edge coverage", "### Edge coverage"),
+            "suffix": prohibition_table.replace(
+                "## Prohibitions", "## Prohibitions (draft)"
+            ),
+        }
+        for name, section in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.intent_root(root, section)
+                self.assert_intent_error(root, "must be exactly")
+
+    def test_intent_rejects_a_repeated_probe_heading(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            table = self.edges(self.VALID_EDGES)
+            self.intent_root(root, table, table)
+            self.assert_intent_error(root, "repeats ## Edge coverage")
+
+    def test_intent_ignores_a_probe_heading_inside_a_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root, "<!--\n" + self.edges(self.VALID_EDGES) + "\n-->\n"
+            )
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["edge_coverage"], "absent")
+
+    def test_intent_rejects_a_row_missing_its_leading_pipe(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | held-out | the start date is inclusive |\n"
+                    "E2 | SC1 | empty | dismissed | x |\n"
+                    "| E3 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, r"must start with \|")
+
+    def test_intent_rejects_all_alongside_another_prohibition_row(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | all | none | dismissed | nobody touches it |\n"
+                    "| N2 | SC1 | shame the user | judgment | wording is neutral |\n"
+                ),
+            )
+            self.assert_intent_error(root, "criterion all must be the only row")
+
+    def test_intent_rejects_all_whose_must_not_is_not_none(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | all | shame the user | dismissed | nobody touches it |\n"
+                ),
+            )
+            self.assert_intent_error(root, "criterion all must be the only row")
+
+    def test_intent_rejects_placeholders_in_dismissed_and_criterion_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.prohibitions(
+                    "| N1 | SC1 | <placeholder> | dismissed | nothing applies |\n"
+                    "| N2 | SC2 | none | dismissed | nothing applies |\n"
+                ),
+            )
+            self.assert_intent_error(root, "Must not still contains the placeholder")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | boundary | criterion SC2 | <placeholder> |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+            )
+            self.assert_intent_error(root, "Detail still contains the placeholder")
+
+    def test_intent_parses_backticked_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.intent_root(
+                root,
+                self.edges(
+                    "| `E1` | `SC1` | boundary | held-out | x |\n"
+                    "| `E2` | `SC2` | none | dismissed | static |\n"
+                ),
+            )
+
+            result = check_handoffs.validate_intent(root)
+
+            self.assertEqual(result["edge_coverage"], 2)
+            self.assertEqual(result["held_out"], ["E1"])
+
+    # Plan
+
+    HELD_OUT_TABLE = (
+        "\n## Held-out checks\n\n"
+        "| Edge | Task | Test |\n"
+        "|------|------|------|\n"
+        "{rows}"
+    )
+
+    def plan_root(
+        self,
+        root: Path,
+        *,
+        check_rows: str = "| E1 | T001 | tests/test_heldout.py |\n",
+        edges: str = "",
+        files: str = "src/app.py\n  - tests/test_heldout.py",
+        verify: str = "python3 src/app.py && python3 tests/test_heldout.py",
+        acceptance: str = (
+            "1. The demo command prints hello.\n"
+            "2. E1: the start date is inclusive."
+        ),
+        with_section: bool = True,
+    ) -> None:
+        self.write_state(root, "plan", "active")
+        self.write_intent_criteria(root)
+        self.append_intent(root, self.edges(edges or self.VALID_EDGES))
+        self.write_plan_coverage(root)
+        plan = root / ".project/plan/PLAN.md"
+        if with_section:
+            plan.write_bytes(
+                (
+                    plan.read_text(encoding="utf-8")
+                    + self.HELD_OUT_TABLE.format(rows=check_rows)
+                ).encode("utf-8")
+            )
+        self.write_coverage_task(
+            root, "T001", "- SC1", acceptance=acceptance, verify=verify, files=files
+        )
+        self.write_coverage_task(
+            root, "T002", "- SC2", acceptance="1. The demo test suite is green."
+        )
+
+    def test_plan_rejects_a_missing_held_out_checks_section(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, with_section=False)
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "omits held-out E1"):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_check_for_a_dismissed_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(
+                root,
+                check_rows=(
+                    "| E1 | T001 | tests/test_heldout.py |\n"
+                    "| E2 | T001 | tests/test_heldout.py |\n"
+                ),
+            )
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "not held-out"):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_test_outside_the_task_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, files="src/app.py")
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "is not listed in T001 files"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_verify_that_skips_the_held_out_test(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, verify="python3 src/app.py")
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "must run held-out test"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_acceptance_that_omits_the_held_out_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, acceptance="1. The demo command prints hello.")
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "must state held-out E1"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_accepts_a_wired_held_out_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root)
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["held_out"], {"E1": "T001"})
+
+    def test_plan_rejects_a_held_out_row_naming_an_unknown_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, check_rows="| E1 | T009 | tests/test_heldout.py |\n")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "names unknown T009"):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_test_that_is_a_directory_prefix_of_another_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(
+                root,
+                check_rows="| E1 | T001 | tests/heldout |\n",
+                files="src/app.py\n  - tests/heldout\n  - tests/heldout/case.py",
+                verify="python3 src/app.py && python3 tests/heldout",
+            )
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "names a directory"):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_a_test_only_named_in_a_verify_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(
+                root,
+                files="src/app.py\n  - tests/other.py\n  - tests/test_heldout.py",
+                verify="python3 -m unittest tests/other.py # tests/test_heldout.py",
+            )
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "must run held-out test"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_rejects_an_edge_id_only_inside_an_acceptance_comment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(
+                root,
+                acceptance=(
+                    "1. The demo command prints hello.\n"
+                    "2. The start date is inclusive. <!-- E1 -->"
+                ),
+            )
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "must state held-out E1"
+            ):
+                check_handoffs.validate_plan(root)
+
+    def test_plan_accepts_a_pytest_node_id_in_the_test_cell(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(
+                root,
+                check_rows="| E1 | T001 | tests/test_heldout.py::test_e1 |\n",
+                verify="pytest tests/test_heldout.py::test_e1",
+            )
+
+            result = check_handoffs.validate_plan(root)
+
+            self.assertEqual(result["held_out"], {"E1": "T001"})
+
+    def test_plan_rejects_a_held_out_edge_assigned_to_a_task_that_does_not_own_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.plan_root(root, check_rows="| E1 | T002 | tests/test_app.py |\n")
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "does not own"):
+                check_handoffs.validate_plan(root)
+
+    # Final
+
+    def final_root(
+        self, root: Path, *sections: str, verdict: str = "pass", sc1: str = "met",
+        observed: str = "hello",
+    ) -> None:
+        self.write_state(root, "ship", "active")
+        self.write_intent_criteria(root)
+        self.append_intent(root, *sections)
+        self.write_final_review(root, verdict=verdict, sc1=sc1, observed=observed)
+
+    def sc1_held_out(self) -> str:
+        return self.edges(
+            "| E1 | SC1 | boundary | held-out | the start date is inclusive |\n"
+            "| E2 | SC2 | none | dismissed | static |\n"
+        )
+
+    def test_final_rejects_met_without_cited_held_out_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.final_root(root, self.sc1_held_out())
+            with self.assertRaisesRegex(
+                check_handoffs.HandoffError, "met without cited evidence for E1"
+            ):
+                check_handoffs.validate_final(root)
+
+    def test_final_accepts_met_when_observed_cites_the_edge(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.final_root(
+                root, self.sc1_held_out(), observed="E1 held: the start date is inclusive"
+            )
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_final_accepts_unverifiable_for_a_tagged_criterion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.final_root(
+                root, self.sc1_held_out(), verdict="blocked", sc1="unverifiable"
+            )
+            final = root / ".project/review/FINAL.md"
+            text = final.read_text(encoding="utf-8")
+            head, tail = text.split("### SC2", 1)
+            head = head.replace(
+                "- **Finding**: none",
+                "- **Finding**: The inclusive start date could not be exercised.",
+            ).replace(
+                "- **Fix direction**: none",
+                "- **Fix direction**: Provide a fixture and rerun the held-out test.",
+            )
+            final.write_bytes((head + "### SC2" + tail).encode("utf-8"))
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "blocked")
+
+    def test_final_requires_a_judgment_prohibition_to_be_cited(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.final_root(
+                root,
+                self.prohibitions(
+                    "| N1 | SC2 | shame the user | judgment | wording is neutral |\n"
+                    "| N2 | SC1 | none | dismissed | nothing applies |\n"
+                ),
+            )
+            with self.assertRaisesRegex(check_handoffs.HandoffError, "N1"):
+                check_handoffs.validate_final(root)
+
+    def test_final_accepts_untagged_criteria_without_citations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.final_root(
+                root,
+                self.edges(
+                    "| E1 | SC1 | none | dismissed | static |\n"
+                    "| E2 | SC2 | none | dismissed | static |\n"
+                ),
+                self.prohibitions(
+                    "| N1 | all | none | dismissed | nobody touches it |\n"
+                ),
+            )
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+
+    def test_cites_matches_whole_tags_only(self) -> None:
+        self.assertFalse(check_handoffs._cites("checked E10 only", "E1"))
+        self.assertFalse(check_handoffs._cites("checked SE1 only", "E1"))
+        self.assertTrue(check_handoffs._cites("E1: held", "E1"))
+        self.assertTrue(check_handoffs._cites("held (E1)", "E1"))
+
+    def test_cites_rejects_ids_inside_paths_and_longer_names(self) -> None:
+        for text, tag in (
+            ("see tests/E1.py", "E1"),
+            ("see E2E/x.py", "E2"),
+            ("see x-E1", "E1"),
+            ("see E1_a", "E1"),
+        ):
+            with self.subTest(text=text):
+                self.assertFalse(check_handoffs._cites(text, tag))
+
+    def test_cites_accepts_ids_ending_a_sentence_or_followed_by_a_colon(self) -> None:
+        for text in ("It held for E1.", "held (E1)", "E1: held"):
+            with self.subTest(text=text):
+                self.assertTrue(check_handoffs._cites(text, "E1"))
 
 
 if __name__ == "__main__":

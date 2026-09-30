@@ -40,7 +40,14 @@ def render(repo: Path, task: Path) -> str:
         if simple:
             before, after = intent[:section.start('body')], intent[section.end('body'):]
             # Corrections and task interfaces can explicitly refer to another SC.
-            required = set(owned) | set(re.findall(r'\bSC\d+\b', before + after + task_text))
+            # The spec-probe tables name every SC by design, so they select nothing.
+            scanned = re.sub(r'(?ms)^## (?:Edge coverage|Prohibitions)[ \t]*\n.*?(?=^## |\Z)', '',
+                             before + after)
+            required = set(owned) | set(re.findall(r'\bSC\d+\b', scanned + task_text))
+            # An owned criterion's edge or prohibition ruled into another SC needs that SC's text.
+            for rows in (contracts.edge_coverage(intent, criteria), contracts.prohibitions(intent, criteria)):
+                required |= {row['target'] for row in (rows or {}).values()
+                             if row['target'] and row['criterion'] in owned}
             selected = ''.join(chunk for item, chunk in zip(items, chunks) if f'SC{item[1]}' in required)
             projected = before + '\n' + (selected or '- No criteria assigned.\n\n') + after
             mode = 'owned-criteria'
