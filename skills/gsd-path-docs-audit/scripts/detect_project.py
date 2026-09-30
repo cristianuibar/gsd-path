@@ -229,16 +229,20 @@ HTML_BLOCK_START = re.compile(
     re.IGNORECASE,
 )
 REPARSE_NAME_SURROGATE = 0x20000000
-ANCHORED_EVIDENCE_SUPPORTED = (
+_POSIX_ANCHORED_EVIDENCE_SUPPORTED = (
     hasattr(os, "O_DIRECTORY")
     and hasattr(os, "O_NOFOLLOW")
     and os.open in os.supports_dir_fd
     and os.stat in os.supports_dir_fd
     and os.stat in os.supports_follow_symlinks
 )
+WINDOWS_ANCHORED_EVIDENCE_SUPPORTED = os.name == "nt"
+ANCHORED_EVIDENCE_SUPPORTED = (
+    _POSIX_ANCHORED_EVIDENCE_SUPPORTED or WINDOWS_ANCHORED_EVIDENCE_SUPPORTED
+)
 LISTDIR_DIR_FD_SUPPORTED = os.listdir in getattr(os, "supports_fd", ())
 ANCHORED_STATE_CREATE_SUPPORTED = (
-    ANCHORED_EVIDENCE_SUPPORTED
+    _POSIX_ANCHORED_EVIDENCE_SUPPORTED
     and LISTDIR_DIR_FD_SUPPORTED
     and os.mkdir in getattr(os, "supports_dir_fd", ())
     and os.unlink in getattr(os, "supports_dir_fd", ())
@@ -354,18 +358,43 @@ def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
         return False
     if is_verified_installer_bundle(parts):
         return True
+    if _POSIX_ANCHORED_EVIDENCE_SUPPORTED:
+        try:
+            status = os.stat(
+                "SKILL.md",
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            raise DetectError(
+                f"cannot inspect managed skill bundle: {relative}: {error}"
+            ) from error
+        return not is_link_like_status(status) and stat.S_ISREG(status.st_mode)
+    skill_fd = None
     try:
-        status = os.stat(
+        win = get_windows_handles()
+        skill_fd = win.open_relative(
+            directory_fd,
             "SKILL.md",
-            dir_fd=directory_fd,
-            follow_symlinks=False,
+            _GENERIC_READ,
+            _PIN_SHARE,
+            _FILE_OPEN,
+            _FILE_NON_DIRECTORY_FILE,
         )
+        status = os.fstat(skill_fd)
     except FileNotFoundError:
         return False
     except OSError as error:
+        if getattr(error, "winerror", None) == 2:
+            return False
         raise DetectError(
             f"cannot inspect managed skill bundle: {relative}: {error}"
         ) from error
+    finally:
+        if skill_fd is not None:
+            os.close(skill_fd)
     return not is_link_like_status(status) and stat.S_ISREG(status.st_mode)
 
 
@@ -435,8 +464,15 @@ def read_regular_evidence(
         ) from error
     if not relative.parts:
         raise DetectError(f"{evidence_name} evidence path is empty: {path}")
-    if ANCHORED_EVIDENCE_SUPPORTED:
+    if _POSIX_ANCHORED_EVIDENCE_SUPPORTED:
         return read_anchored_evidence(
+            relative,
+            root,
+            missing_ok=missing_ok,
+            evidence_name=evidence_name,
+        )
+    if WINDOWS_ANCHORED_EVIDENCE_SUPPORTED:
+        return read_windows_anchored_evidence(
             relative,
             root,
             missing_ok=missing_ok,
@@ -789,8 +825,11 @@ def raise_walk_error(error: OSError) -> None:
 
 
 def iter_worktree_files(root: Path) -> Iterable[str]:
-    if ANCHORED_EVIDENCE_SUPPORTED and LISTDIR_DIR_FD_SUPPORTED:
+    if _POSIX_ANCHORED_EVIDENCE_SUPPORTED and LISTDIR_DIR_FD_SUPPORTED:
         yield from iter_worktree_files_anchored(root)
+        return
+    if WINDOWS_ANCHORED_EVIDENCE_SUPPORTED:
+        yield from iter_worktree_files_windows_anchored(root)
         return
     for dirpath, dirnames, filenames in os.walk(
         root,
@@ -1674,6 +1713,165 @@ class _WindowsHandles:
                 self.msvcrt.get_osfhandle(fd), _FILE_DISPOSITION_INFO,
                 ctypes.byref(flag), ctypes.sizeof(flag)):
             raise ctypes.WinError(ctypes.get_last_error())
+
+
+_WINDOWS_HANDLES: Optional[_WindowsHandles] = None
+
+
+def get_windows_handles() -> _WindowsHandles:
+    global _WINDOWS_HANDLES
+    if _WINDOWS_HANDLES is None:
+        _WINDOWS_HANDLES = _WindowsHandles()
+    return _WINDOWS_HANDLES
+
+
+def _windows_missing_ok(error: OSError) -> bool:
+    return getattr(error, "winerror", None) in {2, 3}
+
+
+def read_windows_anchored_evidence(
+    relative: Path,
+    root: Path,
+    *,
+    missing_ok: bool,
+    evidence_name: str,
+) -> Optional[str]:
+    win = get_windows_handles()
+    descriptors: list[int] = []
+    try:
+        descriptors.append(win.open_root(root))
+        opened_root = os.fstat(descriptors[-1])
+        if not stat.S_ISDIR(opened_root.st_mode):
+            raise DetectError(f"repo evidence is not a directory: {root}")
+        for index, part in enumerate(relative.parts):
+            current = root.joinpath(*relative.parts[: index + 1])
+            final = index == len(relative.parts) - 1
+            access = _GENERIC_READ if final else _DIRECTORY_ACCESS
+            options = _FILE_NON_DIRECTORY_FILE if final else _FILE_DIRECTORY_FILE
+            try:
+                descriptor = win.open_relative(
+                    descriptors[-1],
+                    part,
+                    access,
+                    _PIN_SHARE,
+                    _FILE_OPEN,
+                    options,
+                )
+            except OSError as error:
+                if missing_ok and _windows_missing_ok(error):
+                    return None
+                raise DetectError(
+                    f"filesystem evidence disappeared: {root / relative}"
+                ) from error
+            descriptors.append(descriptor)
+            actual = os.fstat(descriptor)
+            if is_link_like(current, actual):
+                raise DetectError(
+                    f"link-like {evidence_name} evidence is not allowed: {current}"
+                )
+            if final and not stat.S_ISREG(actual.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence is not a regular file: {current}"
+                )
+            if not final and not stat.S_ISDIR(actual.st_mode):
+                raise DetectError(
+                    f"{evidence_name} evidence parent is not a directory: {current}"
+                )
+        with os.fdopen(descriptors.pop(), "rb") as stream:
+            data = stream.read()
+    except DetectError:
+        raise
+    except OSError as error:
+        raise DetectError(
+            f"cannot read {evidence_name} evidence: {root / relative}"
+        ) from error
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise DetectError(
+            f"cannot read {evidence_name} evidence: {root / relative}"
+        ) from error
+
+
+def iter_worktree_files_windows_anchored(root: Path) -> Iterable[str]:
+    win = get_windows_handles()
+    try:
+        root_fd = win.open_root(root)
+    except OSError as error:
+        raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+    try:
+        root_status = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_status.st_mode):
+            raise DetectError(f"repo evidence is not a directory: {root}")
+        yield from iter_from_windows_dir_fd(root_fd, "", root, win)
+    finally:
+        os.close(root_fd)
+
+
+def iter_from_windows_dir_fd(
+    dir_fd: int, relative_dir: str, root: Path, win: _WindowsHandles
+) -> Iterable[str]:
+    try:
+        names = os.listdir(dir_fd)
+    except OSError as error:
+        raise DetectError(f"cannot traverse filesystem evidence: {error}") from error
+    for name in names:
+        relative = f"{relative_dir}/{name}" if relative_dir else name
+        if is_ignored(relative) or name == ".project":
+            continue
+        path = root.joinpath(*PurePosixPath(relative).parts)
+        try:
+            child_fd = win.open_relative(
+                dir_fd,
+                name,
+                _DIRECTORY_ACCESS,
+                _PIN_SHARE,
+                _FILE_OPEN,
+                _FILE_DIRECTORY_FILE,
+            )
+        except OSError:
+            child_fd = None
+        else:
+            status = os.fstat(child_fd)
+            if is_link_like(path, status):
+                os.close(child_fd)
+                continue
+            if stat.S_ISDIR(status.st_mode):
+                try:
+                    if is_verified_skill_bundle_at(relative, child_fd):
+                        continue
+                    yield from iter_from_windows_dir_fd(
+                        child_fd, relative, root, win
+                    )
+                finally:
+                    os.close(child_fd)
+                continue
+            os.close(child_fd)
+        try:
+            file_fd = win.open_relative(
+                dir_fd,
+                name,
+                _GENERIC_READ,
+                _PIN_SHARE,
+                _FILE_OPEN,
+                _FILE_NON_DIRECTORY_FILE,
+            )
+        except OSError as error:
+            raise DetectError(
+                f"cannot inspect filesystem evidence: {relative}: {error}"
+            ) from error
+        try:
+            status = os.fstat(file_fd)
+            if is_link_like(path, status) or not stat.S_ISREG(status.st_mode):
+                continue
+            if is_fixed_managed_pipeline_artifact(relative):
+                continue
+            yield relative
+        finally:
+            os.close(file_fd)
 
 
 def windows_project_entries(project: Path) -> set:

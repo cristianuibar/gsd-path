@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -41,6 +42,16 @@ ANCHORED_STATE_CREATE_AVAILABLE = (
     and os.link in getattr(os, "supports_follow_symlinks", ())
 )
 PROMOTE_SCRIPT = ROOT / "scripts" / "promote_lookahead.py"
+
+
+@contextmanager
+def disable_anchored_evidence_reads():
+    with mock.patch.object(
+        detect_project, "_POSIX_ANCHORED_EVIDENCE_SUPPORTED", False
+    ), mock.patch.object(
+        detect_project, "WINDOWS_ANCHORED_EVIDENCE_SUPPORTED", False
+    ):
+        yield
 
 
 class DetectProjectTests(unittest.TestCase):
@@ -496,11 +507,7 @@ class DetectProjectTests(unittest.TestCase):
                     follow_symlinks=follow_symlinks,
                 )
 
-            with mock.patch.object(
-                detect_project,
-                "ANCHORED_EVIDENCE_SUPPORTED",
-                False,
-            ):
+            with disable_anchored_evidence_reads():
                 with mock.patch.object(
                     detect_project.os,
                     "stat",
@@ -520,11 +527,7 @@ class DetectProjectTests(unittest.TestCase):
             state.write_bytes(
                 "---\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
-            with mock.patch.object(
-                detect_project,
-                "ANCHORED_EVIDENCE_SUPPORTED",
-                False,
-            ):
+            with disable_anchored_evidence_reads():
                 payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "owned")
             self.assertEqual(payload["pipeline"], "gsd-path/v2")
@@ -834,11 +837,7 @@ class DetectProjectTests(unittest.TestCase):
                 "walk",
                 side_effect=failing_walk,
             ):
-                with mock.patch.object(
-                    detect_project,
-                    "ANCHORED_EVIDENCE_SUPPORTED",
-                    False,
-                ):
+                with disable_anchored_evidence_reads():
                     with self.assertRaisesRegex(
                         detect_project.DetectError,
                         "cannot traverse filesystem evidence",
@@ -863,11 +862,7 @@ class DetectProjectTests(unittest.TestCase):
                 "lstat",
                 side_effect=failing_lstat,
             ):
-                with mock.patch.object(
-                    detect_project,
-                    "ANCHORED_EVIDENCE_SUPPORTED",
-                    False,
-                ):
+                with disable_anchored_evidence_reads():
                     with self.assertRaisesRegex(
                         detect_project.DetectError,
                         "cannot inspect filesystem evidence",
@@ -1120,6 +1115,44 @@ class DetectProjectTests(unittest.TestCase):
                     "cannot read Markdown evidence",
                 ):
                     self.classify(repo)
+
+    @unittest.skipUnless(os.name == "nt", "Windows pinned-handle evidence reads required")
+    def test_windows_markdown_parent_replacement_stays_anchored(self) -> None:
+        import _winapi
+
+        def make_junction(target: Path, link: Path) -> None:
+            _winapi.CreateJunction(str(target), str(link))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            docs = repo / "docs"
+            moved = workspace / "moved-docs"
+            external = workspace / "external-docs"
+            readme = docs / "README.md"
+            docs.mkdir(parents=True)
+            external.mkdir()
+            readme.write_bytes("# Local\n".encode("utf-8"))
+            (external / "README.md").write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
+            )
+            win = detect_project.get_windows_handles()
+            original = win.open_relative
+            replaced = False
+
+            def replacing_open_relative(parent_fd, name, *args, **kwargs):
+                nonlocal replaced
+                if name == readme.name and not replaced:
+                    docs.rename(moved)
+                    make_junction(external, docs)
+                    replaced = True
+                return original(parent_fd, name, *args, **kwargs)
+
+            with mock.patch.object(win, "open_relative", side_effect=replacing_open_relative):
+                payload = self.classify(repo)
+            self.assertTrue(replaced)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
 
     @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
