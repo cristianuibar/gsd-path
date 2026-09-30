@@ -107,6 +107,149 @@ def attempts_used(root: Path, task_id: str) -> int:
                if load_state(path).get("origin") == "dispatch")
 
 
+def dispatch_primary(worktree: Path) -> Path:
+    """The bound-branch primary that owns dispatch records for a task checkout."""
+    bound = isolation.require_bound(worktree)
+    attached = isolation.require_attached(worktree)
+    if attached == bound:
+        return worktree.resolve()
+    matches = [
+        path for path, branch in isolation._registered_worktrees(worktree).items()
+        if branch == f"refs/heads/{bound}"
+    ]
+    if len(matches) != 1:
+        raise isolation.IsolationError(
+            "dispatch records require exactly one primary worktree for the bound branch")
+    return matches[0].resolve()
+
+
+def should_open_native_shell(root: Path, task_id: str, base: str) -> bool:
+    """Whether activate-task should append a native dispatch attempt record."""
+    task_dir = root / task_id
+    if not task_dir.is_dir():
+        return True
+    attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                      key=lambda path: attempt_number(path.parent))
+    if not attempts:
+        return True
+    latest = read_attempt(attempts[-1])
+    if latest.get("outcome") is None and not latest.get("command"):
+        return False
+    if latest.get("outcome") == "blocked" and str(latest.get("base")) == base:
+        return False
+    return True
+
+
+def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, task_file: str,
+                      task_branch: Optional[str], mode: str, wave: Optional[int] = None,
+                      title: Optional[str] = None, files: Optional[List[str]] = None,
+                      sidecar: Optional[object] = None, member: Optional[str] = None,
+                      member_base: Optional[str] = None, contract_file: Optional[str] = None) -> None:
+    """Open a dispatch attempt record for a host-spawned coder before it runs."""
+    root = records_root(primary)
+    root.mkdir(parents=True, exist_ok=True)
+    if not should_open_native_shell(root, task_id, base):
+        return
+    task_dir = root / task_id
+    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
+    attempt_dir = task_dir / f"attempt-{attempt}"
+    attempt_dir.mkdir(parents=True)
+    record: Dict[str, object] = {
+        "task_id": task_id,
+        "attempt": attempt,
+        "base": base,
+        "worktree": worktree,
+        "task_file": task_file,
+        "task_branch": task_branch,
+        "mode": mode,
+        "origin": "dispatch",
+        "outcome": None,
+        "dispatched_at": now(),
+        "native": True,
+    }
+    if wave is not None:
+        record["wave"] = wave
+    if title is not None:
+        record["title"] = title
+    if files is not None:
+        record["files"] = files
+    if sidecar is not None:
+        record["sidecar"] = sidecar
+    if member is not None:
+        record["member"] = member
+    if member_base is not None:
+        record["member_base"] = member_base
+    if contract_file is not None:
+        record["contract_file"] = contract_file
+    save_state(attempt_dir / "state.json", record)
+
+
+def record_native_activation(worktree: Path, activation: Dict[str, object]) -> None:
+    """Record a native task activation in the milestone dispatch ledger."""
+    primary = dispatch_primary(worktree)
+    task_file = str(activation["task_file"])
+    task_path = worktree / task_file
+    fields, _ = isolation.task_frontmatter(task_path.read_text(encoding="utf-8"))
+    task_id = str(activation.get("task_id") or (fields or {}).get("id"))
+    wave = None
+    if fields and fields.get("wave") is not None:
+        wave = int(fields["wave"])
+    open_native_shell(
+        primary,
+        task_id=task_id,
+        base=str(activation["base"]),
+        worktree=str(activation["worktree"]),
+        task_file=task_file,
+        task_branch=activation.get("task_branch"),
+        mode="parallel" if activation.get("task_branch") else "serial",
+        wave=wave,
+        title=str(fields.get("title")) if fields else None,
+        files=list(fields.get("files") or []) if fields else None,
+    )
+
+
+def record_native_member_activation(coordinator: Path, activation: Dict[str, object]) -> None:
+    """Record a native member-task activation in the coordinator dispatch ledger."""
+    task_file = str(activation["task_file"])
+    sidecar = Path(str(activation["worktree"]))
+    copy = Path(str(activation["copy"]))
+    fields, _ = isolation.task_frontmatter(copy.read_text(encoding="utf-8"))
+    task_id = str(activation.get("task_id") or (fields or {}).get("id"))
+    wave = None
+    if fields and fields.get("wave") is not None:
+        wave = int(fields["wave"])
+    open_native_shell(
+        coordinator,
+        task_id=task_id,
+        base=str(activation["base"]),
+        worktree=str(sidecar),
+        task_file=copy.relative_to(sidecar).as_posix(),
+        task_branch=str(activation["task_branch"]),
+        mode="member",
+        wave=wave,
+        title=str(fields.get("title")) if fields else None,
+        files=list(fields.get("files") or []) if fields else None,
+        member=str(activation["member"]),
+        member_base=str(activation["member_base"]),
+        contract_file=task_file,
+    )
+
+
+def reusable_shell_attempt(root: Path, state: Dict[str, object]) -> Optional[Path]:
+    """A native activation shell the driver can attach its child wrapper to."""
+    task_dir = root / str(state["task_id"])
+    attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                      key=lambda path: attempt_number(path.parent))
+    if not attempts:
+        return None
+    prior = read_attempt(attempts[-1])
+    if prior.get("outcome") is not None or prior.get("command") or prior.get("pid"):
+        return None
+    if str(prior.get("base")) != str(state.get("base")):
+        return None
+    return attempts[-1].parent
+
+
 def acquire_lock(primary: Path) -> BinaryIO:
     root = records_root(primary)
     root.mkdir(parents=True, exist_ok=True)
@@ -307,7 +450,7 @@ def retain_selection(root: Path, state: Dict[str, object]) -> Dict[str, object]:
                 raise DriverStop('cannot redispatch while the previous child is active')
             if prior.get('model_selection'):
                 state['model_selection'] = prior['model_selection']
-            else:
+            elif prior.get('command'):
                 state['command'] = prior['command']
     reassignment = task_dir / 'model-reassignment.json'
     if reassignment.exists():
@@ -323,13 +466,23 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
     state = retain_selection(root, state)
     task_dir = root / str(state["task_id"])
     argv, selection = selected_command(state, options, command or options.child_command)
-    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
-    attempt_dir = task_dir / f"attempt-{attempt}"
-    attempt_dir.mkdir(parents=True)
+    attempt_dir = reusable_shell_attempt(root, state)
+    if attempt_dir is None:
+        attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
+        attempt_dir = task_dir / f"attempt-{attempt}"
+        attempt_dir.mkdir(parents=True)
+    else:
+        attempt = attempt_number(attempt_dir)
     stale = ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit", "answer",
              "usage_recorded")
-    state = {key: value for key, value in state.items()
-             if not key.startswith("_") and key not in stale}
+    incoming = {key: value for key, value in state.items()
+                if not key.startswith("_") and key not in stale}
+    if (attempt_dir / "state.json").is_file():
+        preserved = {key: value for key, value in read_attempt(attempt_dir / "state.json").items()
+                     if not key.startswith("_") and key not in stale}
+        state = {**preserved, **incoming}
+    else:
+        state = incoming
     if selection is not None:
         state['model_selection'] = selection
     state.update({"attempt": attempt, "command": argv,
@@ -2078,8 +2231,21 @@ def main(argv=None) -> int:
                     raise DriverStop(f"task {arguments.task_id} dispatch record is {record['outcome']}; "
                                      "use round")
                 if record.get("finished_at") is None:
-                    raise DriverStop(f"task {arguments.task_id} still has a running child")
-                current.classify(record)
+                    if child_running(record):
+                        raise DriverStop(f"task {arguments.task_id} still has a running child")
+                    if record.get("command"):
+                        raise DriverStop(f"task {arguments.task_id} still has a running child")
+                    merged = dict(state_from_task(primary, arguments.task_id), **record)
+                    merged["_path"] = record["_path"]
+                    try:
+                        landing = finish_task(primary, merged)
+                    except STOP_ERRORS as error:
+                        update_state(record, outcome="blocked", reason=str(error))
+                        raise
+                    update_state(record, outcome="landed", commit=landing["commit"])
+                    current.receipt["landed"].append(landing)
+                else:
+                    current.classify(record)
             else:  # a coder dispatched by hand: derive the isolate from the task frontmatter
                 current.receipt["landed"].append(
                     finish_task(primary, native or state_from_task(primary, arguments.task_id)))

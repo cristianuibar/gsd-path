@@ -936,9 +936,11 @@ def activate_member_task(
     created = run_git(checkout, "update-ref", ref, member_base, "0" * 40)
     if created.returncode != 0 and run_git(checkout, "rev-parse", "--verify", "--quiet", ref).stdout.strip() != member_base:
         raise IsolationError("could not record member task authorization")
-    return {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
+    result = {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
             "member_base": member_base, "status": "in-progress", "task_branch": branch,
             "task_file": task_file, "worktree": str(sidecar)}
+    _write_native_member_dispatch_record(coordinator, result)
+    return result
 
 
 def retained_member_task(
@@ -1773,7 +1775,7 @@ def activate_task(
             if existing.returncode != 0 or existing.stdout.strip() != resolved_base:
                 _replace_regular_file(task_path, text.encode("utf-8"), mode)
                 raise IsolationError("could not record task worktree authorization")
-    return {
+    result = {
         "agent": agent,
         "base": resolved_base,
         "status": "in-progress",
@@ -1781,6 +1783,30 @@ def activate_task(
         "task_file": normalized_task,
         "worktree": str(worktree),
     }
+    _write_native_dispatch_record(worktree, result)
+    return result
+
+
+def _write_native_dispatch_record(worktree: Path, activation: Dict[str, object]) -> None:
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:
+        return
+    dispatch_driver.record_native_activation(worktree, activation)
+
+
+def _write_native_member_dispatch_record(coordinator: Path, activation: Dict[str, object]) -> None:
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:
+        return
+    dispatch_driver.record_native_member_activation(coordinator, activation)
 
 
 def deactivate_task(
