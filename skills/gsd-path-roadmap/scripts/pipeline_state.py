@@ -193,11 +193,24 @@ def _run_git(
     *arguments: str,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    command = _common.git_command(repo, *arguments)
     result = subprocess.run(
-        ["git", "-C", str(repo), *arguments],
+        command,
         capture_output=True,
         encoding="utf-8", errors="replace",
     )
+    if (
+        check
+        and result.returncode != 0
+        and arguments
+        and arguments[0] == "commit"
+        and _common.git_index_lock_retryable(result.stderr)
+    ):
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            encoding="utf-8", errors="replace",
+        )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise PipelineStateError(f"git {' '.join(arguments)} failed: {detail}")
