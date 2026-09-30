@@ -31,6 +31,7 @@ try:
     from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
                          pipeline_state, review_findings, review_panel, workflow_run, task_context, model_policy)
     from scripts import check_handoffs as contracts
+    from scripts.pipeline_git import is_bound_branch
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
     import archive_milestone
@@ -44,6 +45,7 @@ except ImportError:  # bundled copy inside a skill's scripts directory
     import review_panel
     import workflow_run
     import model_policy
+    from pipeline_git import is_bound_branch
 
 if os.name == "nt":
     import msvcrt
@@ -109,18 +111,18 @@ def attempts_used(root: Path, task_id: str) -> int:
 
 def dispatch_primary(worktree: Path) -> Path:
     """The bound-branch primary that owns dispatch records for a task checkout."""
-    bound = isolation.require_bound(worktree)
-    attached = isolation.require_attached(worktree)
-    if attached == bound:
-        return worktree.resolve()
+    worktree = worktree.resolve()
+    if is_bound_branch(isolation.require_attached(worktree)):
+        return worktree
     matches = [
-        path for path, branch in isolation._registered_worktrees(worktree).items()
-        if branch == f"refs/heads/{bound}"
+        path.resolve()
+        for path, branch in isolation._registered_worktrees(worktree).items()
+        if branch and is_bound_branch(branch.removeprefix("refs/heads/"))
     ]
     if len(matches) != 1:
         raise isolation.IsolationError(
             "dispatch records require exactly one primary worktree for the bound branch")
-    return matches[0].resolve()
+    return matches[0]
 
 
 def should_open_native_shell(root: Path, task_id: str, base: str) -> bool:
@@ -870,6 +872,9 @@ class Round:
                 elif state.get("finished_at") is None:
                     if child_running(state):
                         self.receipt["in_flight"].append(self.summary(state))
+                    elif (state.get("native") and not state.get("command") and not state.get("pid")
+                          and self.isolate_live(state)):
+                        continue
                     else:
                         self.fail(state, ORPHANED)
                 else:
@@ -943,8 +948,14 @@ class Round:
     # dispatch -------------------------------------------------------------
 
     def in_flight_states(self) -> List[Dict[str, object]]:
-        return [state for state in latest_states(self.root)
-                if state.get("outcome") is None and state.get("wave") == self.receipt["wave"]]
+        states = []
+        for state in latest_states(self.root):
+            if state.get("outcome") is not None or state.get("wave") != self.receipt["wave"]:
+                continue
+            if state.get("native") and not state.get("command") and not state.get("pid"):
+                continue
+            states.append(state)
+        return states
 
     def checkpoint_bookkeeping(self) -> None:
         open_ids = {state["task_id"] for state in latest_states(self.root)
