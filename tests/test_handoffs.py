@@ -1590,6 +1590,35 @@ Surfaces: none
                 check_handoffs.validate_plan(root)
             self.assertIn("same-wave file overlap", str(failure.exception))
 
+    def test_plan_allows_same_wave_overlap_between_landed_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_plan_handoff(root)
+            self.write_plan_coverage(
+                root,
+                task_rows=(
+                    "| T001 | Demo task T001 | — | src/app.py |\n"
+                    "| T002 | Demo task T002 | — | src/app.py |\n"
+                ),
+            )
+            self.write_coverage_task(root, "T001", "- SC1", files="src/app.py")
+            self.write_coverage_task(
+                root,
+                "T002",
+                "- SC2",
+                acceptance="1. The demo test suite is green.",
+                files="src/app.py",
+            )
+            for task_id in ("T001", "T002"):
+                path = next(root.glob(f".project/tasks/{task_id}-*.md"))
+                path.write_bytes(
+                    path.read_text(encoding="utf-8")
+                    .replace("status: pending", "status: done")
+                    .replace("agent: null", "agent: coder")
+                    .encode("utf-8")
+                )
+            check_handoffs.validate_plan(root)
+
     def test_plan_rejects_dependency_cycles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
