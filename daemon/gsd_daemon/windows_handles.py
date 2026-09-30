@@ -33,7 +33,19 @@ def is_link_like(path: Path, status: os.stat_result) -> bool:
         return True
     if getattr(status, "st_reparse_tag", 0) & REPARSE_NAME_SURROGATE:
         return True
-    return False
+    if os.name != "nt":
+        return False
+    isjunction = getattr(os, "isjunction", None)
+    if isjunction is not None:
+        try:
+            if isjunction(path):
+                return True
+        except OSError:
+            pass
+    try:
+        return path.is_symlink()
+    except OSError:
+        return False
 
 
 class _WindowsHandles:
