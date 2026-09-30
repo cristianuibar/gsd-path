@@ -21,18 +21,21 @@ class PsQuotingTests(unittest.TestCase):
 
 class SessionPathTests(unittest.TestCase):
     def test_path_under_root_uses_normcase_on_windows(self):
-        with mock.patch("gsd_daemon.sessions.os.name", "nt"):
-            with mock.patch("gsd_daemon.sessions.os.normcase", side_effect=str.lower):
-                self.assertTrue(
-                    sessions.SessionIndex._path_under_root(
-                        r"C:\Repo\Sub", r"c:\repo"
-                    )
+        with mock.patch("gsd_daemon.sessions.os.name", "nt"), mock.patch(
+            "gsd_daemon.sessions.os.sep", "\\"
+        ), mock.patch(
+            "gsd_daemon.sessions.os.normcase", side_effect=str.lower, create=True
+        ):
+            self.assertTrue(
+                sessions.SessionIndex._path_under_root(
+                    r"C:\Repo\Sub", r"c:\repo"
                 )
-                self.assertFalse(
-                    sessions.SessionIndex._path_under_root(
-                        r"C:\Other", r"c:\repo"
-                    )
+            )
+            self.assertFalse(
+                sessions.SessionIndex._path_under_root(
+                    r"C:\Other", r"c:\repo"
                 )
+            )
 
     def test_default_session_dirs_include_windows_orca_glob(self):
         joined = " ".join(sessions.DEFAULT_SESSION_DIRS)
