@@ -709,6 +709,27 @@ test("stale sync fails before mutation", async () => {
   assert.ok(!fs.existsSync(target));
 });
 
+test("reserved skill directory install copies staged entries without directory cpSync", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "gsd-path-reserved-copy-"));
+  try {
+    const stagedSkill = path.join(base, "staged", "gsd-path");
+    const destination = path.join(base, "dest", "gsd-path");
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.mkdirSync(path.join(stagedSkill, "references"), { recursive: true });
+    fs.writeFileSync(path.join(stagedSkill, "SKILL.md"), "skill\n");
+    fs.writeFileSync(path.join(stagedSkill, "references", "dispatch.md"), "dispatch\n");
+    installer.hooks.reserveDirectory(destination);
+    installer.copyIntoReservedDirectory(stagedSkill, destination);
+    assert.equal(fs.readFileSync(path.join(destination, "SKILL.md"), "utf8"), "skill\n");
+    assert.equal(
+      fs.readFileSync(path.join(destination, "references", "dispatch.md"), "utf8"),
+      "dispatch\n"
+    );
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("real mismatches detects a stale generated resource", () => {
   installer.hooks.mismatches = originalHooks.mismatches;
   const repo = REPO_ROOT;

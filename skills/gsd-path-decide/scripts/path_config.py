@@ -73,8 +73,8 @@ def validate_value(key, value):
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f'{key} requires a nonempty string')
     if key == 'integration':
-        if value not in ('direct', 'pull-request'):
-            raise ValueError('integration must be direct or pull-request')
+        if value not in ('direct', 'pull-request', 'external-landing'):
+            raise ValueError('integration must be direct, pull-request, or external-landing')
     elif key == 'review_panel':
         if any(char.isspace() for char in value):
             raise ValueError('use off, detected, or comma-separated families without spaces')
