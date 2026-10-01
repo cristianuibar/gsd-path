@@ -976,7 +976,11 @@ class Round:
                           and self.isolate_live(state)):
                         continue
                     else:
-                        self.fail(state, ORPHANED)
+                        state.update(read_attempt(Path(str(state["_path"]))))
+                        if state.get("finished_at") is not None:
+                            changed = self.classify(state) or changed
+                        else:
+                            self.fail(state, ORPHANED)
                 else:
                     changed = self.classify(state) or changed
         return changed
