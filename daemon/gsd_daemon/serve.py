@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import io
 import json
 import os
 import secrets
@@ -1026,6 +1027,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.path.split("?", 1)[0]
+        # Read the body before any reply: a socket closed with unread data resets
+        # the connection on Windows, and the client then loses the refusal.
+        try:
+            length = max(0, int(self.headers.get("Content-Length") or 0))
+        except ValueError:
+            length = 0
+        self.rfile = io.BytesIO(self.rfile.read(length))
         # Every POST changes local state: refuse cross-site pages and DNS rebinding,
         # and require JSON so a CORS "simple" text/plain POST cannot reach a route.
         if not self._same_origin():
