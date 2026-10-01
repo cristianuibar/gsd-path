@@ -467,15 +467,13 @@ def completed_field(lines: Sequence[str], field: str, artifact: str) -> str:
 
 
 def completed_bullet_field(lines: Sequence[str], field: str, artifact: str) -> str:
-    pattern = re.compile(rf"^- \*\*{re.escape(field)}\*\*:\s*(.*)$")
-    values = []
-    for line in lines:
-        match = pattern.fullmatch(line)
-        if match:
-            values.append(match.group(1).strip().strip("`"))
-    if len(values) != 1 or not values[0] or archive_milestone.contains_placeholder(values[0]):
+    matches = _common.find_review_bullet_field_values(lines, field)
+    if len(matches) != 1:
         raise ArchiveError(f"{artifact} requires one completed {field} field")
-    return values[0]
+    value = matches[0].strip().strip("`")
+    if not value or archive_milestone.contains_placeholder(value):
+        raise ArchiveError(f"{artifact} requires one completed {field} field")
+    return value
 
 
 def section_lines(lines: Sequence[str], heading: str, artifact: str) -> Sequence[str]:
@@ -565,15 +563,15 @@ def parse_final_review(archive: Path) -> tuple:
     for position, (heading_index, _, criterion) in enumerate(headings):
         section_start = heading_index + 1
         section_end = headings[position + 1][0] if position + 1 < len(headings) else criteria_end
+        section = lines[section_start:section_end]
         values = {}
-        for line in lines[section_start:section_end]:
-            match = re.fullmatch(r"- \*\*(Verdict|Check|Observed|Reference|Finding|Fix direction)\*\*:\s*(.*)", line)
-            if not match:
-                continue
-            key, value = match.groups()
-            if key in values:
+        for key in expected_fields:
+            matches = _common.find_review_bullet_field_values(section, key)
+            if len(matches) > 1:
                 raise ArchiveError(f"FINAL.md repeats {key} for {criterion}")
-            values[key] = value.strip().strip("`")
+            if len(matches) != 1:
+                raise ArchiveError(f"FINAL.md criterion is incomplete: {criterion}")
+            values[key] = matches[0].strip().strip("`")
         surface_values = [
             line.removeprefix("- **Surface**:").strip().strip("`")
             for line in lines[section_start:section_end]
@@ -814,10 +812,14 @@ def validate_wave_review(
     expected_depth: str,
     expected_lens: Optional[str] = None,
     task_texts: Optional[dict[str, str]] = None,
+    *,
+    is_last_cycle: bool = True,
 ) -> Sequence[str]:
     lines = path.read_text(encoding="utf-8").splitlines()
     depth = completed_field(lines, "Depth:", path.name)
-    if depth != expected_depth:
+    if depth not in {"full", "deep", "verify-only"}:
+        raise ArchiveError(f"{path.name} has an invalid review depth")
+    if is_last_cycle and depth != expected_depth:
         raise ArchiveError(f"{path.name} has an invalid review depth")
     if expected_lens is not None:
         lens = completed_field(lines, "Lens:", path.name)
@@ -842,10 +844,32 @@ def validate_wave_review(
     normalized_expected = [
         (task_id, " ".join(title.split())) for task_id, title in expected_tasks
     ]
-    if actual_tasks != normalized_expected:
-        raise ArchiveError(
-            f"{path.name} tasks and titles do not match its wave task files in order"
-        )
+    expected_by_id = dict(normalized_expected)
+    enforce_plan_tasks = is_last_cycle and wave_verdict != "blocked"
+    if enforce_plan_tasks:
+        if actual_tasks != normalized_expected:
+            raise ArchiveError(
+                f"{path.name} tasks and titles do not match its wave task files in order"
+            )
+    else:
+        known_ids = set(expected_by_id)
+        for task_id in task_ids:
+            if task_id not in known_ids:
+                raise ArchiveError(
+                    f"{path.name} tasks and titles do not match its wave task files in order"
+                )
+        plan_order = [task_id for task_id, _title in normalized_expected]
+        reviewed_order = [task_id for task_id in plan_order if task_id in task_ids]
+        if task_ids != reviewed_order:
+            raise ArchiveError(
+                f"{path.name} tasks and titles do not match its wave task files in order"
+            )
+        for _index, task_id, title, _verdict in headings:
+            expected_title = expected_by_id.get(task_id)
+            if expected_title is not None and " ".join(title.split()) != expected_title:
+                raise ArchiveError(
+                    f"{path.name} tasks and titles do not match its wave task files in order"
+                )
 
     verdicts = []
     for position, (heading_index, _task_id, _title, verdict) in enumerate(headings):
@@ -869,6 +893,9 @@ def validate_wave_review(
                 f"{path.name} task {task_ids[position]} lacks non-placeholder evidence"
             )
         verdicts.append(verdict)
+
+    if not is_last_cycle:
+        return verdicts
 
     coverage_indexes = [
         index for index, line in enumerate(lines) if line == "## Intent coverage"
@@ -1083,6 +1110,7 @@ def review_cycle_counts(archive: Path) -> Sequence[int]:
                         depth,
                         lens,
                         task_texts,
+                        is_last_cycle=cycle == max(cycles),
                     )
                 )
 

@@ -285,7 +285,7 @@ class SyncSkillResourcesTests(unittest.TestCase):
             "kiro",
             "shared-agents",
         )
-        for shared_profile_runtime in ("codex", "zed", "antigravity"):
+        for shared_profile_runtime in ("codex", "zed", "antigravity", "muse"):
             self.assertFalse(
                 (PROJECT_ROOT / "platforms" / shared_profile_runtime).exists(),
                 shared_profile_runtime,

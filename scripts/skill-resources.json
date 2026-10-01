@@ -10,7 +10,8 @@
     "cursor": {"local_root": ".cursor/skills", "guard_tier": "native-fail-closed", "child_apis": ["Task"]},
     "zed": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["spawn_agent"]},
     "kiro": {"local_root": ".kiro/skills", "guard_tier": "git-only", "child_apis": ["invoke_sub_agent"]},
-    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only", "child_apis": ["Agent"]}
+    "kimi": {"local_root": ".kimi-code/skills", "guard_tier": "git-only", "child_apis": ["Agent"]},
+    "muse": {"local_root": ".agents/skills", "guard_tier": "git-only", "invocation_prefix": "/", "child_apis": ["muse.subagent_spawn"]}
   },
   "skills": [
     "gsd-path",

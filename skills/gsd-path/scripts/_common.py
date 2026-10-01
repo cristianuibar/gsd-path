@@ -65,6 +65,49 @@ VERIFY_RESULTS = ("pass", "fail")
 VERIFY_LEDGER_SCHEMA = "gsd-path/verify-ledger/v2"
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
 
+REVIEW_BULLET_HEADING_PATTERN = re.compile(r"^#{2,3} ")
+REVIEW_BULLET_FIELD_LABEL_PATTERN = re.compile(r"^- \*\*[^*]+\*\*:")
+
+
+def review_bullet_field_label_pattern(field: str) -> re.Pattern[str]:
+    return re.compile(rf"^- \*\*{re.escape(field)}\*\*:[ \t]*(.*)$")
+
+
+def _review_bullet_field_value(lines: Sequence[str], index: int, inline: str) -> str:
+    if inline:
+        return inline
+    collected: list[str] = []
+    for line in lines[index + 1 :]:
+        if REVIEW_BULLET_FIELD_LABEL_PATTERN.match(line) or REVIEW_BULLET_HEADING_PATTERN.match(
+            line
+        ):
+            break
+        if line and not line[0].isspace():
+            break
+        stripped = line.strip()
+        if stripped:
+            collected.append(stripped)
+    return "\n".join(collected)
+
+
+def find_review_bullet_field_values(lines: Sequence[str], field: str) -> list[str]:
+    pattern = review_bullet_field_label_pattern(field)
+    values: list[str] = []
+    for index, line in enumerate(lines):
+        match = pattern.fullmatch(line)
+        if match is None:
+            continue
+        values.append(_review_bullet_field_value(lines, index, match.group(1)))
+    return values
+
+
+def parse_review_bullet_field(lines: Sequence[str], field: str) -> str:
+    """Parse one `- **Field**:` review bullet, including indented continuations."""
+    values = find_review_bullet_field_values(lines, field)
+    if len(values) != 1:
+        raise ValueError(field)
+    return values[0]
+
 
 # Sample paths the pipeline must commit. A product rule such as an unanchored
 # `build/` would otherwise drop them silently from every commit.
@@ -266,6 +309,70 @@ def git_visible_entries(directory: Path) -> set:
     if result.returncode != 0:
         raise RuntimeError(f"git ls-files failed in {directory}: {result.stderr.strip()}")
     return {path.split("/", 1)[0] for path in result.stdout.split("\0") if path}
+
+
+RUNTIME_PIN_PATH = ".gsd-path/runtime.json"
+RUNTIME_PIN_ALLOWANCE = (
+    "only runtime-pin commits (.gsd-path/runtime.json) may follow the reviewed HEAD"
+)
+
+
+def reviewed_head_covers(repo: Path, reviewed: str, head: str) -> bool:
+    """True when a review of `reviewed` still covers `head`.
+
+    That is the same commit, or `reviewed` is an ancestor of `head` and every
+    commit on the first-parent path in ``reviewed..head`` is a non-merge commit
+    whose only change is ``.gsd-path/runtime.json``. An empty commit does not
+    qualify. Any other path, any merge commit, an unresolvable SHA, or a
+    non-ancestor returns False.
+    """
+    if not reviewed or not head:
+        return False
+    resolved_repo = Path(repo)
+    resolved: List[str] = []
+    for value in (reviewed, head):
+        result = run_git(
+            resolved_repo, "rev-parse", "--verify", "--quiet", f"{value}^{{commit}}"
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+        resolved.append(result.stdout.strip())
+    reviewed_sha, head_sha = resolved
+    if reviewed_sha == head_sha:
+        return True
+    if (
+        run_git(resolved_repo, "merge-base", "--is-ancestor", reviewed_sha, head_sha).returncode
+        != 0
+    ):
+        return False
+    listing = run_git(
+        resolved_repo,
+        "rev-list",
+        "--first-parent",
+        "--parents",
+        f"{reviewed_sha}..{head_sha}",
+    )
+    if listing.returncode != 0:
+        return False
+    for line in listing.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            return False
+        commit_sha, parent_sha = fields[0], fields[1]
+        changed = run_git(
+            resolved_repo,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--no-ext-diff",
+            parent_sha,
+            commit_sha,
+        )
+        if changed.returncode != 0:
+            return False
+        if {path for path in changed.stdout.splitlines() if path} != {RUNTIME_PIN_PATH}:
+            return False
+    return True
 
 
 def atomic_replace(path: Path, temporary_path: Path, content: str) -> None:

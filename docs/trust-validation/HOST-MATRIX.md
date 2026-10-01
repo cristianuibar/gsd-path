@@ -26,11 +26,17 @@ publication; see the [release contract](../../RELEASE.md#release-contract).
 | Qwen Code | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Zed | automated | no native hook API; Git hooks | not run (API credits) | excluded at the maintainer's request |
 | Kiro | automated | not installed; Git hooks | not run (API credits) | excluded at the maintainer's request |
+| Muse Code | automated | not installed; Git hooks | not run: no recorded live release evidence yet | excluded until live evidence is recorded |
 
 Historical smoke evidence remains under `evidence/`; release receipts belong
 under `evidence/releases/<version>/` and are never inferred from smoke runs.
 
 ## 1.4.0 run notes
+
+Muse Code was not evaluated: the Muse delegation adapter was added from live
+tool schemas; no recorded live release evidence yet. It is excluded from the
+live-check scope until evidence is recorded; restore it by removing it from
+`EXCLUDED_EVALUATION_HOSTS`. Exclusion is not a live-test pass.
 
 Copilot was not evaluated: every Copilot-routed model, including zero-premium
 models, returned HTTP 402 `quota_exceeded` for the account. The maintainer

@@ -266,6 +266,7 @@ writes nor verifies that wiring. To add it yourself, register
 | Antigravity | `.agents/hooks.json` `PreToolUse` | [Antigravity hooks](https://antigravity.google/docs/hooks) |
 | OpenCode | JS plugin `tool.execute.before` | [OpenCode plugins](https://opencode.ai/docs/plugins/) |
 | Zed | no hook API — git hooks only | — |
+| Muse Code | no GSD Path hook integration — git hooks only | — |
 
 **Caveats:** The hook cannot prove which skill initiated a build-phase edit
 when the routed build phase is already active. Shell product writes use the

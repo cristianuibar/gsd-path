@@ -1,5 +1,6 @@
 import contextlib
 import io
+import re
 import subprocess
 import sys
 import tempfile
@@ -1350,6 +1351,20 @@ The task implements the demo.
                         str(failure.exception),
                     )
 
+    def test_surfaces_splits_only_on_top_level_commas(self) -> None:
+        text = (
+            "Surfaces: HTTP API (/api/v1 — revizie complete, ticket revizii list), "
+            "Filament back office (ticket view)\n"
+        )
+        surfaces = check_handoffs._surfaces(text, "INTENT.md")
+        self.assertEqual(
+            surfaces,
+            [
+                "HTTP API (/api/v1 — revizie complete, ticket revizii list)",
+                "Filament back office (ticket view)",
+            ],
+        )
+
     def test_plan_rejects_an_empty_surface_list(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1885,6 +1900,55 @@ Tasks reviewed: 2
                 ):
                     validate()
 
+    def test_reviews_bind_intent_criterion_with_sub_bullet_continuations(self) -> None:
+        joined = (
+            "At a store with a due review: - The board lists the store. "
+            "- The dashboard shows a badge."
+        )
+        for phase in ("wave", "final"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_plan_handoff(root)
+                if phase == "wave":
+                    relative = self.write_wave_review(root)
+                    validate = lambda: check_handoffs.validate_wave(root, review=relative)
+                else:
+                    self.write_state(root, "ship", "active")
+                    self.write_final_review(root)
+                    relative = ".project/review/FINAL.md"
+                    validate = lambda: check_handoffs.validate_final(root)
+                intent = root / ".project/intent/INTENT.md"
+                intent.write_bytes(
+                    intent.read_text(encoding="utf-8")
+                    .replace(
+                        "1. The demo command prints hello.",
+                        "1. At a store with a due review:\n"
+                        "   - The board lists the store.\n"
+                        "   - The dashboard shows a badge.",
+                    )
+                    .encode("utf-8")
+                )
+                review = root / relative
+                original = review.read_text(encoding="utf-8")
+                review.write_bytes(
+                    original.replace(
+                        "### SC1 — The demo command prints hello.",
+                        f"### SC1 — {joined}",
+                    ).encode("utf-8")
+                )
+                self.assertEqual(validate()["verdict"], "pass")
+                review.write_bytes(
+                    original.replace(
+                        "### SC1 — The demo command prints hello.",
+                        "### SC1 — At a store with a due review: The board lists the store. "
+                        "The dashboard shows a badge.",
+                    ).encode("utf-8")
+                )
+                with self.assertRaisesRegex(
+                    check_handoffs.HandoffError, "SC1 heading text differs from INTENT.md"
+                ):
+                    validate()
+
     def test_wave_checks_evidence_after_exact_quoted_task_criterion(self) -> None:
         for verdict, marker in (("pass", "✅"), ("fail", "❌")):
             with self.subTest(verdict=verdict), tempfile.TemporaryDirectory() as directory:
@@ -2194,6 +2258,37 @@ Waves checked: 1
             result = check_handoffs.validate_final(root)
 
             self.assertEqual(result["verdict"], "pass")
+
+    def test_final_accepts_multiline_observed_sub_bullets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_state(root, "ship", "active")
+            self.write_intent_criteria(root, surfaces="Demo web app")
+            self.write_plan_coverage(root, surface_contract=SURFACE_CONTRACT)
+            self.write_final_review(root, surface="Demo web app")
+            final_path = root / ".project/review/FINAL.md"
+            text = final_path.read_text(encoding="utf-8")
+            text = text.replace(
+                "- **Observed**: hello",
+                """- **Observed**:
+  - Both deactivations notified.
+  - In the DB, rows stayed listed.""",
+                1,
+            )
+            final_path.write_text(text, encoding="utf-8")
+
+            result = check_handoffs.validate_final(root)
+
+            self.assertEqual(result["verdict"], "pass")
+            block = re.search(
+                r"### SC1 — The demo command prints hello\.(.*)(?=### SC2)",
+                text,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(block)
+            observed = check_handoffs._raw_source_field(block.group(1), "Observed", "FINAL.md SC1")
+            self.assertIn("Both deactivations notified.", observed)
+            self.assertIn("In the DB, rows stayed listed.", observed)
 
     def test_final_rejects_a_surface_criterion_without_a_walked_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

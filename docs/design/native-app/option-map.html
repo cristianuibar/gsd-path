@@ -1,0 +1,278 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Path App Option Map</title>
+<style>
+  /* Layout: summary strip, filter bar, then one table per area, grouped by where the option lives in the app.
+     Palette follows the daemon dashboard's "instrument" tokens (graphite neutrals, system blue). */
+  :root {
+    --bg: #fbfcfd; --chrome: #eef0f3; --card: #ffffff; --text: #1a1d22; --dim: #595e64; --line: #e1e3e6;
+    --accent: #0062cc; --accent-soft: #e5f1ff;
+    --have: #1f7a3a; --have-soft: #e3f5e8; --plan: #0062cc; --plan-soft: #e5f1ff;
+    --miss: #b3261e; --miss-soft: #ffe7e4; --decide: #8d5e00; --decide-soft: #fdf1dc;
+    --router: #5b4a9e; --router-soft: #ece8fb; --auto: #51565c; --auto-soft: #eef0f3;
+    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --line: #292c2f;
+    --accent: #4da3ff; --accent-soft: #0f2640;
+    --have: #5ad17e; --have-soft: #13301c; --plan: #4da3ff; --plan-soft: #0f2640;
+    --miss: #ef675c; --miss-soft: #47211d; --decide: #e4ac59; --decide-soft: #3a2a12;
+    --router: #b3a4f5; --router-soft: #2a2447; --auto: #a0a5ab; --auto-soft: #1d1f23;
+    color-scheme: dark;
+  }}
+  :root[data-theme="dark"] {
+    --bg: #101214; --chrome: #171a1d; --card: #141619; --text: #e9ebee; --dim: #a7abb1; --line: #292c2f;
+    --accent: #4da3ff; --accent-soft: #0f2640;
+    --have: #5ad17e; --have-soft: #13301c; --plan: #4da3ff; --plan-soft: #0f2640;
+    --miss: #ef675c; --miss-soft: #47211d; --decide: #e4ac59; --decide-soft: #3a2a12;
+    --router: #b3a4f5; --router-soft: #2a2447; --auto: #a0a5ab; --auto-soft: #1d1f23;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--ui); margin: 0; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 22px; }
+  header { display: grid; gap: 6px; }
+  h1 { font-size: 24px; font-weight: 650; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  .lead { color: var(--dim); margin: 0; max-width: 72ch; }
+  .journey { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--dim); }
+  .journey li { background: var(--chrome); border-radius: 999px; padding: 2px 10px; }
+  .journey li + li::before { content: "→ "; color: var(--dim); }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+  .tile:focus-visible, .chip:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .tile b { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 650; }
+  .tile span { font-size: 12.5px; color: var(--dim); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .bar input { flex: 1 1 240px; min-width: 0; font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); }
+  .bar .count { font-size: 12.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  section { display: grid; gap: 8px; }
+  h2 { font-size: 15px; font-weight: 650; margin: 0; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  h2 small { font-weight: 400; color: var(--dim); font-size: 12.5px; }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); font-weight: 600; background: var(--chrome); }
+  td.opt { font-weight: 600; width: 22%; }
+  td.what { color: var(--text); width: 30%; }
+  td.src { font: 12px/1.45 var(--mono); color: var(--dim); width: 18%; word-break: break-word; }
+  td.where { width: 13%; font-size: 13px; }
+  td.state { width: 17%; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.have { color: var(--have); background: var(--have-soft); }
+  .pill.plan { color: var(--plan); background: var(--plan-soft); }
+  .pill.miss { color: var(--miss); background: var(--miss-soft); }
+  .pill.decide { color: var(--decide); background: var(--decide-soft); }
+  .pill.router { color: var(--router); background: var(--router-soft); }
+  .pill.auto { color: var(--auto); background: var(--auto-soft); }
+  .note { display: block; font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 18px; font-size: 13px; color: var(--dim); margin: 0; padding: 0; list-style: none; }
+  .empty { color: var(--dim); padding: 12px; }
+  @media (max-width: 520px) { h1 { font-size: 20px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Path App Option Map</h1>
+    <p class="lead">Every choice a user has today across the npm installer, the daemon, Path settings, and multi-repo tools, and where each one should live in the native app. Status is checked against <code>main</code> at 94d10280 and the A1 branch.</p>
+    <ul class="journey" aria-label="User journey">
+      <li>Download app</li><li>Requirements</li><li>Agents found</li><li>Skills (global)</li><li>Watch folders</li><li>Add project</li><li>Start /path</li><li>Stay updated</li><li>Remove</li>
+    </ul>
+  </header>
+
+  <div class="summary" id="summary" role="group" aria-label="Filter by status"></div>
+
+  <ul class="legend" aria-label="Status meanings">
+    <li><span class="pill have">In app/dashboard</span> works today in the dashboard or the A1 shell</li>
+    <li><span class="pill plan">Planned</span> in docs/native-app-work.md or agreed in chat</li>
+    <li><span class="pill miss">Missing</span> exists in the CLI or config, no UI and no plan</li>
+    <li><span class="pill decide">Decide</span> needs an owner call before it is planned</li>
+    <li><span class="pill router">Router only</span> stays in <code>/path</code> by design; the app may show a hint</li>
+    <li><span class="pill auto">Automatic</span> no user choice; the app should only explain it</li>
+  </ul>
+
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search options, flags, settings…" aria-label="Search options">
+    <span class="count" id="count"></span>
+  </div>
+
+  <div id="areas"></div>
+</div>
+
+<script>
+const STATUS = {
+  have: "In app/dashboard", plan: "Planned", miss: "Missing", decide: "Decide", router: "Router only", auto: "Automatic",
+};
+// [option, what it does, source today, where in the app, status, note]
+const AREAS = [
+  { name: "Requirements", where: "Onboarding wizard, step 1", rows: [
+    ["Python 3.9+", "Runs the daemon, installer, hooks, and every pipeline helper. Agents find it on PATH.", "setup page (A1)", "Onboarding", "plan", "A1 detects only. Agreed: one-click via xcode-select (macOS) or winget (Windows), guide on Linux. macOS CLT ships 3.9.6, which is past end of life."],
+    ["Git", "Required for every project, worktree, and hook.", "launch check (A1)", "Onboarding", "plan", "Same install route as Python."],
+    ["Git for Windows (Git Bash)", "Windows hooks and task Verify commands run in Git Bash, never WSL.", "README; GSD_PATH_BASH", "Onboarding", "miss", "winget Git.Git provides it; the app should check bash.exe and offer the GSD_PATH_BASH override."],
+    ["Windows long paths", "Deep managed-worktree paths need core.longpaths and LongPathsEnabled.", "--doctor warns", "Onboarding", "miss", "LongPathsEnabled needs admin; offer the command with its own consent."],
+    ["WebView2 runtime", "The app window needs it; some Windows 10 machines lack it.", "—", "Installer", "miss", "Tauri's Windows installer can bootstrap it (webviewInstallMode)."],
+    ["python3-venv (Linux)", "Debian and Ubuntu split venv out; creating the daemon venv fails without it.", "A1 setup page text", "Onboarding", "plan", "Guide only on Linux."],
+    ["GitHub CLI and sign-in", "Pull-request shipping, new repos, and members add --create need gh and gh auth.", "router, members.py", "Onboarding", "miss", "Optional step: detect gh, show gh auth status, link the install."],
+    ["Node.js", "Needed only by the npx installer.", "npx", "—", "auto", "Not required if the app installs the npm release tarball with install.py."],
+  ]},
+  { name: "Coding agents", where: "Onboarding wizard, step 2; Skills page", rows: [
+    ["Detect installed agents", "Find which of the 11 hosts are on this machine to preselect them.", "—", "Onboarding", "miss", "Today only existing skill installs are detected, not the hosts themselves."],
+    ["Codex, Claude Code, Grok, OpenCode, Copilot CLI, Qwen Code, Antigravity, Cursor, Zed, Kiro, Kimi Code", "Pick which agents get Path skills.", "--codex … --kimi, --all", "Skills", "have", "Dashboard Plugin page installs per host and all detected hosts."],
+    ["Custom skills folder per agent", "Override where an agent's skills are written.", "--<host>-root PATH", "Skills (advanced)", "miss", ""],
+    ["Install the agent itself", "Path does not install hosts.", "—", "Onboarding", "decide", "Link to each host's install page, or leave out."],
+  ]},
+  { name: "Skills (global)", where: "Skills page", rows: [
+    ["Install skills", "Write Path skills into each chosen agent's global skills folder.", "npx … --all | --<host>", "Skills", "have", "Source today is a clone of main. Agreed: switch to the verified npm release tarball (A4a)."],
+    ["Update skills", "Refresh existing installs in place.", "--update", "Skills", "have", "Moves to npm releases with A4a."],
+    ["Choose plugin release", "Install latest or a specific published version.", "npx @opengsd/gsd-path@X", "Skills", "plan", "A4a: npm registry dist-tags and versions, sha512 checked."],
+    ["Preview before writing", "Show what would be written without writing.", "--dry-run", "Skills, Projects", "miss", "The API accepts dry_run; install screens do not offer it."],
+    ["Uninstall skills", "Remove Path skills from chosen agents, with a plan first.", "plugin uninstall (daemon)", "Skills", "have", "Plan, then confirm."],
+    ["Update check", "Show when a newer plugin release exists.", "update-check.json", "Tray, Skills", "have", "Moves from git fetch to npm dist-tags."],
+  ]},
+  { name: "Projects", where: "Projects page and each project's page", rows: [
+    ["Add a project", "Pick a Git repo that does not use Path yet and set it up.", "npx … --project PATH", "Projects", "plan", "A4b. Discovery only finds folders with .project/STATE.md today, so new repos are invisible."],
+    ["Contracts and status runtime", "Write AGENTS.md block, WORKFLOW.md, and the pinned runtime.", "--project PATH", "Project", "have", "Works for watched projects only."],
+    ["Existing AGENTS.md", "Adds a marked Path block and keeps the owner's text.", "automatic", "Project", "auto", "Explain it before install."],
+    ["Project-local skills", "Install skills into this repo's per-agent folders instead of global.", "--local", "Project", "miss", "API takes local_hosts; no UI to pick them."],
+    ["Guard hooks", "Archive and ship-commit guards as Git and host hooks.", "--hooks", "Project", "miss", "API takes hooks; no toggle in the UI."],
+    ["Add guards to an existing project", "Install guards without changing contracts.", "--hooks-init", "Project", "miss", ""],
+    ["Refresh hooks", "Validate the runtime and keep its version, or refresh native settings and Git hooks.", "--hooks-refresh, --hooks-refresh-full", "Project", "miss", ""],
+    ["Upgrade project runtime", "Select the newer packaged runtime for this project.", "--runtime-upgrade", "Project", "have", "Dashboard Update button."],
+    ["Migrate legacy runtime", "Move an old in-repo runtime out and leave a diff to review.", "--runtime-migrate", "Project", "have", "Dashboard picks it for legacy layouts."],
+    ["Restore declared runtime", "Restore the exact runtime the project declares.", "--runtime-restore", "Project", "miss", ""],
+    ["Health check", "Read-only check of installs, hooks, state, long paths.", "--doctor", "Project", "miss", "Should run after every install and on demand."],
+    ["Windows line endings", "Managed .git/info/attributes rule keeps .project LF.", "automatic", "Project", "auto", ""],
+    ["Open in agent", "Open the project in the chosen agent and say to type /path.", "—", "Project", "plan", "A4b."],
+    ["Create a new GitHub repo", "Create repo, default checkout, bound branch, and worktree.", "router + bootstrap_repository.py", "Projects", "decide", "Router owns it today."],
+    ["Remove Path from a project", "Plan and remove contracts, runtime, hooks; never .project/.", "plugin uninstall --project", "Project", "have", ""],
+    ["Migrate from GSD Core", "Convert a .planning/ project.", "gsd-path-migrate skill", "Project", "router", "Show a hint when .planning/ is found."],
+  ]},
+  { name: "Multi-repo", where: "Coordinator project page", rows: [
+    ["Members and their health", "Marker, member hooks, and origin/main per member.", "members.py validate, detect", "Project", "plan", "A4."],
+    ["Install member hooks", "Hold a member repo to the coordinator guard.", "--member-of PATH --project MEMBER", "Project", "plan", "A4."],
+    ["Repair member markers", "Fix markers after the coordinator moves.", "members.py repair", "Project", "plan", "A4."],
+    ["Join a member", "Record a member repo, or create one on GitHub.", "members.py add [--create]", "—", "router", "Owner ruling: joining stays in the router."],
+    ["Member shipping mode", "default, direct, or pull-request per member.", "members add --integration", "—", "router", "Show it read-only."],
+  ]},
+  { name: "Path settings", where: "Settings → Path settings (user and project)", rows: [
+    ["Shipping mode (default)", "direct merge or pull request for new projects.", "path_config set integration", "Settings", "have", ""],
+    ["Shipping mode (project)", "Per-project shipping; locks when build starts.", "configure-integration", "Project", "have", ""],
+    ["Review panel", "off, detected, or named model families.", "set review_panel", "Settings", "have", ""],
+    ["Model per role", "coder, reviewer, review_panel, skeptic, inspect_codebase, inspect_docs, docs_audit, research, decide, roadmap, plan, plan_patch.", "set models.roles.<role>.model", "Settings", "have", "User and project scope."],
+    ["Effort per role", "Same roles, effort level.", "set models.roles.<role>.effort", "Settings", "have", ""],
+    ["Per-agent model and effort", "Override by host and role.", "set models.hosts.<host>.<role>.*", "Settings", "have", ""],
+    ["Reset a setting", "Remove this scope's value and show the default.", "path_config reset", "Settings", "have", ""],
+    ["Jev screening", "Optional advisory evidence screening; off by default.", "GSD_PATH_JEV, TYPESAFE_API_KEY, timeout env vars", "Settings", "decide", "Needs a keychain for the API key; env vars do not reach agents started outside the app."],
+  ]},
+  { name: "App and monitoring", where: "Settings → App; tray", rows: [
+    ["Launch at login", "Start the app and daemon at login.", "A1 enables it automatically", "Settings", "miss", "No toggle to turn it off."],
+    ["Start, stop, restart daemon", "Control the daemon the app owns.", "tray (A1)", "Tray", "have", ""],
+    ["Open dashboard / in browser", "", "tray (A1)", "Tray", "have", ""],
+    ["Watched folders", "Folders scanned for projects.", "daemon.json parents; /api/config/parents", "Onboarding, Settings", "have", "Folder picker exists; add it to onboarding step 5."],
+    ["Excluded folders", "Folders never scanned.", "daemon.json excludes", "Settings", "miss", ""],
+    ["Scan depth", "How deep to look for projects.", "daemon.json max_depth (6)", "Settings", "miss", ""],
+    ["Refresh interval", "How often projects are re-read.", "daemon.json poll_seconds (5)", "Settings", "miss", ""],
+    ["Notifications", "Desktop notices on phase changes.", "daemon.json notify", "Settings", "miss", ""],
+    ["Activity history", "Keep the JSONL event history.", "daemon.json history", "Settings", "miss", ""],
+    ["Usage session folders", "Where agent session logs are read for tokens.", "daemon.json session_dirs", "Settings", "miss", ""],
+    ["Model prices", "Per-model prices so cost can be shown.", "daemon.json prices", "Settings", "miss", "Cost stays hidden without them."],
+    ["Appearance", "Light, dark, or system.", "dashboard theme", "Settings", "have", ""],
+    ["App updates", "Check, download, and install new app versions.", "Tauri updater (A3)", "Tray, Settings", "plan", ""],
+    ["One update overview", "App, plugin, and each project runtime in one list.", "—", "Settings", "miss", "Three update paths today."],
+    ["Local API token", "Only the app can call install endpoints.", "—", "Automatic", "plan", "A0b, agreed in the evaluation."],
+    ["Remove everything", "Skills, hooks, venv, autostart when leaving.", "partial: plugin uninstall", "Settings", "plan", "A7."],
+    ["Diagnostics", "Logs and a copyable report for support.", "~/.gsd-path/logs", "Settings", "miss", ""],
+  ]},
+  { name: "Pipeline (read-only in the app)", where: "Project page", rows: [
+    ["Board, milestones, tasks, reviews, verify", "Progress of every watched project.", "dashboard", "Project", "have", ""],
+    ["History and files, records", "Browse files, archives, Git versions, full records.", "dashboard", "Project", "have", ""],
+    ["Usage and cost", "Tokens and turns from agent session logs.", "dashboard", "Project", "have", ""],
+    ["Stats charts", "Tokens and cost over time, throughput, verify history.", "A5", "Project", "plan", ""],
+    ["Status", "Where the pipeline stands.", "/path status", "Project", "have", "The dashboard shows it."],
+    ["Pre-approve gates", "Grant intent and plan approval for one milestone.", "/gsd-path --pre-approve intent,plan", "—", "router", "The app never approves; it can show the command."],
+    ["Discuss, undo, forensics, loop, docs audit", "Other Path skills.", "/gsd-path-discuss … ", "—", "router", "Show copyable commands."],
+    ["Approvals and rulings", "Phase approvals, ship approval.", "router", "—", "router", "AGENTS.md: never from the app."],
+  ]},
+];
+
+const state = { status: null, q: "" };
+const all = AREAS.flatMap(area => area.rows.map(row => ({ area: area.name, row })));
+
+function renderSummary() {
+  const counts = {};
+  all.forEach(({ row }) => { counts[row[4]] = (counts[row[4]] || 0) + 1; });
+  const tiles = [["all", "All options", all.length], ...Object.keys(STATUS).map(key => [key, STATUS[key], counts[key] || 0])];
+  const box = document.getElementById("summary");
+  box.replaceChildren(...tiles.map(([key, label, n]) => {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "tile";
+    tile.id = "tile-" + key;
+    tile.setAttribute("aria-pressed", String((state.status || "all") === key));
+    const b = document.createElement("b"); b.textContent = n;
+    const s = document.createElement("span"); s.textContent = label;
+    tile.append(b, s);
+    tile.addEventListener("click", () => { state.status = key === "all" ? null : key; render(); });
+    return tile;
+  }));
+}
+
+function cell(cls, text) {
+  const td = document.createElement("td");
+  td.className = cls;
+  td.textContent = text;
+  return td;
+}
+
+function render() {
+  renderSummary();
+  const q = state.q.trim().toLowerCase();
+  let shown = 0;
+  const out = AREAS.map(area => {
+    const rows = area.rows.filter(row =>
+      (!state.status || row[4] === state.status) &&
+      (!q || row.join(" ").toLowerCase().includes(q) || area.name.toLowerCase().includes(q)));
+    if (!rows.length) return null;
+    shown += rows.length;
+    const section = document.createElement("section");
+    const h2 = document.createElement("h2");
+    h2.textContent = area.name + " ";
+    const small = document.createElement("small");
+    small.textContent = area.where;
+    h2.append(small);
+    const wrap = document.createElement("div");
+    wrap.className = "tablewrap";
+    const table = document.createElement("table");
+    table.innerHTML = "<thead><tr><th>Option</th><th>What it does</th><th>Source today</th><th>In the app</th><th>Status</th></tr></thead>";
+    const body = document.createElement("tbody");
+    rows.forEach(([opt, what, src, where, status, note]) => {
+      const tr = document.createElement("tr");
+      const stateCell = document.createElement("td");
+      stateCell.className = "state";
+      const pill = document.createElement("span");
+      pill.className = "pill " + status;
+      pill.textContent = STATUS[status];
+      stateCell.append(pill);
+      if (note) { const n = document.createElement("span"); n.className = "note"; n.textContent = note; stateCell.append(n); }
+      tr.append(cell("opt", opt), cell("what", what), cell("src", src), cell("where", where), stateCell);
+      body.append(tr);
+    });
+    table.append(body);
+    wrap.append(table);
+    section.append(h2, wrap);
+    return section;
+  }).filter(Boolean);
+  const areas = document.getElementById("areas");
+  if (out.length) areas.replaceChildren(...out);
+  else { const p = document.createElement("p"); p.className = "empty"; p.textContent = "No options match this filter."; areas.replaceChildren(p); }
+  areas.style.display = "grid"; areas.style.gap = "22px";
+  document.getElementById("count").textContent = shown + " of " + all.length + " shown";
+}
+
+document.getElementById("q").addEventListener("input", event => { state.q = event.target.value; render(); });
+render();
+</script>
+
+</body></html>

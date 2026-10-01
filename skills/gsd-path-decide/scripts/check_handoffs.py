@@ -56,6 +56,21 @@ WAVE_REVIEW_NAME = re.compile(
     r"wave-(?P<wave>[1-9]\d*)\.cycle(?P<cycle>[1-9]\d*)"
     r"(?:\.(?P<lens>contract|adversarial))?\.md$"
 )
+VALID_REVIEW_DEPTHS = frozenset({"full", "deep", "verify-only"})
+
+
+def _max_wave_cycle(root: Path, project_dir: str, wave: int) -> int:
+    review_dir = root / PurePosixPath(project_dir) / "review"
+    if not review_dir.is_dir():
+        return 0
+    maximum = 0
+    for path in review_dir.iterdir():
+        named = WAVE_REVIEW_NAME.fullmatch(path.name)
+        if named and int(named.group("wave")) == wave:
+            maximum = max(maximum, int(named.group("cycle")))
+    return maximum
+
+
 WAVE_SC_HEADING = re.compile(r"^### (SC[1-9]\d*) — (.+)$")
 WAVE_TASK_HEADING = re.compile(
     r"^## (?P<task>T\d{3}) — (?P<title>.+): (?P<verdict>pass|fail)$"
@@ -513,7 +528,7 @@ def _field(block: str, field: str) -> str:
 
 
 def _raw_source_field(block: str, field: str, source: str) -> str:
-    matches = re.findall(rf"(?m)^- \*\*{re.escape(field)}\*\*:\s*(.*)$", block)
+    matches = _common.find_review_bullet_field_values(block.splitlines(), field)
     if not matches:
         raise HandoffError(f"{source} is missing {field}")
     if len(matches) != 1:
@@ -644,6 +659,42 @@ def _success_criteria(intent: str) -> Dict[str, str]:
     return {f"SC{number}": text for number, text in items.items()}
 
 
+def _split_top_level_commas(value: str) -> List[str]:
+    """Split on commas outside parentheses, brackets, and simple quoted strings."""
+
+    parts: List[str] = []
+    start = 0
+    depth_paren = 0
+    depth_bracket = 0
+    quote: Optional[str] = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote is not None:
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+            index += 1
+            continue
+        if character == "(":
+            depth_paren += 1
+        elif character == ")":
+            depth_paren = max(0, depth_paren - 1)
+        elif character == "[":
+            depth_bracket += 1
+        elif character == "]":
+            depth_bracket = max(0, depth_bracket - 1)
+        elif character == "," and depth_paren == 0 and depth_bracket == 0:
+            parts.append(value[start:index])
+            start = index + 1
+        index += 1
+    parts.append(value[start:])
+    return parts
+
+
 def _surfaces(text: str, label: str) -> List[str]:
     """Human-facing surfaces one milestone delivers; empty when `none`."""
 
@@ -660,7 +711,7 @@ def _surfaces(text: str, label: str) -> List[str]:
     _non_placeholder(value, f"{label} Surfaces")
     named: List[str] = []
     seen = set()
-    for item in value.split(","):
+    for item in _split_top_level_commas(value):
         if not item.strip():
             continue
         surface = _unquoted(item)
@@ -1901,17 +1952,27 @@ def validate_wave_evidence(
             assigned[task_id].add(criterion)
     owned = _owned_by_wave(tasks, assigned, wave)
     text = _read(root, review_path.as_posix())
+    is_last_cycle = cycle >= _max_wave_cycle(root, project_dir, wave)
     if _line_value(text, "Cycle:") != str(cycle):
         raise HandoffError(f"{name} Cycle field does not match its filename")
-    if _line_value(text, "Depth:") != expected_depth:
+    recorded_depth = _line_value(text, "Depth:")
+    if recorded_depth not in VALID_REVIEW_DEPTHS:
+        raise HandoffError(f"{name} Depth does not match PLAN.md")
+    if is_last_cycle and recorded_depth != expected_depth:
         raise HandoffError(f"{name} Depth does not match PLAN.md")
     lens_fields = re.findall(r"(?m)^Lens:[ \t]*(\S.*?)[ \t]*$", text)
     if lens is None and lens_fields:
         raise HandoffError(f"{name} must not declare a review lens")
     if lens is not None and lens_fields != [lens]:
         raise HandoffError(f"{name} Lens field does not match its filename")
+    overall = _line_value(text, "Wave verdict:")
+    if overall not in {"pass", "blocked"}:
+        raise HandoffError(f"{name} Wave verdict is invalid")
     reviewed = _line_value(text, "Tasks reviewed:")
-    if not reviewed.isdigit() or int(reviewed) != len(expected_tasks):
+    enforce_plan_tasks = is_last_cycle and overall != "blocked"
+    if not reviewed.isdigit() or int(reviewed) < 1:
+        raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
+    if enforce_plan_tasks and int(reviewed) != len(expected_tasks):
         raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
 
     lines = text.splitlines()
@@ -1920,11 +1981,25 @@ def validate_wave_evidence(
         match = WAVE_TASK_HEADING.fullmatch(line)
         if match:
             task_headings.append((index, match))
+    if len(task_headings) != int(reviewed):
+        raise HandoffError(f"{name} Tasks reviewed does not match Wave {wave}")
     reviewed_tasks = [match.group("task") for _, match in task_headings]
-    if reviewed_tasks != expected_tasks:
-        raise HandoffError(
-            f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
-        )
+    if enforce_plan_tasks:
+        if reviewed_tasks != expected_tasks:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
+    else:
+        unknown = [task_id for task_id in reviewed_tasks if task_id not in expected_tasks]
+        if unknown:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
+        plan_order = [task_id for task_id in expected_tasks if task_id in reviewed_tasks]
+        if reviewed_tasks != plan_order:
+            raise HandoffError(
+                f"{name} must review exactly {', '.join(expected_tasks)} in plan order"
+            )
     task_verdicts = []
     for heading_index, heading in task_headings:
         task_id = heading.group("task")
@@ -1953,9 +2028,16 @@ def validate_wave_evidence(
             _non_placeholder(item, f"{name} task {task_id} {verdict} evidence")
         task_verdicts.append(verdict)
 
-    overall = _line_value(text, "Wave verdict:")
-    if overall not in {"pass", "blocked"}:
-        raise HandoffError(f"{name} Wave verdict is invalid")
+    if not is_last_cycle:
+        return {
+            "phase": "wave",
+            "wave": wave,
+            "cycle": cycle,
+            "owned": owned if owned else [],
+            "review": review,
+            "verdict": overall,
+        }
+
     if overall == "pass" and "fail" in task_verdicts:
         raise HandoffError(f"{name} Wave verdict is pass while a task failed")
     try:
