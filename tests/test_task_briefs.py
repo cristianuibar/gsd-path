@@ -210,6 +210,41 @@ class TaskBriefTests(unittest.TestCase):
             )
             self.assertEqual(result["tasks"], 2)
 
+    def test_cli_project_dir_applies_plan_dependency_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_repo(root)
+            self.write(root, "src/legacy.ts", "export {}\n")
+            historical = self.commit(root)
+            (root / "src/legacy.ts").unlink()
+            head = self.commit(root)
+            (root / ".project/plan").mkdir(parents=True)
+            (root / ".project/plan/PLAN.md").write_text(PLAN_WAVE.format(title="first"), encoding="utf-8")
+            t001 = TASK_TEMPLATE.format(
+                task_id="T001",
+                files_block="  - src/legacy.ts",
+                context="Keep legacy.",
+                approach="Keep.",
+                contract="- None",
+                verify="python3 src/legacy.ts",
+            ).replace("status: pending", "status: done").replace("agent: null", "agent: coder").replace(
+                "base: null", f"base: {historical}"
+            )
+            t002 = TASK_TEMPLATE.format(
+                task_id="T002",
+                files_block="  - src/other.py",
+                context="Read `src/legacy.ts`.",
+                approach="Use legacy.",
+                contract="- None",
+                verify="python3 src/other.py",
+            ).replace("deps: []", "deps: [T001]")
+            self.write(root, ".project/tasks/T001-legacy.md", t001)
+            self.write(root, ".project/tasks/T002-other.md", t002)
+            code, _, error = self.run_main(
+                ["--repo", str(root), "--base", head, "--project-dir", ".project"]
+            )
+            self.assertEqual(code, 0, error)
+
     def test_landed_briefs_use_recorded_historical_base(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
