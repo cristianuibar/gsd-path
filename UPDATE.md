@@ -176,9 +176,10 @@ a global update does not update project runtimes. Use the project's **Update**
 button to refresh its runtime and existing guards. Install and update actions
 show progress, success or failure, and installer output.
 
-If the daemon's plugin source checkout has local changes, project Update uses
-that local build and says so in its result. It does not pull remote changes over
-local edits. Clean source checkouts still refresh before a project update.
+Project Update refreshes the daemon's plugin source first. With the
+[git source](daemon/README.md#plugin-lifecycle), a clone that has local changes
+is used as that local build, and the result says so. It does not pull remote
+changes over local edits.
 
 Older unstamped installs show **Unknown — version metadata unavailable**.
 This does not establish that their runtime is outdated or broken. **Update**

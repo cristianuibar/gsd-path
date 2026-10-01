@@ -53,6 +53,9 @@ def make_manager(tmp, runner=None, git_runner=None, clock=None, **kwargs):
     home = base / "daemon-home"
     user_home = base / "user-home"
     user_home.mkdir(parents=True, exist_ok=True)
+    # These tests cover the git clone source, which a configured repository selects.
+    # The npm release source has its own tests in test_daemon_release_source.py.
+    kwargs.setdefault("repo", "https://github.com/open-gsd/gsd-path.git")
     return PluginManager(
         home=home,
         user_home=user_home,
