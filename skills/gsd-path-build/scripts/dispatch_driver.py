@@ -184,6 +184,8 @@ def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, 
             return
         state_path = attempts[-1]
         state = load_state(state_path)
+        if state.get("outcome") is not None or state.get("command"):
+            return
         attempt = state.get("attempt")
         state.update(record)
         if attempt is not None:
