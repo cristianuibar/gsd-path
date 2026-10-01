@@ -1266,12 +1266,25 @@ class _Handler(BaseHTTPRequestHandler):
         return DASHBOARD_PAGE.replace("__DAEMON_JSON__", json.dumps(daemon)).replace("__RECORDS_CSS__", RECORDS_CSS).replace("__RECORDS_JS__", RECORDS_JS).replace("__LAYOUT_CSS__", LAYOUT_CSS).replace("__LAYOUT_JS__", LAYOUT_JS)
 
 
+class _StopEvent(threading.Event):
+    """Ends the poll loop; setting it also wakes a loop that waits for its next poll."""
+
+    def __init__(self, wake: threading.Event) -> None:
+        super().__init__()
+        self._wake = wake
+
+    def set(self) -> None:
+        super().set()
+        self._wake.set()
+
+
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
           plugin: Optional[PluginManager] = None) -> ThreadingHTTPServer:
     # Bind before the first session scan: scanning every host session log on
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
     scan_lock = threading.Lock()
+    wake = threading.Event()  # set to start the next poll at once
 
     def scan(scan_sessions=True):
         with scan_lock:
@@ -1282,9 +1295,9 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
 
     handler = type("Handler", (_Handler,),
                    {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
-                    "scan_lock": scan_lock})
+                    "scan_lock": scan_lock, "wake": staticmethod(wake.set)})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    stop = threading.Event()
+    stop = _StopEvent(wake)
     server.watcher_stop = stop  # callers may set() to end the poll loop
 
     def poll_loop() -> None:
@@ -1294,7 +1307,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                 scan()
             except Exception:
                 pass  # a failed cycle must never kill the poll loop
-            stop.wait(watcher.config.poll_seconds)
+            wake.wait(watcher.config.poll_seconds)
+            wake.clear()
 
     threading.Thread(target=poll_loop, daemon=True).start()
     return server

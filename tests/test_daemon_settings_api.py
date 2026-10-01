@@ -120,6 +120,18 @@ class ConfigRouteTests(Case):
         self.assertFalse(self.config_path.exists())
         self.assertEqual(self.scans, [])
 
+    def test_writes_keep_keys_the_settings_do_not_own(self):
+        repo = "https://example.test/private/plugin.git"
+        self.config_path.write_text(json.dumps({"plugin_repo": repo, "poll_seconds": 5}), encoding="utf-8")
+        for path, body in (("/api/config", {"notify": False}),
+                           ("/api/config/parents", {"action": "add", "path": str(self.root)})):
+            with self.subTest(path=path):
+                status, payload = self.request("POST", path, body)
+                self.assertEqual(status, 200, payload)
+                self.assertEqual(self.saved()["plugin_repo"], repo)
+                self.assertEqual(self.plugin._config_repo(), repo)
+        self.assertEqual((self.saved()["notify"], self.saved()["parents"]), (False, [str(self.root)]))
+
     def test_body_that_is_not_a_json_object_is_refused(self):
         for raw in ("[1]", "{not json"):
             with self.subTest(raw=raw):
@@ -192,6 +204,21 @@ class DiagnosticsTests(Case):
         self.assertTrue(tail.endswith("line 99"))
         self.assertNotIn("line 0\n", tail)
 
+    def test_log_tails_mask_credentials_in_urls(self):
+        logs = self.root / "home" / "logs"
+        logs.mkdir(parents=True)
+        (logs / "plugin.log").write_text(
+            "fatal: unable to access 'https://user:s3cret-pat@github.com/acme/plugin.git/'\n"
+            "retry https://ghp_onlytoken@github.com/acme/plugin.git and https://github.com/acme/open.git\n",
+            encoding="utf-8")
+        status, payload = self.request("GET", "/api/diagnostics")
+        self.assertEqual(status, 200)
+        tail = payload["logs"]["plugin.log"]
+        self.assertNotIn("s3cret-pat", tail)
+        self.assertNotIn("ghp_onlytoken", tail)
+        self.assertIn("https://***@github.com/acme/plugin.git/", tail)
+        self.assertIn("https://github.com/acme/open.git", tail)
+
     def test_report_never_holds_the_write_token(self):
         app = self.root / "home" / "app"
         app.mkdir(parents=True)
@@ -199,6 +226,43 @@ class DiagnosticsTests(Case):
         status, payload = self.request("GET", "/api/diagnostics")
         self.assertEqual(status, 200)
         self.assertNotIn("s3cret-token-value", json.dumps(payload))
+
+
+class PollWakeTests(unittest.TestCase):
+    def test_settings_write_starts_a_full_poll_without_waiting_for_the_interval(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        env = mock.patch.dict(os.environ, {"GSD_DAEMON_CONFIG": str(root / "daemon.json")})
+        env.start()
+        self.addCleanup(env.stop)
+        watcher = Watcher(Config(parents=[], history=False, session_dirs=[], poll_seconds=3600))
+        polls = []
+        full_polls = threading.Semaphore(0)
+        real_poll = watcher.poll_once
+
+        def poll_once(scan_sessions=True):
+            events = real_poll(scan_sessions=scan_sessions)
+            polls.append((scan_sessions, watcher.config.poll_seconds))
+            if scan_sessions:
+                full_polls.release()
+            return events
+
+        watcher.poll_once = poll_once
+        plugin = PluginManager(home=root / "home", user_home=root / "user", environ={},
+                               runner=lambda argv, cwd=None: (0, "", ""))
+        server = serve(watcher, port=0, plugin=plugin)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.watcher_stop.set)
+        threading.Thread(target=server.handle_request, daemon=True).start()
+        self.assertTrue(full_polls.acquire(timeout=5))  # the poll at start; the loop now waits 3600 s
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+        connection.request("POST", "/api/config", body=json.dumps({"poll_seconds": 7}),
+                           headers={"Content-Type": "application/json"})
+        self.assertEqual(connection.getresponse().status, 200)
+        connection.close()
+        self.assertTrue(full_polls.acquire(timeout=5), polls)
+        self.assertEqual(polls[-1], (True, 7))
 
 
 if __name__ == "__main__":

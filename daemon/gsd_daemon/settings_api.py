@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import platform
+import re
 import sys
 from typing import Callable, Dict
 
@@ -16,6 +17,7 @@ from .config import _abs
 from .plugin import STDOUT_TAIL_LINES, _tail
 
 PRICE_KEYS = ("input", "cached", "output")
+URL_CREDENTIALS = re.compile(r"(\b[a-z][a-z0-9+.-]*://)[^/\s@]+@", re.IGNORECASE)
 
 
 def _number(value) -> bool:
@@ -88,16 +90,19 @@ def write_config(handler, body: dict) -> dict:
         watcher.sessions.set_dirs(watcher.config.session_dirs)
         watcher.sessions.prices = watcher.config.prices
     handler.scan(scan_sessions=False)
+    handler.wake()
     return watcher.config.to_dict()
 
 
 def diagnostics(handler, _body=None) -> dict:
-    """A support report the user can copy. It holds settings and log tails, never the write token."""
+    """A support report the user can copy. It holds settings and log tails, never the write token
+    or a credential inside a URL."""
     logs = {}
     directory = handler.plugin.log_path.parent
     for path in sorted(directory.glob("*.log")) if directory.is_dir() else []:
         try:
-            logs[path.name] = _tail(path.read_text(encoding="utf-8", errors="replace"), STDOUT_TAIL_LINES)
+            tail = _tail(path.read_text(encoding="utf-8", errors="replace"), STDOUT_TAIL_LINES)
+            logs[path.name] = URL_CREDENTIALS.sub(r"\1***@", tail)
         except OSError as error:
             logs[path.name] = f"could not be read: {error}"
     return {
