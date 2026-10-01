@@ -1583,7 +1583,7 @@ class DispatchDriverTests(unittest.TestCase):
 class DispatchPinnedRuntimeTests(unittest.TestCase):
     PINNED_MARKER = "gsd-path-pinned-runtime-marker-209"
 
-    def tearDown(self) -> None:
+    def _restore_bundled_scripts(self) -> None:
         import scripts
 
         scripts.__path__ = [str(PROJECT_ROOT / "scripts")]
@@ -1599,7 +1599,11 @@ class DispatchPinnedRuntimeTests(unittest.TestCase):
         dispatch_driver.model_policy = importlib.import_module("scripts.model_policy")
         dispatch_driver._refresh_stop_errors()
 
+    def tearDown(self) -> None:
+        self._restore_bundled_scripts()
+
     def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
+        self.addCleanup(self._restore_bundled_scripts)
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
             (repo / ".gsd-path").mkdir(parents=True)
