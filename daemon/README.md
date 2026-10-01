@@ -129,6 +129,13 @@ Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 except `/api/refresh` must also send `Content-Type: application/json`, or it
 returns 415. This blocks other web pages and DNS rebinding.
 
+`serve --require-token` adds one more check. The daemon creates
+`~/.gsd-path/app/api-token` (readable by the user only) if it is missing, and
+every `POST` must then send its content in the `X-GSD-Path-Token` header, or
+it returns 403. The native app starts its daemon this way, so only the app
+can change local state; the dashboard in a browser is then read-only. Without
+the flag, nothing changes.
+
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.
 The board and project page adapt to the window within a centered content area;

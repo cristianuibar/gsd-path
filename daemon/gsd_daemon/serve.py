@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
+import secrets
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .history import append_event, resolve_history_path
@@ -26,6 +29,23 @@ _PLUGIN_ENDPOINTS = (
     "/api/plugin/update",
     "/api/plugin/uninstall",
 )
+TOKEN_HEADER = "X-GSD-Path-Token"
+
+
+def load_token() -> str:
+    """Read the write token, or create it readable by the user only."""
+    path = Path.home() / ".gsd-path" / "app" / "api-token"
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        token = ""
+    if not token:
+        token = secrets.token_urlsafe(32)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(token)
+    return token
 
 
 class _BadRequest(Exception):
@@ -961,6 +981,7 @@ def _browse_dirs(raw_path: Optional[str]) -> Tuple[int, dict]:
 class _Handler(BaseHTTPRequestHandler):
     watcher: Watcher = None  # set by serve()
     plugin: PluginManager = None  # set by serve()
+    token: Optional[str] = None  # set by serve(); when set, every POST must carry it
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -1010,6 +1031,11 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if path != '/api/refresh' and self.headers.get_content_type() != 'application/json':
             self._respond(415, 'application/json', json.dumps({'error': 'POST body must be application/json.'}))
+            return
+        if self.token and not hmac.compare_digest(
+                (self.headers.get(TOKEN_HEADER) or '').encode(), self.token.encode()):
+            self._respond(403, 'application/json', json.dumps(
+                {'error': 'This monitor accepts changes from the OpenGSD Path app only. Use the app for this action.'}))
             return
         if path == '/api/path-config':
             self._path_config(True)
@@ -1230,7 +1256,8 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
-          plugin: Optional[PluginManager] = None) -> ThreadingHTTPServer:
+          plugin: Optional[PluginManager] = None,
+          token: Optional[str] = None) -> ThreadingHTTPServer:
     # Bind before the first session scan: scanning every host session log on
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
@@ -1244,7 +1271,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                     append_event(event)
 
     handler = type("Handler", (_Handler,),
-                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan)})
+                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
+                    "token": token})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     stop = threading.Event()
     server.watcher_stop = stop  # callers may set() to end the poll loop
@@ -1275,8 +1303,8 @@ def serve_in_thread(
     return server, thread
 
 
-def run(watcher: Watcher, port: int = DEFAULT_PORT) -> None:
-    server = serve(watcher, port)
+def run(watcher: Watcher, port: int = DEFAULT_PORT, require_token: bool = False) -> None:
+    server = serve(watcher, port, token=load_token() if require_token else None)
     host, actual_port = server.server_address[:2]
     print(f"serving on http://{host}:{actual_port}")
     try:
