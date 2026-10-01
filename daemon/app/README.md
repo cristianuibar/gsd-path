@@ -41,3 +41,9 @@ npm run tauri dev
 ```
 
 Only one copy of the app runs per identifier; a second start only focuses the first.
+
+## Release a tester build
+
+Set the same version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`, merge, then
+push the tag `app-v<version>`. The `App release` workflow builds the `.dmg` (arm64 and x64), `.msi`, `.deb`,
+and AppImage files and attaches them to a GitHub pre-release. The builds are unsigned.

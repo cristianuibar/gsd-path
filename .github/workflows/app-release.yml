@@ -1,0 +1,95 @@
+name: App release
+
+# Builds the OpenGSD Path desktop app (daemon/app) and attaches the installers
+# to a GitHub pre-release. Builds are unsigned (macOS: ad-hoc), so they are for
+# testers only; see docs/adr/0005-native-dashboard-app.md.
+#
+# Trigger: push a tag app-v<version>, where <version> is the version in
+# daemon/app/src-tauri/tauri.conf.json:
+#   git tag app-v0.1.0 && git push origin app-v0.1.0
+# The npm release workflow runs on v* tags only, so an app-v* tag never publishes to npm.
+
+on:
+  push:
+    tags:
+      - "app-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against the app version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./daemon/app/src-tauri/tauri.conf.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "app-v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match app version $version" >&2
+            exit 1
+          fi
+      - name: Create the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
+            --prerelease --title "OpenGSD Path app ${GITHUB_REF_NAME#app-v}" \
+            --notes "Tester build. Unsigned: macOS asks for approval in Privacy & Security, and Windows shows a SmartScreen warning."
+
+  build:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: daemon/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux build packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - name: Build
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Upload the installers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          files=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*.{dmg,msi,deb,AppImage})
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "the build made no installer" >&2
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
