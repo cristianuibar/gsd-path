@@ -273,11 +273,12 @@ def is_link_like_status(status: os.stat_result) -> bool:
 def is_link_like(path: Path, status: os.stat_result) -> bool:
     if is_link_like_status(status):
         return True
-    isjunction = getattr(os.path, "isjunction", None)
-    if os.name != "nt" or isjunction is None:
+    if os.name != "nt":
         return False
     try:
-        return bool(isjunction(path))
+        return is_link_like_status(os.lstat(path))
+    except FileNotFoundError:
+        return False
     except OSError as error:
         raise DetectError(f"cannot inspect link-like evidence: {path}: {error}") from error
 
@@ -366,7 +367,7 @@ def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
         skill_fd = win.open_relative(
             directory_fd,
             "SKILL.md",
-            _GENERIC_READ,
+            _FILE_READ_ATTRIBUTES,
             _PIN_SHARE,
             _FILE_OPEN,
             _FILE_NON_DIRECTORY_FILE,
@@ -1844,7 +1845,7 @@ def iter_from_windows_dir_fd(
             file_fd = win.open_relative(
                 dir_fd,
                 name,
-                _GENERIC_READ,
+                _FILE_READ_ATTRIBUTES,
                 _PIN_SHARE,
                 _FILE_OPEN,
                 _FILE_NON_DIRECTORY_FILE,
