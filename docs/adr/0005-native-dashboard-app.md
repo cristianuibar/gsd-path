@@ -17,7 +17,7 @@ the plugin and the app, and see project stats.
   web view (WKWebView, WebView2, WebKitGTK), so one UI serves every OS and
   the setup and error screens work while no daemon runs (owner ruling
   2026-10-01; this replaces "the window shows the daemon's existing
-  dashboard"). The frontend never calls the daemon directly: one Rust command
+  dashboard"). In the app, the frontend never calls the daemon directly: one Rust command
   sends each request to the daemon on `127.0.0.1`, so the daemon needs no
   CORS rule. The app starts the daemon when needed. On first launch, it uses the daemon's existing uninstall cleanup
   to retire the old LaunchAgent, Startup shortcut, systemd unit, and Swift app
@@ -49,7 +49,9 @@ the plugin and the app, and see project stats.
   behaves as before. The app never writes pipeline state. It can edit a
   project's `.env` files on request: values are masked, shown as a diff
   before save, and never logged. Every env route (list, reveal, save) is a
-  POST that needs the token, so no GET returns env content. Multi-repo
+  POST that needs the token, so no GET returns env content. The env routes
+  exist only on a daemon started with `--require-token`; a daemon without
+  the flag refuses them with a reason. Multi-repo
   actions are member hook install and marker repair; joining a member stays
   in the router.
 - **Updates.** The app updates through the Tauri updater from `latest.json`
@@ -72,7 +74,9 @@ beside the new one (two macOS apps).
 **Consequences:** CI builds the app on macOS, Windows, and Linux and needs a
 Rust toolchain and Node for the frontend build. The daemon's inline dashboard
 is removed once the frontend matches it; the daemon then serves the built
-frontend for "Open in browser". The Swift app in `daemon/macos` is removed once the new app
+frontend for "Open in browser". There the frontend uses same-origin `fetch`
+with no token: reads always work, and writes work only on a daemon started
+without `--require-token`. The Swift app in `daemon/macos` is removed once the new app
 matches it. Removing autostart from `gsd_daemon install` means scripted installs
 no longer start the daemon at login; the app becomes the only autostart path.
 The npm package is unchanged; the installer and docs point to the app. The work

@@ -36,9 +36,9 @@ config and a project's `.env` files.
 | A4a Release source | The plugin manager installs skills from the npm registry in place of a clone of `main`: it lists versions and dist-tags, downloads the release tarball, checks its sha512 against `dist.integrity`, and runs that release's `install.py`. This gives A4 its "latest" and the release picker. |
 | A4 Install view | Skills page: hosts × installed skill version × latest, with Preview (dry run), Install, Update, and Uninstall; hosts found on this computer are detected. Per project: runtime version, guard hooks, health check, and their actions. For a coordinator with `.project/MEMBERS.md`: each member's marker, member hooks, and `origin/main`, with **Install hooks** (`install.py --member-of`) and **Repair** (`members.py repair`). Settings → Updates lists app, skills, and runtime updates in one place. Setup steps Agents, Skills, and Watch folders. Each failed check shows the exact fix. All data comes from installer and helper output; the daemon adds no rule of its own. |
 | A4c Settings | Settings pages for Path settings (existing `/api/path-config`), Monitoring (watched and excluded folders, scan depth, refresh interval, notifications, activity history), Usage and prices (model prices, session folders), and App (launch at login, appearance, run setup again, open logs, copy a diagnostics report). The daemon reads and writes `daemon.json` through one config route. |
-| A4d Environment | Per project, edit `.env`, `.env.local`, `.env.development`, and `.env.production`. The daemon masks values, reveals one key on request, shows a diff before save, and rewrites only the chosen file. Every env route (list, reveal, save) is a POST that needs the token and passes the A0 same-origin and JSON checks; no GET route returns env content. Values never reach logs, history, or the diagnostics report. The Jev toggle writes `GSD_PATH_JEV=1`. |
+| A4d Environment | Per project, edit `.env`, `.env.local`, `.env.development`, and `.env.production`. The daemon masks values, reveals one key on request, shows a diff before save, and rewrites only the chosen file. Every env route (list, reveal, save) is a POST that needs the token and passes the A0 same-origin and JSON checks; no GET route returns env content. The env routes exist only on a daemon started with `--require-token`; a daemon without the flag refuses each of them with a reason. On a reused daemon without the flag, the Environment page shows that reason and offers **Restart monitor**, which replaces the daemon with an app-owned one that has the token. Values never reach logs, history, or the diagnostics report. The Jev toggle writes `GSD_PATH_JEV=1`. |
 | A5 Stats | Charts from data the daemon already records: tokens and cost over time, time per phase, task throughput per wave, verify pass and fail history. Missing data shows as missing, never as zero. |
-| A6 Retire old UI | Remove `daemon/macos`, the inline dashboard in `serve.py`, and the autostart code in `gsd_daemon install` that the app replaces. The daemon serves the built frontend for "Open in browser"; on a daemon started with `--require-token` it is read-only, as in A0b. Keep the legacy uninstall cleanup used by A1a. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
+| A6 Retire old UI | Remove `daemon/macos`, the inline dashboard in `serve.py`, and the autostart code in `gsd_daemon install` that the app replaces. The daemon serves the built frontend for "Open in browser". The frontend API client has two transports: the Rust command in the app, and same-origin `fetch` with no token when the daemon serves the frontend to a browser; A6 builds the second one. In a browser, reads always work. Writes work only on a daemon without the flag; on a daemon started with `--require-token` they are refused and the page tells the user to use the app, as in A0b. Keep the legacy uninstall cleanup used by A1a. README, `daemon/README.md`, and the npm installer's final message point to the app download. |
 | Later: A4b Add project | Find Git repositories without Path and set them up from the app; setup steps Add project and Start /path; Open in agent. Not built until the owner rules it in. |
 | Later: A7 Remove everything | Plan-first removal of skills, hooks, venv, and autostart. Not built until the owner rules it in. |
 
@@ -86,11 +86,15 @@ can run in parallel. A6 comes last. Until A4b lands, setup has four steps.
 - A4d: after save, the file differs only in the changed keys; a dry run writes
   nothing; a secret value is in no log and no report. An env list, reveal, or
   save request without the token is refused, and no GET route returns env
-  content.
+  content. A daemon without the flag refuses each env route with a reason; on
+  a reused daemon without the flag, the Environment page shows the reason, and
+  **Restart monitor** starts an app-owned daemon on which the editor works.
 - A5: a sample project renders every chart; a project without a usage ledger
   shows the missing state.
 - A6: after retirement, install and launch the new app; "Open in browser"
-  shows the same frontend; run
+  shows the same frontend, and it reads status. In a browser on a daemon
+  without the flag, a write works; on a daemon started with `--require-token`,
+  a write is refused and the page tells the user to use the app. Run
   `gsd_daemon install` and confirm it no longer registers autostart. Separately
   review active docs and install messages for correct app download and startup
   instructions.
@@ -129,6 +133,11 @@ can run in parallel. A6 comes last. Until A4b lands, setup has four steps.
   view (owner ruling 2026-10-01).
 - Every env route is a token-gated POST; no GET returns env content (owner
   ruling 2026-10-01).
+- Env routes exist only on a daemon started with `--require-token` (owner
+  ruling 2026-10-01).
+- The frontend API client has two transports: the Rust command in the app,
+  and same-origin `fetch` with no token in a browser (owner ruling
+  2026-10-01).
 - A4a and A0b are in scope. A4b and A7 stay out until the owner rules them in
   (2026-10-01).
 
