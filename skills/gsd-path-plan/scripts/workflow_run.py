@@ -77,7 +77,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
         head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
                               cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
         step("check_task_briefs.py", "--repo", str(repo), "--base", head,
-             "--tasks-dir", f"{project_dir}/tasks")
+             "--tasks-dir", f"{project_dir}/tasks", "--project-dir", project_dir)
         panel = ["validate-plan", "--plan", str(repo / project_dir / "plan/PLAN.md"),
                  "--intent", str(repo / project_dir / "intent/INTENT.md")]
         charter = repo / ".project/CHARTER.md"
@@ -199,7 +199,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
                                   cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
             step("check_task_briefs.py", "--repo", str(repo), "--base", head,
-                 "--tasks-dir", f"{project_dir}/tasks")
+                 "--tasks-dir", f"{project_dir}/tasks", "--project-dir", project_dir)
             step("check_handoffs.py", "plan", *common)
         elif action == "prepare-task" and _task_member(repo, project_dir, task_id):
             # A member task works in a sidecar of its member; its Verify runs there at finish.
