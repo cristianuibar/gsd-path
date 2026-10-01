@@ -57,6 +57,36 @@ paragraph the user signed off on — do not edit without a new sign-off.>
 1. <criterion — a thing you can run/measure/see>
 2. ...
 
+## Edge coverage
+
+<!-- Written by define's edge probe (references/spec-probes.md). Walk every
+     success criterion; each applicable edge gets one row ruled by the user.
+     Disposition: criterion SCn (stated in that criterion) | held-out (a named
+     test pins the ruling written in Detail) | dismissed (Detail says why the
+     edge cannot occur). Every SCn appears at least once; a criterion with no
+     data shape gets category none, dismissed. Categories: boundary,
+     adjacency, empty, encoding, ordering, precision, idempotency,
+     concurrency, none. `check_handoffs.py intent` gates this table. -->
+
+| Edge | Criterion | Category | Disposition | Detail |
+|------|-----------|----------|-------------|--------|
+| E1 | SC1 | <category> | <disposition> | <ruling, examples, or dismissal reason> |
+
+## Prohibitions
+
+<!-- Written by define's prohibition probe. What each criterion must never
+     silently become: values, safety, privacy, fairness, transparency. Not
+     routine engineering, not generic security canon.
+     Disposition: criterion SCn (checkable; stated in that criterion) |
+     judgment (final reviewer judges it; Detail says what to look for) |
+     dismissed. A single row with Criterion `all`, Must not `none`, and
+     disposition dismissed, and no other row, records work that affects no
+     person directly. -->
+
+| Prohibition | Criterion | Must not | Disposition | Detail |
+|-------------|-----------|----------|-------------|--------|
+| N1 | SC1 | <what it must never become> | <disposition> | <what the reviewer looks for, or why dismissed> |
+
 ## Scope: in
 
 <The smallest version that hits the success criteria. Bullet list.>

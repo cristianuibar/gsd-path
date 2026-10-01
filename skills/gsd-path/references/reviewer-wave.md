@@ -26,7 +26,11 @@ Then check each INTENT.md success criterion owned by a task in this wave
 against that same isolated product. Copy the criterion verbatim from
 INTENT.md. Mark `pass` or `fail` with evidence; a failed owned SC blocks
 the wave. Omit the Intent coverage section when no task in the wave owns
-an SC.
+an SC. When INTENT.md `## Edge coverage` or `## Prohibitions` has rows for
+an owned SC, judge it against those rulings too: cite each `held-out` edge
+id with its held-out test's recorded output and each `judgment` prohibition
+id with what you observed. A missing held-out result or a violated ruling
+fails the SC.
 
 Allow changed paths only in the task's `files` plus its assigned task file.
 Within the task file, allow orchestrator-owned `base`, `worktree`,
@@ -65,7 +69,10 @@ criterion's Intent coverage block includes `- **Surface**:`, `- **Check**:`, and
 `- **Observed**:` with the walked states and actual result. `Surface` holds
 exactly the surface name from PLAN's Surface contract; walkthrough detail belongs
 in Check and Observed. Reuse recorded task
-output if it proves that exact walkthrough; run only a missing check. Final-scope
+output if it proves that exact walkthrough; run only a missing check. Cite
+every `held-out` edge and `judgment` prohibition id of each criterion in its
+evidence; shipping derives FINAL.md from these records, and an uncited id
+sends the milestone to a dispatched final review instead. Final-scope
 coverage shares this wave artifact; do not write a second report. Shipping's
 runtime checks freshness and derives the final view from these records.
 
