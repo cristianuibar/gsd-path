@@ -49,3 +49,17 @@ Only one copy of the app runs per identifier; a second start only focuses the fi
 Set the same version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`, merge, then
 push the tag `app-v<version>`. The `App release` workflow builds the `.dmg` (arm64 and x64), `.msi`, `.deb`,
 and AppImage files and attaches them to a GitHub pre-release. The builds are unsigned.
+
+## Updates
+
+The app updates itself with the Tauri updater. It reads
+`https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json`, checks at start and from
+Settings → Updates, and asks before it installs. Each update file is signed with the owner's updater key
+(repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); the public key is in
+`src-tauri/tauri.conf.json`. An update whose signature does not match is refused and nothing changes.
+
+The `App release` workflow signs one update file per platform (`updater-<platform>.<ext>` and its `.sig`; Linux
+has two, the AppImage and the `.deb`, because an app installed from the `.deb` can install only a `.deb`) and,
+only when every platform built, writes `latest.json` with `scripts/latest-json.mjs` and replaces it on the
+`app-latest` pre-release. A local build makes no update files, because it has no signing key. If the private
+key or its password is lost, installed apps can accept no more updates.

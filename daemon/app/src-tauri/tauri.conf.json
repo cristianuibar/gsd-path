@@ -40,5 +40,13 @@
     "macOS": {
       "signingIdentity": "-"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIzQzA2MjU1NjQ3RTRERDAKUldUUVRYNWtWV0xBczAzTlBROFIvMHdHWlc5aXlJblc5bFFnclB4UEtZM3hOc0ZOeTBrT0huY28K",
+      "endpoints": [
+        "https://github.com/open-gsd/gsd-path/releases/download/app-latest/latest.json"
+      ]
+    }
   }
 }

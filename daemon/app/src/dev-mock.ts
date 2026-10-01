@@ -18,7 +18,8 @@ const launch = (over: Partial<Launch> = {}): Launch => ({
   ...over,
 });
 const shell = (over: Partial<Shell> = {}): Shell => ({
-  phase: "ready", os: "macos", port: 8765, python_missing: false, launch: launch(), error: null, autostart: true, owned: true, ...over,
+  phase: "ready", os: "macos", port: 8765, python_missing: false, launch: launch(), error: null, autostart: true, owned: true,
+  version: "0.1.0", update: null, update_error: null, ...over,
 });
 const blocked = (kind: string, message: string, fix: string, detail?: object): Shell =>
   shell({ phase: "blocked", launch: launch({ action: "setup", problems: [{ kind, message, fix, blocking: true, detail }] }) });
@@ -36,6 +37,8 @@ const STATES: Record<string, Shell> = {
   migrated: shell({ launch: launch({ replaced: "0.0.9", legacy: [
     { name: "launch-agent", removed: true, fix: "" }, { name: "login-item", removed: true, fix: "" },
     { name: "tray-app", removed: true, fix: "" }] }) }),
+  update: shell({ update: { version: "0.1.1", notes: "Fixes the Settings save button and adds the environment editor." } }),
+  "update-refused": shell({ update: { version: "0.1.1", notes: null }, update_error: "the signature does not match" }),
   "migrate-failed": shell({ autostart: false, launch: launch({ autostart_ok: false, replaced: "0.0.9", legacy: [
     { name: "launch-agent", removed: false, fix: "launchctl bootout gui/501/org.gsd-path.daemon" },
     { name: "login-item", removed: true, fix: "" }, { name: "tray-app", removed: true, fix: "" }] }) }),
@@ -92,6 +95,8 @@ mockIPC((command, args) => {
   if (command === "tray_action") return void console.log("tray_action", args);
   if (command === "pick_folder") return "/Users/me/work";
   if (command === "open_logs") return void console.log("open_logs");
+  if (command === "check_update") return state;
+  if (command === "install_update") throw new Error("the signature does not match");
   if (command === "set_autostart") return { ...state, autostart: (args as { enabled: boolean }).enabled };
   return state; // shell_state, boot_command, use_port
 }, { shouldMockEvents: true });
