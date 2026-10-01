@@ -12,7 +12,7 @@ documented in [DOCS.md](DOCS.md); this file is for maintainers.
 | [Release trust](.github/workflows/release-trust.yml) | Every pull request and push to `main`; manual dispatch | PR/push: trust validator tests; manual: `npm run verify:release` | Test the proof validator during development; validate frozen-candidate receipts on demand |
 | [Dogfood](.github/workflows/dogfood.yml) | Weekly schedule or manual dispatch | Live host smoke | Opt-in live host invocation (requires API secrets) |
 | [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, update `CHANGELOG.md` + README release section, `npm pack --dry-run`, npm publish with provenance + GitHub Release | Ship a trusted version to npm |
-| [App release](.github/workflows/app-release.yml) | App tag `app-v*` | The tag matches the app version; the installers build on each OS | Attach unsigned tester installers to a GitHub pre-release; never publishes to npm. See [daemon/app/README.md](daemon/app/README.md#release-a-tester-build) |
+| [App release](.github/workflows/app-release.yml) | App tag `app-v*` | The tag matches the app version; the installers build on each OS | Attach unsigned tester installers to a GitHub pre-release and replace the app update file `latest.json`; never publishes to npm. See [daemon/app/README.md](daemon/app/README.md#release-a-tester-build) |
 
 Local equivalents:
 
