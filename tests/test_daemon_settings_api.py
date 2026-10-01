@@ -40,10 +40,11 @@ class Case(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
         self.port = self.server.server_address[1]
 
-    def request(self, method, path, body=None):
+    def request(self, method, path, body=None, headers=None, raw=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        connection.request(method, path, body=None if body is None else json.dumps(body),
-                           headers={"Content-Type": "application/json"} if body is not None else {})
+        send = {"Content-Type": "application/json"} if body is not None or raw is not None else {}
+        connection.request(method, path, body=raw if raw is not None else None if body is None else json.dumps(body),
+                           headers={**send, **(headers or {})})
         response = connection.getresponse()
         payload = json.loads(response.read())
         connection.close()
@@ -89,6 +90,8 @@ class ConfigRouteTests(Case):
                {"notify": "yes"}, {"excludes": "/tmp"}, {"excludes": [""]}, {"session_dirs": [3]},
                {"prices": {"m": {"input": -1}}}, {"prices": {"m": {"input": "1"}}},
                {"prices": {"m": {"speed": 1}}}, {"prices": []}, {"theme": "dark"},
+               {"prices": {"m": {"input": float("nan")}}}, {"prices": {"m": {"output": float("inf")}}},
+               {"prices": {"m": {"cached": 10 ** 400}}},
                {"poll_seconds": 9, "max_depth": 0}]
         for body in bad:
             with self.subTest(body=body):
@@ -98,6 +101,53 @@ class ConfigRouteTests(Case):
         self.assertEqual(self.watcher.config.to_dict(), before)
         self.assertFalse(self.config_path.exists())
         self.assertEqual(self.scans, [])
+
+    def test_body_that_is_not_a_json_object_is_refused(self):
+        for raw in ("[1]", "{not json"):
+            with self.subTest(raw=raw):
+                status, payload = self.request("POST", "/api/config", raw=raw)
+                self.assertEqual((status, payload), (400, {"error": "invalid JSON body"}))
+        self.assertEqual(self.scans, [])
+
+    def test_failed_save_changes_nothing_in_the_running_daemon(self):
+        before = self.watcher.config.to_dict()
+        with mock.patch.object(Config, "save", side_effect=OSError("disk full")):
+            status, payload = self.request("POST", "/api/config", {
+                "poll_seconds": 9, "session_dirs": [str(self.sessions)], "prices": {"m": {"input": 1}}})
+        self.assertEqual((status, payload), (500, {"error": "disk full"}))
+        self.assertEqual(self.watcher.config.to_dict(), before)
+        self.assertEqual(self.watcher.sessions.dirs, [])
+        self.assertEqual(self.watcher.sessions.prices, {})
+        self.assertEqual(self.scans, [])
+
+    def test_removed_session_folder_no_longer_counts_in_project_usage(self):
+        project = self.root / "proj"
+        project.mkdir()
+        line = {"type": "assistant", "cwd": str(project), "timestamp": "2026-09-01T09:00:05.000Z", "uuid": "a1",
+                "message": {"model": "claude-sonnet-5", "usage": {"input_tokens": 10, "output_tokens": 20}}}
+        folders = [self.root / "kept", self.root / "removed"]
+        for folder in folders:
+            folder.mkdir()
+            (folder / "session.jsonl").write_text(json.dumps(line) + "\n", encoding="utf-8")
+        status, payload = self.request("POST", "/api/config", {"session_dirs": [str(f) for f in folders]})
+        self.assertEqual(status, 200, payload)
+        self.watcher.sessions.scan([str(project)])
+        self.assertEqual(len(self.watcher.sessions.records_for(str(project))), 2)
+        status, payload = self.request("POST", "/api/config", {"session_dirs": [str(folders[0])]})
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(len(self.watcher.sessions.records_for(str(project))), 1)
+
+    def test_get_routes_refuse_a_foreign_host_or_origin(self):
+        for path in ("/api/config", "/api/diagnostics"):
+            for headers in ({"Host": f"evil.example:{self.port}"}, {"Origin": "https://evil.example"},
+                            {"Sec-Fetch-Site": "cross-site"}):
+                with self.subTest(path=path, headers=headers):
+                    status, payload = self.request("GET", path, headers=headers)
+                    self.assertEqual(status, 403, payload)
+                    self.assertEqual(list(payload), ["error"])
+            status, _payload = self.request("GET", path, headers={
+                "Host": f"localhost:{self.port}", "Origin": f"http://localhost:{self.port}"})
+            self.assertEqual(status, 200)
 
     def test_cross_site_write_is_refused(self):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)

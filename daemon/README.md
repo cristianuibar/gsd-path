@@ -128,8 +128,10 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   `max_depth`, `poll_seconds`, `notify`, `history`, `session_dirs`, `prices`.
 - `POST /api/config` — a JSON object with any of those keys. Every value is
   checked first; one bad value or an unknown key returns 400 and changes
-  nothing. Valid changes apply to the running daemon, are saved, and start a
-  scan. The answer is the full settings object.
+  nothing. Prices must be finite numbers. Valid changes are saved, then
+  apply to the running daemon and start a scan; a failed save returns 500 and
+  changes nothing. Usage from a removed session folder no longer counts. The
+  answer is the full settings object.
 - `GET /api/diagnostics` — a support report: daemon and Python versions,
   platform, settings, project count, plugin state, and the last lines of each
   file in `~/.gsd-path/logs`. It never holds the write token.
@@ -138,7 +140,9 @@ Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 `localhost:<port>`, `Origin` is absent or `http://<Host>`, and
 `Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
 except `/api/refresh` must also send `Content-Type: application/json`, or it
-returns 415. This blocks other web pages and DNS rebinding.
+returns 415. This blocks other web pages and DNS rebinding. `GET /api/config`,
+`GET /api/diagnostics`, and `GET /api/project-files` apply the same same-origin
+check and return 403 otherwise.
 
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.

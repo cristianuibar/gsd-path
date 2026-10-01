@@ -986,6 +986,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond(200, "application/json", json.dumps({"ok": True}))
             return
         if path in _JSON_GET:
+            if not self._same_origin():
+                self._respond(403, 'application/json', json.dumps({'error': 'Same-origin requests only.'}))
+                return
             self._json_route(_JSON_GET[path], None)
             return
         if path == "/api/fs/browse":
@@ -1041,26 +1044,14 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/config/parents":
             self._parents_op()
             return
-        if path in _JSON_POST:
-            try:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-                if not isinstance(body, dict):
-                    raise ValueError("body must be a JSON object")
-            except ValueError:
-                self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
-                return
-            self._json_route(_JSON_POST[path], body)
-            return
-        if path not in _PLUGIN_ENDPOINTS:
+        if path not in _JSON_POST and path not in _PLUGIN_ENDPOINTS:
             self._respond(404, "text/plain", "not found")
             return
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length) or b"{}")
-            if not isinstance(body, dict):
-                raise ValueError("body must be a JSON object")
-        except ValueError:
-            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+        body = self._json_body()
+        if body is None:
+            return
+        if path in _JSON_POST:
+            self._json_route(_JSON_POST[path], body)
             return
         if not _PLUGIN_OP_LOCK.acquire(blocking=False):
             self._respond(409, "application/json",
@@ -1088,6 +1079,17 @@ class _Handler(BaseHTTPRequestHandler):
         finally:
             _PLUGIN_OP_LOCK.release()
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
+
+    def _json_body(self) -> Optional[dict]:
+        """The request body as a JSON object, or None after a 400 answer."""
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+        except ValueError:
+            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+            return None
+        return body
 
     def _json_route(self, route, body) -> None:
         try:

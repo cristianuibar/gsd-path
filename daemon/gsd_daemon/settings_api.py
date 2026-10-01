@@ -1,10 +1,12 @@
 """Settings and diagnostics routes for the native app.
 
-``daemon.json`` is the only store. A write checks every value first, then
-applies all of them to the running watcher and saves the file.
+``daemon.json`` is the only store. A write checks every value first, saves the
+file, and then applies all of them to the running watcher.
 """
 from __future__ import annotations
 
+import dataclasses
+import math
 import platform
 import sys
 from typing import Callable, Dict
@@ -12,13 +14,15 @@ from typing import Callable, Dict
 from . import __version__
 from .config import _abs
 from .plugin import STDOUT_TAIL_LINES, _tail
-from .sessions import expand_session_dirs
 
 PRICE_KEYS = ("input", "cached", "output")
 
 
 def _number(value) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    try:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _strings(key: str, value) -> list:
@@ -76,12 +80,12 @@ def write_config(handler, body: dict) -> dict:
         raise ValueError(f"unknown setting: {', '.join(unknown)}")
     checked = {key: CHECKS[key](key, value) for key, value in body.items()}
     watcher = handler.watcher
+    dataclasses.replace(watcher.config, **checked).save()
     for key, value in checked.items():
         setattr(watcher.config, key, value)
     # The session index copied these two at start; give it the new values.
-    watcher.sessions.dirs = expand_session_dirs(watcher.config.session_dirs)
+    watcher.sessions.set_dirs(watcher.config.session_dirs)
     watcher.sessions.prices = watcher.config.prices
-    watcher.config.save()
     handler.scan()
     return watcher.config.to_dict()
 
