@@ -479,8 +479,15 @@ def _validate_plan_briefs(repo: Path, kind: str, project_dir: str) -> None:
                     raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
                 base_repo = located[0]
             recorded_base = check_handoffs._task_scalar(text, task_id, "base")
+            recorded_full = require_full_sha(recorded_base)
             try:
-                landed_bases[task_id] = require_commit(base_repo, require_full_sha(recorded_base))
+                if member is not None:
+                    try:
+                        landed_bases[task_id] = require_commit(repo, recorded_full)
+                    except IsolationError:
+                        landed_bases[task_id] = require_commit(base_repo, recorded_full)
+                else:
+                    landed_bases[task_id] = require_commit(base_repo, recorded_full)
             except IsolationError as error:
                 raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
             dependency_files[task_id] = set()

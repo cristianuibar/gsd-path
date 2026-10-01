@@ -38,7 +38,12 @@ def checkpoint_runtime():
 
 def context(repo: Path, text: str | None = None) -> dict | None:
     state = runtime()
-    current, loaded, _ = state.load_state(repo)
+    try:
+        current, loaded, _ = state.load_state(repo)
+    except state.PipelineStateError as error:
+        if "STATE.md must be a real file" not in str(error):
+            raise
+        return None
     text = loaded if text is None else text
     recovery = None
     for line in text.splitlines():
