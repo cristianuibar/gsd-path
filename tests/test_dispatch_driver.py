@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import io
 import json
 import os
@@ -1582,7 +1583,23 @@ class DispatchDriverTests(unittest.TestCase):
 class DispatchPinnedRuntimeTests(unittest.TestCase):
     PINNED_MARKER = "gsd-path-pinned-runtime-marker-209"
 
-    def test_activate_pinned_runtime_reloads_scripts_isolation(self):
+    def tearDown(self) -> None:
+        import scripts
+
+        scripts.__path__ = [str(PROJECT_ROOT / "scripts")]
+        for name in dispatch_driver._RUNTIME_ACTIVATION_ORDER:
+            importlib.reload(importlib.import_module(f"scripts.{name}"))
+        dispatch_driver.isolation = importlib.import_module("scripts.isolation")
+        dispatch_driver.build_state = importlib.import_module("scripts.build_state")
+        dispatch_driver.task_context = importlib.import_module("scripts.task_context")
+        dispatch_driver.contracts = importlib.import_module("scripts.check_handoffs")
+        dispatch_driver.pipeline_state = importlib.import_module("scripts.pipeline_state")
+        dispatch_driver.archive_milestone = importlib.import_module("scripts.archive_milestone")
+        dispatch_driver.review_findings = importlib.import_module("scripts.review_findings")
+        dispatch_driver.model_policy = importlib.import_module("scripts.model_policy")
+        dispatch_driver._refresh_stop_errors()
+
+    def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo = Path(temp)
             (repo / ".gsd-path").mkdir(parents=True)
