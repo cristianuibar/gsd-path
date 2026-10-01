@@ -157,6 +157,13 @@ as stated in Lookahead mode.
      command's output — not an internal unit test.
      Require the surface to land in the same wave as the capability behind
      it, never in a later polish wave.
+   - When INTENT.md has `## Edge coverage`, require a PLAN.md
+     `## Held-out checks` row for every `held-out` edge and for no other
+     edge. The named test is in that task's `files`, the task's Verify runs
+     it, and the task's Acceptance criteria state the edge id and its ruling
+     (see [spec-reach probes](references/spec-probes.md)). An edge or
+     prohibition ruled `criterion SCn` needs no extra row; it is covered as
+     SCn. Put each `judgment` prohibition in its owning task's Approach.
    - Prove every intent constraint and synthesis decision is covered, that no
      scope-out veto appears in a task, and that `Project verify` is a real,
      non-placeholder command in PLAN.md. Every Verify — task and project —

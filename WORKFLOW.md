@@ -223,6 +223,20 @@ vetoes and corrections verbatim. Unresolved items remain tagged `RESEARCH` or
 first and presented as settled coverage for correction; the interview covers
 only its gaps and contradictions.
 
+Once the success criteria are drafted, define runs the spec-reach probes
+([spec-probes.md](skills/gsd-path/references/spec-probes.md)). The edge probe
+walks each criterion through a closed edge taxonomy (boundary, adjacency,
+empty, encoding, ordering, precision, idempotency, concurrency) and records
+the user's ruling per applicable edge in INTENT.md `## Edge coverage`:
+`criterion SCn` (stated in a success criterion), `held-out` (a named test
+pins it), or `dismissed` with a reason. The prohibition probe asks what each
+criterion must never silently become and records kept items in
+`## Prohibitions` as `criterion SCn`, `judgment`, or `dismissed`. Define
+never rules on an edge itself. `scripts/check_handoffs.py intent` checks
+both tables before every approval question, and the `define/done` transition
+refuses an intent whose tables are incomplete. An INTENT.md without these
+sections predates the probes and is not rechecked.
+
 At approval define classifies the milestone lane in INTENT.md: `quick`
 when scope fits at most two deliverable-sized tasks in one wave with no open
 questions and no cross-wave risk; otherwise `standard`. Milestone mode — a
@@ -343,6 +357,9 @@ by — which that task must own, in the same wave as the capability behind it.
 `check_handoffs.py final` then requires each of those criteria to name its
 surface in FINAL.md with the walkthrough as its Check, so a surface criterion
 cannot be marked `met` on internal test output.
+Every `held-out` edge gets a PLAN.md `## Held-out checks` row naming the task
+and test file; that test is in the task's files, its Verify runs it, and its
+Acceptance criteria state the edge id and ruling.
 `scripts/check_handoffs.py plan` gates the table; `wave` and `final`
 require a verdict per owned SC id. Acceptance criteria,
 owned SCs, and Verify are the contract; the coder owns
@@ -417,7 +434,11 @@ surface walkthroughs, in its existing review. The runtime proves freshness and
 generates FINAL.md from that record. Dispatch an integration reviewer only when
 that proof is incomplete or stale; dispatch gap reviewers only for uncovered
 cross-wave risks through the shared capacity-aware contract. The integration reviewer marks each success
-criterion `met`, `not-met`, or `unverifiable` with checked evidence. Each gap
+criterion `met`, `not-met`, or `unverifiable` with checked evidence. A criterion
+tagged by a `held-out` edge or `judgment` prohibition is `met` only when its
+evidence cites every tag id; otherwise the reviewer records `unverifiable`
+(insufficient spec evidence) and `check_handoffs.py final` refuses a `met`
+that skips a tag. Each gap
 reviewer records `pass` or `blocked` for its assigned end-to-end or cross-wave
 risk. List only genuine
 risks that could plausibly fail; never pad the list. The runtime

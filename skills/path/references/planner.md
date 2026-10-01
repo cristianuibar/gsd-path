@@ -72,6 +72,14 @@ plan order above, which still keeps plan-invalidating risk in wave 1.
   criterion may appear in only one surface block. Put the surface in the same
   wave as the capability behind it. A milestone with a surface is not done
   when only its internals run.
+- When INTENT.md carries `## Edge coverage` or `## Prohibitions` (read the
+  supplied [spec-reach probes](spec-probes.md)), treat every ruling as a hard
+  limit on its criterion. For each `held-out` edge, write one PLAN.md
+  `## Held-out checks` row: a test file in the owning task's `files`, a
+  Verify that runs it, and an Acceptance criterion that names the edge id
+  and states its ruling from Detail. Omit the section when no edge is
+  held-out. Put each `judgment` prohibition's Must not and Detail in the
+  owning task's Approach.
 - Make `files` exhaustive, including imports, routes, generated artifacts,
   tests, and wiring. Require disjoint files for same-wave tasks.
 - Write an Interface contract in every task: `None` for independent tasks;
@@ -105,7 +113,7 @@ family list. Copy `Finding skeptics:` from INTENT.md into PLAN.md Config as
 invent `on`. Quick-lane plans always write both values as `off`.
 
 Before returning, check veto exclusion, decision coverage, Intent coverage,
-the Surface contract, dependencies, file overlap, task size, criteria, and
+the Surface contract, Held-out checks, dependencies, file overlap, task size, criteria, and
 Verify commands.
 
 Return a brief structured summary: wave count, task count, and the wave-1
