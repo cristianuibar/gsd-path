@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from . import __version__
-from . import settings_api
+from . import settings_api, stats
 from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import PluginManager
@@ -57,6 +57,7 @@ def load_token() -> str:
 _JSON_GET = {
     "/api/config": settings_api.read_config,
     "/api/diagnostics": settings_api.diagnostics,
+    "/api/stats": stats.route,
 }
 _JSON_POST = {
     "/api/config": settings_api.write_config,

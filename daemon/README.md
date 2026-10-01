@@ -136,6 +136,13 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   new folders, prices, and poll interval. Usage from
   a removed session folder no longer counts. The
   answer is the full settings object.
+- `GET /api/stats` — chart data for all projects, or for one with
+  `?root=<watched project>`: `days` (tokens, turns, and cost per day from host
+  session logs; a model without a price adds tokens but no cost and is listed
+  in `unpriced`), `phases` (seconds per phase from recorded phase changes),
+  `waves` (tasks per wave; one project only), and `verify` (verify runs,
+  oldest first). A chart with no data is `null` with a reason in `missing`;
+  it is never zero.
 - `GET /api/diagnostics` — a support report: daemon and Python versions,
   platform, settings, project count, plugin state, and the last lines of each
   file in `~/.gsd-path/logs`. It never holds the write token, and credentials inside
