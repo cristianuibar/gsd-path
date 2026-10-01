@@ -136,6 +136,29 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   new folders, prices, and poll interval. Usage from
   a removed session folder no longer counts. The
   answer is the full settings object.
+- `GET /api/stats` — chart data for all projects, or for one with
+  `?root=<watched project>`: `days` (tokens, turns, and cost per day from host
+  session logs; a model without a price adds tokens but no cost and is listed
+  in `unpriced`), `phases` (seconds per phase from recorded phase changes),
+  `waves` (tasks per wave; one project only), and `verify` (verify runs,
+  oldest first). A chart with no data is `null` with a reason in `missing`;
+  it is never zero.
+- `GET /api/hosts` — `{hosts: [{id, name, found, path, skills_root}]}`: each
+  supported coding agent and whether its command is on this computer.
+- `POST /api/project/op` — `{root, op, dry_run?, member?, hosts?}` for a watched
+  project. `op` is `hooks-init`, `hooks-refresh`, `hooks-refresh-full`,
+  `runtime-restore`, `doctor`, `members`, `member-hooks`, or `member-repair`.
+  Each runs one helper from the plugin source (`install.py` or `members.py`)
+  and returns its output; the daemon adds no rule of its own. `hooks-init`
+  passes `hosts` (host ids) to the installer, which needs at least one. A second
+  operation while one runs returns 409.
+- `POST /api/env/list`, `/api/env/reveal`, `/api/env/save` — read and change
+  one of a watched project's `.env`, `.env.local`, `.env.development`,
+  `.env.production`. `list` returns names only; `reveal` returns one value;
+  `save` takes `changes` and `dry_run` and returns the diff by name. These
+  routes exist only on a daemon started with `--require-token`; another
+  daemon answers 403. No GET route returns env content, and no value is
+  written to a log or to the diagnostics report.
 - `GET /api/diagnostics` — a support report: daemon and Python versions,
   platform, settings, project count, plugin state, and the last lines of each
   file in `~/.gsd-path/logs`. It never holds the write token, and credentials inside
@@ -146,8 +169,9 @@ Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 `Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
 except `/api/refresh` must also send `Content-Type: application/json`, or it
 returns 415. This blocks other web pages and DNS rebinding. `GET /api/config`,
-`GET /api/diagnostics`, and `GET /api/project-files` apply the same same-origin
-check and return 403 otherwise.
+`GET /api/stats`, `GET /api/hosts`, `GET /api/diagnostics`, and
+`GET /api/project-files` apply the same same-origin check and return 403
+otherwise.
 
 `serve --require-token` adds one more check. The daemon creates
 `~/.gsd-path/app/api-token` (readable by the user only) if it is missing, and
