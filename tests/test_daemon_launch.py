@@ -210,11 +210,25 @@ class VenvTests(LaunchCase):
         self.assertEqual(runner.ran("pip"), [])
         self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
-    def test_older_installed_daemon_is_upgraded_from_bundle(self):
-        runner = ScriptRunner(installed("0.0.1"))
-        installer = self.installer(runner)
+    def test_older_installed_daemon_is_upgraded_from_a_copy_of_the_bundle(self):
+        seen = []
+
+        def respond(cmd):
+            if "pip" in Path(cmd[0]).name and cmd[1:3] == ["install", "--upgrade"]:
+                target = Path(cmd[-1])
+                seen.append((target, sorted(p.name for p in target.iterdir()),
+                             (target / "gsd_daemon" / "launch.py").is_file()))
+            return installed("0.0.1")(cmd)
+        installer = self.installer(ScriptRunner(respond))
         self.assertEqual(ensure_venv(installer), __version__)
-        self.assertEqual(runner.ran("pip")[0][-1], str(DAEMON))
+        self.assertEqual(len(seen), 1)
+        target, names, has_code = seen[0]
+        # pip builds in place, so it must get a copy, never the (read-only) app bundle.
+        self.assertNotEqual(target.resolve(), DAEMON.resolve())
+        self.assertEqual(names, ["README.md", "gsd_daemon", "pyproject.toml"])
+        self.assertTrue(has_code)
+        self.assertFalse(target.exists(), "the build copy was not removed")
+        self.assertEqual(installer.package_dir, DAEMON)
 
     def test_install_failure_is_a_blocking_problem(self):
         def respond(cmd):
@@ -232,6 +246,64 @@ class PrerequisiteTests(LaunchCase):
         self.assertEqual(result["action"], "setup")
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("git", True)])
         self.assertEqual(runner.ran("pip"), [])
+
+
+class RequirementTests(LaunchCase):
+    """`requirements` in the launch result feeds the app's Requirements step."""
+
+    def rows(self, runner, platform="darwin"):
+        if not hasattr(self, "shared"):
+            self.shared = self.installer(runner)
+        self.shared.runner, self.shared.platform = runner, platform
+        result = launch(free_port(), self.shared)
+        return {row["id"]: row for row in result["requirements"]}
+
+    def respond(self, gh_auth=0, venv=0):
+        def respond(cmd):
+            line = " ".join(cmd)
+            if cmd[1:] == ["--version"] and Path(cmd[0]).name == "git":
+                return 0, "git version 2.39.5 (Apple Git-154)\n"
+            if cmd[1:] == ["--version"] and Path(cmd[0]).name == "gh":
+                return 0, "gh version 2.60.1 (2024-10-25)\nhttps://github.com/cli/cli\n"
+            if cmd[1:3] == ["auth", "status"]:
+                return gh_auth, ""
+            if "ensurepip" in line:
+                return venv, ""
+            return installed(__version__)(cmd)
+        return respond
+
+    def test_python_and_git_report_their_versions(self):
+        rows = self.rows(ScriptRunner(self.respond()))
+        self.assertEqual(rows["python"], {
+            "id": "python", "required": True, "state": "ready",
+            "detail": ".".join(str(part) for part in sys.version_info[:3])})
+        self.assertEqual(rows["git"]["state"], "ready")
+        self.assertEqual(rows["git"]["detail"], "2.39.5 (Apple Git-154)")
+
+    def test_missing_git_is_a_missing_required_row(self):
+        rows = self.rows(ScriptRunner(self.respond(), which={}))
+        self.assertEqual((rows["git"]["state"], rows["git"]["required"]), ("missing", True))
+
+    def test_github_cli_states(self):
+        which = {"git": "/usr/bin/git", "gh": "/usr/bin/gh"}
+        rows = self.rows(ScriptRunner(self.respond(), which=which))
+        self.assertEqual(rows["gh"], {"id": "gh", "required": False, "state": "ready", "detail": "2.60.1"})
+        rows = self.rows(ScriptRunner(self.respond(gh_auth=1), which=which))
+        self.assertEqual((rows["gh"]["state"], rows["gh"]["required"]), ("signed-out", False))
+        rows = self.rows(ScriptRunner(self.respond()))
+        self.assertEqual((rows["gh"]["state"], rows["gh"]["detail"]), ("missing", None))
+
+    def test_optional_rows_never_block(self):
+        result = launch(free_port(), self.installer(ScriptRunner(self.respond(venv=1)), platform="linux"))
+        self.assertEqual(result["action"], "start")
+        self.assertEqual(result["problems"], [])
+
+    def test_venv_module_row_is_linux_only(self):
+        self.assertNotIn("python-venv", self.rows(ScriptRunner(self.respond())))
+        rows = self.rows(ScriptRunner(self.respond()), platform="linux")
+        self.assertEqual((rows["python-venv"]["state"], rows["python-venv"]["required"]), ("ready", True))
+        rows = self.rows(ScriptRunner(self.respond(venv=1)), platform="linux")
+        self.assertEqual(rows["python-venv"]["state"], "missing")
 
 
 class LegacyAutostartTests(LaunchCase):

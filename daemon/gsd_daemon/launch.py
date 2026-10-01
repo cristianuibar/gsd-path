@@ -14,8 +14,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
+import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -202,7 +205,19 @@ def ensure_venv(installer: Installer) -> str:
     current_parts = _parse_version(current)
     if current_parts is not None and current_parts >= _parse_version(__version__):
         return current
-    installer.install(no_tray=True, no_autostart=True)
+    source = installer.package_dir
+    with tempfile.TemporaryDirectory(prefix="gsd-path-daemon-") as work:
+        # pip builds a local package in place; build a copy, never the app bundle.
+        copy = Path(work) / "daemon"
+        shutil.copytree(source / "gsd_daemon", copy / "gsd_daemon",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        for name in ("pyproject.toml", "README.md"):
+            shutil.copy2(source / name, copy / name)
+        installer.repo_root = Path(work)
+        try:
+            installer.install(no_tray=True, no_autostart=True)
+        finally:
+            installer.repo_root = source.parent
     return __version__
 
 
@@ -216,9 +231,42 @@ def git_fix(platform: str) -> str:
     return "Install git with your package manager, for example `sudo apt install git`."
 
 
+def _requirement(name: str, required: bool, state: str, detail: Optional[str] = None) -> dict:
+    return {"id": name, "required": required, "state": state, "detail": detail}
+
+
+def _tool_version(installer: Installer, tool: str) -> Optional[str]:
+    """`<tool> --version` without the leading words: '2.39.5 (Apple Git-154)'."""
+    done = installer.runner.run([tool, "--version"], check=False)
+    found = re.search(r"\d.*", (done.stdout or "").splitlines()[0]) if done.stdout else None
+    return found.group(0).strip() if found else None
+
+
+def requirements(installer: Installer) -> List[dict]:
+    """What the app's Requirements step shows. Facts only; the app owns the wording."""
+    runner = installer.runner
+    rows = [_requirement("python", True, "ready", ".".join(str(part) for part in sys.version_info[:3]))]
+    if runner.which("git") is None:
+        rows.append(_requirement("git", True, "missing"))
+    else:
+        rows.append(_requirement("git", True, "ready", _tool_version(installer, "git")))
+    if installer.platform not in ("darwin", "win32"):
+        # Debian and Ubuntu ship venv apart from Python; without it the daemon venv cannot be made.
+        venv = runner.run([sys.executable, "-c", "import ensurepip"], check=False).returncode == 0
+        rows.append(_requirement("python-venv", True, "ready" if venv else "missing"))
+    if runner.which("gh") is None:
+        rows.append(_requirement("gh", False, "missing"))
+    else:
+        version = (_tool_version(installer, "gh") or "").split(" ")[0] or None
+        signed_in = runner.run(["gh", "auth", "status"], check=False).returncode == 0
+        rows.append(_requirement("gh", False, "ready" if signed_in else "signed-out", version))
+    return rows
+
+
 def launch(port: int, installer: Installer) -> dict:
     result = {"action": "setup", "port": port, "url": f"http://127.0.0.1:{port}/",
-              "version": None, "serve_argv": None, "autostart_ok": True, "problems": []}
+              "version": None, "serve_argv": None, "autostart_ok": True, "problems": [],
+              "requirements": requirements(installer)}
     problems = result["problems"]
 
     if installer.runner.which("git") is None:

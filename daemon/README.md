@@ -96,6 +96,7 @@ gsd-path-daemon scan            # {"projects": [{root, project, milestone, phase
 gsd-path-daemon dump            # full aggregated status JSON (schema gsd-path-daemon/status/v1)
 gsd-path-daemon serve --port 8765   # localhost dashboard: GET / (HTML), GET /status (JSON)
 gsd-path-daemon tray            # system tray app
+gsd-path-daemon launch [--port 8765]  # native app only: launch check as one JSON object (changes the venv and old autostart)
 gsd-path-daemon tray --serve [--port 8765]  # tray + dashboard server in one process
 gsd-path-daemon install [--no-tray] [--no-autostart] [--dry-run]  # venv + autostart
 gsd-path-daemon uninstall [--dry-run]                             # remove autostart
