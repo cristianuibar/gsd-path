@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SKIP = {"_common.py"}
+SKIP = {"_common.py", "check_lock_usage.py"}
 
 
 def main() -> int:
