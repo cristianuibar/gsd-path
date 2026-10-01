@@ -1,0 +1,53 @@
+/* Environment page. Values copied from the design prototype (banner ENVIRONMENT). */
+.env{max-width:920px;padding-top:24px}
+.env-head{margin:10px 0 22px}
+.env-head p{margin:8px 0 0;color:var(--dim);max-width:62ch}
+.env-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.env-seg{display:flex;flex-wrap:wrap;padding:2px;border-radius:7px;background:var(--seg)}
+.env-seg button{padding:3px 12px;border:0;border-radius:5px;background:none;color:var(--dim);font-size:12.5px;cursor:pointer}
+.env-seg button[aria-pressed=true]{background:var(--card);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
+.env-seg button:focus-visible,.env-toggle:focus-visible,.env-jev select:focus-visible{outline:2px solid var(--accent-fill);outline-offset:2px}
+.env-file-note{font-size:12.5px;color:var(--dim);margin-bottom:12px}
+.env-table{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.env-th,.env-row{display:grid;grid-template-columns:minmax(150px,.9fr) minmax(0,1.4fr) 140px;gap:14px;padding:10px 16px}
+.env-th{background:var(--chrome);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase}
+.env-row{padding:11px 16px;border-top:1px solid var(--line);align-items:center;font:12.5px var(--mono)}
+.env-row:hover{background:var(--hover)}
+.env-row>div{min-width:0}
+/* Name and value look like text until the pointer or the focus is on them. */
+.env-name,.env-value{width:100%;min-height:30px;padding:0 8px;margin-left:-8px;border:1px solid transparent;border-radius:6px;background:none;font:12.5px var(--mono)}
+.env-value{color:var(--dim)}
+.env-name:hover,.env-value:hover,.env-value:placeholder-shown{border-color:var(--line)}
+.env-name:focus,.env-value:focus{border-color:var(--accent-fill);outline:0;background:var(--card)}
+.env-name[aria-invalid=true]{border-color:var(--danger)}
+.env-row.removed .env-name{text-decoration:line-through;color:var(--faint)}
+.env-mask{color:var(--dim);letter-spacing:.08em}
+.env-multi{display:block;color:var(--dim);white-space:pre-wrap;overflow-wrap:anywhere}
+.env-multi small{display:block;font:11.5px var(--ui);color:var(--faint);margin-top:4px}
+.env-quiet{font:12.5px var(--ui);color:var(--faint);grid-column:1/-1}
+.env-row>div>.env-quiet{grid-column:auto}
+.env-error{font:12px var(--ui);color:var(--danger);margin:4px 0 0}
+.env-actions{display:flex;gap:6px;justify-content:flex-end}
+.env-actions .btn{padding:0 12px}
+.env .btn.danger{color:var(--danger)}
+.env-add{padding:12px 16px;border-top:1px solid var(--line)}
+.env-add .btn{min-height:32px}
+.env-jev{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px;margin-top:16px}
+.env-jev-row{display:flex;align-items:center;gap:16px;padding:14px 0}
+.env-jev-target{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 0 14px;font-size:12.5px;color:var(--dim)}
+.env-jev select{min-height:30px;padding:0 8px;background:var(--card);border:1px solid var(--line);border-radius:6px;font:12.5px var(--mono)}
+.env-jev-target span{color:var(--faint)}
+.env-jev .env-preview{margin:0 0 14px}
+.env-jev>.env-error{margin:0 0 14px}
+.env-toggle{width:36px;height:22px;border:0;border-radius:11px;padding:0;position:relative;cursor:pointer;flex:none;background:var(--seg)}
+.env-toggle i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0/.3)}
+.env-toggle[aria-checked=true]{background:var(--accent-fill)}
+.env-toggle[aria-checked=true] i{left:16px}
+.env-toggle:disabled{opacity:.45;cursor:default}
+.env-preview{margin-top:16px;padding:12px 14px;border-radius:8px;background:var(--accent-soft);font-size:12.5px;display:grid;gap:8px}
+.env-preview ul{margin:0;padding-left:18px}
+.env-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:18px}
+.env-note{font-size:12.5px;color:var(--faint);margin-left:8px}
+.env-note.bad{color:var(--danger)}
+.env-refused{display:grid;gap:10px;padding:18px;border-radius:8px;background:var(--danger-soft);font-size:13px}
+.env-refused span{overflow-wrap:anywhere}

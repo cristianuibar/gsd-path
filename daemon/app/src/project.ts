@@ -4,6 +4,8 @@ import {
   ago, DASH, duration, healthOf, int, milestoneStack, money, phaseCells, PHASES, reasons, shortTime, spendCell,
   stateLabel, stateOf, tokens,
 } from "./status";
+import { runtimePending } from "./board";
+import type { OpResult, ProjectSetup } from "./skills";
 import type { Cell, Milestone, Project } from "./status";
 
 export function facts(p: Project, now: number): [string, string][] {
@@ -124,3 +126,81 @@ export function usageTiles(p: Project): [string, string][] | null {
     ["Time / turn", timed != null ? Math.round(timed / sp.timed_turns!) + "s" : DASH],
   ];
 }
+
+export type SetupRun = "update" | "runtime-restore" | "hooks-init" | "hooks-refresh" | "doctor" | "env";
+export type SetupRow = {
+  key: "runtime" | "hooks" | "skills" | "doctor" | "env"; label: string; value: string; sub: string;
+  /** Shows the "Up to date" pill in place of a button. */
+  ok: boolean; action: { label: string; primary: boolean; run: SetupRun } | null;
+};
+
+/** The "Setup in this project" card. Without a plugin status entry, only the rows that need none. */
+export function setupRows(setup: ProjectSetup | undefined, latest: string | null, doctor: OpResult | null, names: Record<string, string>): SetupRow[] {
+  const quiet = (label: string, run: SetupRun) => ({ label, primary: false, run });
+  const rows: SetupRow[] = [];
+  if (setup) {
+    const pending = runtimePending(setup, latest);
+    rows.push(!setup.runtime ? {
+      key: "runtime", label: "Runtime", value: setup.runtime_version || "Not installed", ok: false,
+      sub: setup.runtime_version ? "The runtime files are missing." : "This project has no Path runtime.",
+      action: setup.runtime_version ? quiet("Restore", "runtime-restore") : null,
+    } : {
+      key: "runtime", label: "Runtime", value: setup.runtime_version || "No version stamp", ok: !pending,
+      sub: pending ? "Newer runtime available" : "Guard hooks are kept on update",
+      action: pending ? { label: `Update to ${latest}`, primary: true, run: "update" } : null,
+    });
+    rows.push(setup.hooks ? {
+      key: "hooks", label: "Guard hooks", value: "Installed", sub: "pre-commit, commit-msg, pre-push", ok: false,
+      action: quiet("Refresh", "hooks-refresh"),
+    } : {
+      key: "hooks", label: "Guard hooks", value: "None", ok: false,
+      sub: "Edits to archived work and unapproved ship commits are not blocked.",
+      action: { label: "Add guards", primary: true, run: "hooks-init" },
+    });
+    rows.push(setup.local_skills.length ? {
+      key: "skills", label: "Skills", value: setup.local_skills.map((id) => names[id] ?? id).join(", "),
+      sub: "Project copies in this repository.", ok: false, action: null,
+    } : {
+      key: "skills", label: "Skills", value: "Global only", sub: "Agents read the shared install. No project copies.", ok: false, action: null,
+    });
+  }
+  rows.push({
+    key: "doctor", label: "Health check", value: doctor ? doctorReport(doctor).summary : "Not run yet",
+    sub: "Read-only. It changes nothing.", ok: false, action: quiet(doctor ? "Run again" : "Run", "doctor"),
+  });
+  rows.push({ key: "env", label: "Environment", value: ".env files", sub: "Variables for this project.", ok: false, action: quiet("Edit…", "env") });
+  return rows;
+}
+
+/** The doctor output. `ok: false` means findings, not a crash; they are in `error`. */
+export function doctorReport(result: OpResult): { ok: boolean; summary: string; lines: { kind: "note" | "line" | "error"; text: string }[] } {
+  const split = (text: string | null | undefined) => (text ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  return {
+    ok: result.ok, summary: result.ok ? "Passed" : "Findings",
+    lines: [
+      ...split(result.stdout_tail).map((line) => line.startsWith("note:")
+        ? { kind: "note" as const, text: line.slice(5).trim() } : { kind: "line" as const, text: line }),
+      ...split(result.error).map((text) => ({ kind: "error" as const, text })),
+    ],
+  };
+}
+
+/** One member from the `members` project operation. */
+export type Member = {
+  name: string; checkout: string; remote: string; integration: string;
+  marker: { current: boolean; reason: string | null }; hooks: boolean;
+};
+type Pill = { label: string; tone: "ok" | "warn" | "bad" };
+export type MemberRow = {
+  name: string; checkout: string; watched: boolean; integration: string; reason: string | null;
+  marker: Pill; hooks: Pill; actions: ("repair" | "hooks")[];
+};
+
+/** The "Member repositories" table. A watched member links to its own project page. */
+export const memberRows = (members: Member[], watched: string[]): MemberRow[] => members.map((member) => ({
+  name: member.name, checkout: member.checkout, watched: watched.includes(member.checkout), integration: member.integration,
+  reason: member.marker.current ? null : member.marker.reason,
+  marker: member.marker.current ? { label: "Marker ok", tone: "ok" } : { label: "Marker stale", tone: "bad" },
+  hooks: member.hooks ? { label: "Member hooks installed", tone: "ok" } : { label: "No member hooks", tone: "warn" },
+  actions: [...(member.marker.current ? [] : ["repair" as const]), ...(member.hooks ? [] : ["hooks" as const])],
+}));

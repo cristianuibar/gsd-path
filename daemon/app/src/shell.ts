@@ -53,5 +53,11 @@ export const api = <T>(method: "GET" | "POST", path: string, body?: unknown) =>
 /** A tray popover button; the ids of the native tray menu. With `root`, "open" shows that project. */
 export const trayAction = (action: "open" | "start" | "restart" | "quit", root?: string) =>
   invoke<void>("tray_action", { action, root: root ?? null });
+/** The OS folder dialog. null when the user cancels. */
+export const pickFolder = () => invoke<string | null>("pick_folder");
+/** Turn launch at login on or off. Returns the new shell state. */
+export const setAutostart = (enabled: boolean) => invoke<Shell>("set_autostart", { enabled });
+/** Show ~/.gsd-path/logs in the file manager. */
+export const openLogs = () => invoke<void>("open_logs");
 export const onShellChange = (handler: (shell: Shell) => void) =>
   listen<Shell>("shell", (event) => handler(event.payload));

@@ -1,57 +1,81 @@
-// Setup, step 1. Later steps (Agents, Skills, Watch folders) join the rail in slice A4.
+// The setup wizard: Requirements, Agents, Skills, Watch folders. Steps 2 to 4 need the monitor.
+import { useState } from "react";
 import { requirementRows } from "../screen";
+import { footer, preselected, stepGate, STEPS } from "../setup";
 import type { Shell } from "../shell";
+import { usePlugin } from "../skillsApi";
 import { ActionButton, Logo } from "../ui";
+import { SetupAgents } from "./SetupAgents";
+import { SetupFolders } from "./SetupFolders";
+import { SetupSkills } from "./SetupSkills";
+import "./setup.css";
+import "./skills.css";
 
-const STEPS = ["Requirements"];
 const TONE = { ok: "ok", warn: "warn", miss: "bad" } as const;
 
 export function Requirements({ shell, onRetry, onDone }: { shell: Shell; onRetry: () => void; onDone: () => void }) {
   const { rows, blocked } = requirementRows(shell);
-  const waiting = blocked || shell.phase !== "ready";
+  const ready = shell.phase === "ready";
+  const [wanted, setStep] = useState(0);
+  const step = stepGate(wanted, ready);
+  // The agent list and the releases load when the monitor runs.
+  const { plugin, hosts, error, reload } = usePlugin(ready);
+  const [picked, setPicked] = useState<string[] | null>(null); // null: the user has not changed the preselection
+  const selected = picked ?? preselected(hosts);
+  const [installing, setInstalling] = useState(false);
+  const foot = footer(step, { blocked, ready, installing });
+  const toggle = (id: string) => setPicked(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+
   return (
     <div className="setup">
       <aside className="rail">
         <Logo size={20} />
         {STEPS.map((label, index) => (
-          <div key={label} className="step current" aria-current="step">
-            <span className="step-mark">{index + 1}</span>{label}
-          </div>
+          <button key={label} className={`step${index === step ? " current" : index < step ? " done" : ""}`}
+            aria-current={index === step ? "step" : undefined} disabled={index > step || installing} onClick={() => setStep(index)}>
+            <span className="step-mark">{index < step ? "✓" : index + 1}</span>{label}
+          </button>
         ))}
         <div className="rail-foot">Nothing is installed or written until you click it. Every step can be redone from Settings.</div>
       </aside>
       <div className="setup-main">
         <div className="setup-body">
-          <div className="eyebrow">Step 1 of {STEPS.length}</div>
-          <h1 className="title">What this computer needs</h1>
-          <p className="lead" style={{ marginBottom: 26 }}>
-            Path runs on Python and Git. The app checks for both and offers a fix when one is missing.
-          </p>
-          <div className="card">
-            {rows.map((row) => (
-              <div className="req" key={row.id}>
-                <div className="grow">
-                  <div className="line" style={{ gap: 8, flexWrap: "wrap" }}>
-                    <i className={`dot ${row.tone === "miss" && !row.required ? "" : TONE[row.tone]}`} />
-                    <b>{row.name}</b>
-                    <span className={`pill ${row.tone === "miss" && !row.required ? "mute" : TONE[row.tone]}`}>{row.pill}</span>
+          <div className="eyebrow">Step {step + 1} of {STEPS.length}</div>
+          {step === 0 && <>
+            <h1 className="title">What this computer needs</h1>
+            <p className="lead setup-lead">Path runs on Python and Git. The app checks for both and offers a fix when one is missing.</p>
+            <div className="card">
+              {rows.map((row) => (
+                <div className="req" key={row.id}>
+                  <div className="grow">
+                    <div className="line" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <i className={`dot ${row.tone === "miss" && !row.required ? "" : TONE[row.tone]}`} />
+                      <b>{row.name}</b>
+                      <span className={`pill ${row.tone === "miss" && !row.required ? "mute" : TONE[row.tone]}`}>{row.pill}</span>
+                    </div>
+                    <div className="req-detail">{row.detail}</div>
+                    <div className="req-hint">{row.hint}</div>
                   </div>
-                  <div className="req-detail">{row.detail}</div>
-                  <div className="req-hint">{row.hint}</div>
+                  {row.action && <ActionButton action={row.action} />}
                 </div>
-                {row.action && <ActionButton action={row.action} />}
-              </div>
-            ))}
-          </div>
-          {shell.os === "windows" && (
-            <p className="note">The app window also needs the WebView2 runtime. The installer adds it when missing, so there is nothing to do here.</p>
-          )}
-          {blocked && <p className="note danger">Install the required items, then choose Check again.</p>}
+              ))}
+            </div>
+            {shell.os === "windows" && (
+              <p className="note">The app window also needs the WebView2 runtime. The installer adds it when missing, so there is nothing to do here.</p>
+            )}
+            {blocked && <p className="note danger">Install the required items, then choose Check again.</p>}
+          </>}
+          {step > 0 && error && <p className="error" role="alert">{error} <button className="link" onClick={reload}>Try again</button></p>}
+          {step === 1 && <SetupAgents hosts={hosts} selected={selected} onToggle={toggle} />}
+          {step === 2 && <SetupSkills hosts={hosts} selected={selected} plugin={plugin} reload={reload} onBusy={setInstalling} />}
+          {step === 3 && <SetupFolders />}
         </div>
         <div className="setup-foot">
+          {foot.back && <button className="btn" onClick={() => setStep(step - 1)}>Back</button>}
           <span style={{ marginLeft: "auto" }} />
-          <button className="btn" onClick={onRetry}>Check again</button>
-          <button className="btn primary" disabled={waiting} onClick={onDone}>Open dashboard</button>
+          {step === 0 && <button className="btn" onClick={onRetry}>Check again</button>}
+          {foot.skip && <button className="btn quiet" onClick={onDone}>Skip for now</button>}
+          <button className="btn primary" disabled={!foot.canNext} onClick={() => (step === STEPS.length - 1 ? onDone() : setStep(step + 1))}>{foot.next}</button>
         </div>
       </div>
     </div>

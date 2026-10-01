@@ -440,6 +440,35 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
 }
 
 /// A button in the tray popover: an id of the native tray menu. With `root`, "open" shows that project.
+/// The OS folder dialog, for watched and excluded folders. None when the user cancels.
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
+        .await
+        .ok()
+        .flatten()
+        .and_then(|folder| folder.into_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Settings → App → Launch at login.
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<ShellState, String> {
+    let autostart = app.autolaunch();
+    if enabled { autostart.enable() } else { autostart.disable() }.map_err(|e| e.to_string())?;
+    let now = autostart.is_enabled().unwrap_or(false);
+    Ok(publish(&app, move |view| view.autostart = now))
+}
+
+/// Settings → App → Open logs.
+#[tauri::command]
+fn open_logs(app: AppHandle) -> Result<(), String> {
+    let logs = app.path().home_dir().map_err(|e| e.to_string())?.join(".gsd-path").join("logs");
+    fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
+    app.opener().open_path(logs.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn tray_action(app: AppHandle, action: String, root: Option<String>) {
     match root {
@@ -604,7 +633,9 @@ fn main() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![HIDDEN_ARG])))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
-        .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api, tray_action])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api, tray_action,
+            pick_folder, set_autostart, open_logs])
         .setup(|app| {
             let view = ShellState {
                 phase: "checking",

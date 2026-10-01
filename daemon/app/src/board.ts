@@ -1,5 +1,7 @@
 // The Projects board: filters, search and one row per project.
 import { ago, DASH, healthTone, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
+import { isNewer, skillRows } from "./skills";
+import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import type { Cell, Project, Tone } from "./status";
 
 const FILTERS = [["all", "All"], ["active", "In progress"], ["blocked", "Blocked"], ["shipped", "Shipped"]];
@@ -35,4 +37,30 @@ export function boardRow(p: Project, now: number): BoardRow {
     tasks: p.tasks_total ? `${p.tasks_done ?? 0}/${p.tasks_total}` : DASH,
     ...spendCell(p.spend),
   };
+}
+
+/** A runtime older than the latest release, or an old runtime without a version stamp. */
+export const runtimePending = (setup: ProjectSetup, latest: string | null) =>
+  setup.runtime && !!latest && (!setup.runtime_version || isNewer(latest, setup.runtime_version));
+
+/** The Setup column. Null when the plugin status does not list the project. */
+export function setupPill(setup: ProjectSetup | undefined, latest: string | null): { label: string; tone: "ok" | "warn" | "acc" } | null {
+  if (!setup) return null;
+  if (!setup.runtime) return { label: "No runtime", tone: "warn" };
+  if (runtimePending(setup, latest)) return { label: "Runtime update", tone: "acc" };
+  if (!setup.hooks) return { label: "No guards", tone: "warn" };
+  return { label: "Up to date", tone: "ok" };
+}
+
+/** The banner above the board: only the updates that wait. Null when there are none. */
+export function updateBanner(hosts: HostInfo[], plugin: PluginStatus | null, projects: Project[]): { count: number; title: string; text: string } | null {
+  if (!plugin) return null;
+  const skills = skillRows(hosts, plugin).filter((row) => row.status === "Update available").map((row) => "skills for " + row.label);
+  const runtimes = projects.filter((p) => {
+    const setup = plugin.projects.find((item) => item.root === p.root);
+    return setup && runtimePending(setup, plugin.latest);
+  }).map((p) => "runtime for " + nameOf(p));
+  const items = [...skills, ...runtimes];
+  if (!items.length) return null;
+  return { count: items.length, title: `${items.length} ${items.length === 1 ? "update" : "updates"} available`, text: items.join(", ") };
 }
