@@ -112,8 +112,8 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 
 - `GET /health` — `{"ok": true}` liveness probe.
 - `GET /status` — aggregated status JSON (the `dump` schema below, plus
-  `daemon` with current `parents` and `poll_seconds`, and compact `plugin`
-  status). Also consumed by the native macOS app.
+  `daemon` with current `parents` and `poll_seconds`, the daemon `version` and
+  `pid`, and compact `plugin` status). Also consumed by the native macOS app.
 - `GET /activity` — recent events from `history.jsonl`, newest first.
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
