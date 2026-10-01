@@ -40,7 +40,8 @@ class ProjectUpdateTests(unittest.TestCase):
                 result = subprocess.run(argv, cwd=cwd, env={**os.environ, 'HOME': str(home)}, capture_output=True, encoding="utf-8", errors="replace")
                 return result.returncode, result.stdout, result.stderr
             manager = PluginManager(home=home, user_home=home, runner=runner,
-                                    git_runner=lambda argv, **kw: (0, ' M daemon/gsd_daemon/serve.py\n', '') if 'status' in argv else (1, '', 'Your local changes would be overwritten by merge'), environ={})
+                                    git_runner=lambda argv, **kw: (0, ' M daemon/gsd_daemon/serve.py\n', '') if 'status' in argv else (1, '', 'Your local changes would be overwritten by merge'), environ={},
+                                    repo='https://example.invalid/gsd-path.git')
             watcher = mock.Mock(config=Config(parents=[], session_dirs=[]), projects={str(repo): ProjectStatus(root=str(repo), project='Legacy project')})
             watcher.poll_once.return_value = []
             server, _ = serve_in_thread(watcher, port=0, plugin=manager)

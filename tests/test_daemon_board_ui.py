@@ -226,7 +226,8 @@ class BoardUITests(unittest.TestCase):
                     return 0, "runtime refreshed", ""
                 return 2, "some hosts installed", "host install failed"
             manager = PluginManager(home=root / "daemon", user_home=root / "home",
-                                    runner=runner, git_runner=lambda *a, **kw: (0, "", ""), environ={})
+                                    runner=runner, git_runner=lambda *a, **kw: (0, "", ""), environ={},
+                                    repo="https://example.invalid/gsd-path.git")
             (manager.src_dir / ".git").mkdir(parents=True)
             (manager.src_dir / "scripts").mkdir()
             manager.install_py.write_bytes("# test installer boundary\n".encode("utf-8"))

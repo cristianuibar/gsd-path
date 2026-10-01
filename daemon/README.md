@@ -233,19 +233,29 @@ The daemon manages the gsd-path **skill plugin** itself (this is separate
 from `install`/`uninstall`, which manage the daemon): install, update, and
 uninstall, both globally (per-host skill roots) and per-project.
 
-**Source.** The skills are also available through
-[`@opengsd/gsd-path` on npm](https://www.npmjs.com/package/@opengsd/gsd-path).
-The daemon's plugin manager uses a git clone, which it keeps at `~/.gsd-path/src`
-(`https://github.com/open-gsd/gsd-path.git`, override with the `plugin_repo`
-key in `daemon.json`) and runs its `scripts/install.py` for every
-install/update. Background source refresh does `git fetch origin main` +
-`git pull --ff-only` at most once per 24h, cached in
-`~/.gsd-path/update-check.json` (last-fetch timestamp + last-known latest
-version from the clone's `package.json`). Background refresh failures retain
-the cached state. Explicit global updates and project updates from a clean source
-checkout bypass this cache period and stop if source refresh fails. When the
-source checkout has local changes, project Update uses that local build without
-fetching or merging and displays a source notice. It never discards those edits.
+**Source.** The plugin manager installs from the published
+[`@opengsd/gsd-path` npm release](https://www.npmjs.com/package/@opengsd/gsd-path).
+It reads the registry for the release list and the `latest` tag, downloads the
+release tarball, and checks it against the registry's sha512 (`dist.integrity`).
+A tarball that does not match is refused and nothing is installed. A verified
+release is unpacked to `~/.gsd-path/releases/<version>`, and its
+`scripts/install.py` runs for every install/update. The manager follows
+`latest` unless a release is chosen (`POST /api/plugin/release`). Background
+refresh reads the registry at most once per 24h, cached in
+`~/.gsd-path/update-check.json` (last-fetch timestamp, latest version, release
+list, chosen release). Refresh failures retain the cached state, and an
+unpacked release keeps working offline. Explicit global and project updates
+bypass the cache period and stop if the refresh fails.
+
+**Git source.** Set `plugin_repo` in `daemon.json` to use a git clone of that
+repository at `~/.gsd-path/src` in place of npm releases, for a fork or a
+checkout under development. Refresh is then `git fetch origin main` +
+`git pull --ff-only`, and the latest version comes from the clone's
+`package.json`. When the clone has local changes, project Update uses that
+local build without fetching or merging and displays a source notice. It never
+discards those edits. A clone left by an earlier daemon version is not used
+unless `plugin_repo` is set.
+
 Project updates invoke `--runtime-upgrade`, or `--runtime-migrate` for legacy
 runtime directories; see
 [project runtime versions](../DOCS.md#project-runtime-versions) for version
@@ -253,9 +263,8 @@ selection and legacy migration, and [Dashboard feedback](../UPDATE.md#update-the
 for the displayed controls and results. Every installer operation (argv, exit code,
 output tail) is appended to `~/.gsd-path/logs/plugin.log`.
 
-**Repository access.** The default `open-gsd/gsd-path` repository is public.
-If you configure a private `plugin_repo`, cloning needs credentials on the
-machine. `ensure_source` tries HTTPS first, then SSH on failure. Use
+**Repository access.** If you configure a private `plugin_repo`, cloning
+needs credentials on the machine. `ensure_source` tries HTTPS first, then SSH on failure. Use
 `gh auth login` or an SSH key for access to a private source.
 
 **CLI:**
@@ -286,6 +295,11 @@ one global op-lock — a second concurrent operation gets
 - `POST /api/plugin/install` — `{scope: "global"|"project", hosts?, root?,
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
+- `POST /api/plugin/check` — reads the registry now →
+  `{ok, error, latest, update_available, installed}`.
+- `POST /api/plugin/release` — `{version}` chooses a published release;
+  `{version: null}` follows `latest` again → `{latest, selected, versions}`.
+  `GET /api/plugin/status` carries the same object as `releases`.
 - `POST /api/plugin/uninstall` — `{scope, hosts?, root?, dry_run?}` returns
   the plan; `{..., confirm: true}` applies it. Neither `dry_run` nor
   `confirm` → 400.
