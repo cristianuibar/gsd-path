@@ -15,6 +15,7 @@ export const HOST_LABELS = {
   zed: "Zed",
   kiro: "Kiro",
   kimi: "Kimi Code",
+  muse: "Muse Code",
 };
 
 // ponytail: hand-drawn block letters; no figlet dependency.

@@ -27,7 +27,7 @@ ENV_HOME = "GSD_DAEMON_HOME"
 
 HOSTS = (
     "codex", "claude", "grok", "opencode", "copilot", "qwen",
-    "antigravity", "cursor", "zed", "kiro", "kimi",
+    "antigravity", "cursor", "zed", "kiro", "kimi", "muse",
 )
 
 LOCAL_ROOTS = {
@@ -42,6 +42,7 @@ LOCAL_ROOTS = {
     "zed": ".agents/skills",
     "kiro": ".kiro/skills",
     "kimi": ".kimi-code/skills",
+    "muse": ".agents/skills",
 }
 
 BACKUP_PREFIX = "disabled-gsd-skills"
@@ -284,7 +285,7 @@ class PluginManager:
                 return candidate if candidate.is_absolute() else home / candidate
             return home / default
 
-        if host in ("codex", "zed"):
+        if host in ("codex", "zed", "muse"):
             return home / ".agents" / "skills"
         if host == "claude":
             return env_home("CLAUDE_CONFIG_DIR", ".claude") / "skills"

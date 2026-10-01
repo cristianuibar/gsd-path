@@ -131,7 +131,9 @@ STEP_EXACT_FIELDS = {
     "task-verify": {"verify_exit_code": 0},
     "archive": {"validation_exit_code": 0},
 }
-EXCLUDED_EVALUATION_HOSTS = frozenset({"qwen", "kiro", "zed", "copilot"})
+EXCLUDED_EVALUATION_HOSTS = frozenset(
+    {"qwen", "kiro", "zed", "copilot", "muse"}
+)
 WORKTREE_RECORD_KEYS = frozenset(
     {"worktree", "HEAD", "branch", "bare", "detached", "locked", "prunable"}
 )

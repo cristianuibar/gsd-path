@@ -44,6 +44,19 @@ use exactly one matching branch:
   create another worktree. Encode task dependencies explicitly; launch
   independent children concurrently up to the host's advertised
   concurrent-subagent capacity.
+- A `muse.subagent_spawn` tool (with `muse.subagent_wait`,
+  `muse.subagent_read_result`, and `muse.subagent_send_message` siblings) is
+  Muse Code. Omit `subagent_type` (general-purpose, full capability), pass the
+  logical task name as `task_name` and `role`, and the complete brief as
+  `objective`. Never set `worktree_isolation`. Keep the returned
+  `subagent_id`; send a correction to a still-live child with
+  `muse.subagent_send_message` mode `followup` and the complete new prompt,
+  otherwise start a fresh child. Collect with `muse.subagent_wait`
+  (`wait_for: task_terminal`) then `muse.subagent_read_result`; on
+  `root_capacity_exhausted`, wait for a child to finish and retry. Spawn has no
+  model or effort argument, so record no such capability. If only
+  `muse.workflow` is exposed (untrusted workspace), do not script or inline
+  the work; stop and report that the workspace must be trusted.
 
 For every branch:
 

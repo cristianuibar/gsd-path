@@ -10,7 +10,7 @@ parallel under `.project/next/` (lookahead); a building milestone can also be
 abandoned on an explicit ruling, archiving its partial work for a re-slice.
 
 **Supported hosts:** Codex, Claude Code, Grok, OpenCode, GitHub Copilot CLI,
-Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, and Kimi Code.
+Qwen Code, Antigravity CLI, Cursor, Zed, Kiro, Kimi Code, and Muse Code.
 Support means the installer and dispatch contract exist. See the
 [host trust matrix](https://github.com/open-gsd/gsd-path/blob/main/docs/trust-validation/HOST-MATRIX.md) for live milestone
 proof and each host's guard tier.
@@ -474,7 +474,7 @@ node scripts/install.mjs --all --update --project /path/to/project   # refresh .
 
 | Flag | User skills root | Invoke |
 | --- | --- | --- |
-| `--codex`, `--zed` | `~/.agents/skills` | Codex: `$path` or `$gsd-path`; Zed: `/path` or `/gsd-path` |
+| `--codex`, `--zed`, `--muse` | `~/.agents/skills` | Codex: `$path` or `$gsd-path`; Zed, Muse: `/path` or `/gsd-path` |
 | `--claude` | `~/.claude/skills` | `/path` or `/gsd-path` |
 | `--cursor` | `~/.cursor/skills` (+ subagent) | `/path` or `/gsd-path` |
 | `--grok` | `~/.grok/skills` | `/path` or `/gsd-path` |
