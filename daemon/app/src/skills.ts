@@ -35,7 +35,7 @@ export function isNewer(latest: string | null | undefined, installed: string | n
 }
 
 /** The release an install writes: the chosen one, else the latest. */
-export const targetVersion = (plugin: PluginStatus | null) =>
+export const targetVersion = (plugin: { latest?: string | null; releases?: Releases } | null) =>
   plugin?.releases?.selected ?? plugin?.releases?.latest ?? plugin?.latest ?? null;
 
 export const joinNames = (names: string[]) =>

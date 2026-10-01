@@ -5,8 +5,10 @@ import { doctorReport, memberRows, setupRows } from "../project";
 import type { Member, SetupRow } from "../project";
 import { envHash, projectHash } from "../route";
 import { api } from "../shell";
+import { targetVersion } from "../skills";
 import type { OpResult, UninstallPlan } from "../skills";
-import { applyUninstall, message, planUninstall, projectOp, usePlugin } from "../skillsApi";
+import { applyUninstall, message, planUninstall, projectOp } from "../skillsApi";
+import type { usePlugin } from "../skillsApi";
 import type { Project } from "../status";
 import { CopyButton } from "../ui";
 import { Output, PlanBox } from "./SkillsParts";
@@ -19,8 +21,8 @@ type Ask = { at: string; label: string; text: string; output: boolean; apply: ()
 type Note = { at: string; ok: boolean; text: string; output?: string };
 
 /** `children` (usage and activity) sit between the cards and the removal link. */
-export function SetupCard({ project: p, children }: { project: Project; children: ReactNode }) {
-  const { plugin, hosts, error, reload } = usePlugin(p.root);
+export function SetupCard({ project: p, skills, children }: { project: Project; skills: ReturnType<typeof usePlugin>; children: ReactNode }) {
+  const { plugin, hosts, error, reload } = skills;
   const [members, setMembers] = useState<Members | null>(null);
   const [doctor, setDoctor] = useState<OpResult | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // the row or member that works now
@@ -36,7 +38,7 @@ export function SetupCard({ project: p, children }: { project: Project; children
 
   const setup = plugin?.projects.find((item) => item.root === p.root);
   const names = Object.fromEntries(hosts.map((host) => [host.id, host.name]));
-  const rows = setupRows(setup, plugin?.latest ?? null, doctor, names);
+  const rows = setupRows(setup, targetVersion(plugin), doctor, names);
   const report = doctor && doctorReport(doctor);
 
   /** Run one call for the row or member `at`. A rejected call shows its message there. */

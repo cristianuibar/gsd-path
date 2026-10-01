@@ -1,6 +1,7 @@
 // Settings → Updates: the rows and the "Update all" plan, from GET /api/plugin/status.
 import { runtimePending } from "./board";
-import { isNewer, joinNames, versionParts } from "./skills";
+import { isNewer, joinNames, targetVersion, versionParts } from "./skills";
+import type { Releases } from "./skills";
 import { DASH } from "./status";
 
 export type PluginStatus = {
@@ -9,7 +10,7 @@ export type PluginStatus = {
   error?: string;
   hosts?: Record<string, { installed: boolean; version: string | null; root?: string; skill_dirs?: string[] }>;
   projects?: { root: string; runtime?: boolean; runtime_version?: string | null; hooks?: boolean; contracts?: boolean; local_skills?: string[] }[];
-  releases?: unknown;
+  releases?: Releases;
 };
 /** The answer of POST /api/plugin/update. */
 export type OpResult = { ok: boolean; argv: string[]; stdout_tail: string; error: string | null; source_notice?: string };
@@ -43,7 +44,7 @@ function row(key: string, name: string, sub: string, version: string | null, lat
 
 /** Skills per agent folder (agents that share a folder are one row), then the runtime of each project. */
 export function updateRows(plugin: PluginStatus, names: Record<string, string>): UpdateRow[] {
-  const latest = plugin.latest ?? null;
+  const latest = targetVersion(plugin);
   const folders = new Map<string, { agents: string[]; version: string | null }>();
   for (const [host, entry] of Object.entries(plugin.hosts ?? {})) {
     if (!entry.installed) continue;

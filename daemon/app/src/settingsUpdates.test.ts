@@ -64,6 +64,15 @@ describe("updateRows", () => {
     expect(allCurrent([rows[0], rows[4]])).toBe(true);
     expect(allCurrent([])).toBe(true);
   });
+  it("compares with the chosen release, not the latest one", () => {
+    const chosen = updateRows({ ...plugin, releases: { latest: "1.4.0", selected: "1.3.2", versions: ["1.4.0", "1.3.2"] } }, names);
+    expect(chosen[1]).toMatchObject({ name: "Skills in Claude Code", version: "1.3.2", state: "current", step: null });
+    expect(chosen[3]).toMatchObject({ name: "Runtime in gsd-path", version: "1.3.2", state: "current", step: null });
+    expect(updatePlan(chosen)).toEqual([]);
+    const legacy = updateRows({ latest: "1.4.0", releases: { latest: "1.4.0", selected: "1.3.2", versions: [] },
+      projects: [{ root: "/work/legacy", runtime: true, runtime_version: null }] }, {});
+    expect(legacy[0].version).toBe("No version stamp → 1.3.2");
+  });
   it("marks every row unknown when the latest release is not known", () => {
     const blind = updateRows({ ...plugin, latest: null }, names);
     expect(blind.map((row) => row.state)).toEqual(Array(6).fill("unknown"));

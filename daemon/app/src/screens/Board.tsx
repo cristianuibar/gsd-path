@@ -2,21 +2,21 @@
 import { useState } from "react";
 import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from "../board";
 import { projectHash, settingsHash } from "../route";
-import { usePlugin } from "../skillsApi";
+import { targetVersion } from "../skills";
+import type { usePlugin } from "../skillsApi";
 import { DASH } from "../status";
 import type { Status } from "../status";
 import { Cells } from "../ui";
 import "./skills.css";
 
-export function Board({ status, offline, now }: { status: Status | null; offline: boolean; now: number }) {
+export function Board({ status, offline, now, skills }: { status: Status | null; offline: boolean; now: number; skills: ReturnType<typeof usePlugin> }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const projects = status?.projects ?? [];
   const shown = visibleProjects(projects, filter, query);
-  // Setup status per project. It loads again when the list of projects changes.
-  const { plugin, hosts, error: setupError } = usePlugin(projects.map((p) => p.root).join("\n"));
+  const { plugin, hosts, error: setupError } = skills;
   const banner = updateBanner(hosts, plugin, projects);
-  const setupOf = (root: string) => setupPill(plugin?.projects.find((item) => item.root === root), plugin?.latest ?? null);
+  const setupOf = (root: string) => setupPill(plugin?.projects.find((item) => item.root === root), targetVersion(plugin));
   const empty = !status ? (offline ? "Cannot load projects. Start the monitor." : "Loading projects…")
     : !projects.length ? "No projects yet. Projects in your watched folders appear here."
     : "No projects match this filter.";

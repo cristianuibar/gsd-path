@@ -104,6 +104,10 @@ describe("updateBanner", () => {
     const one = plugin({ hosts: { claude: { installed: true, version: "1.4.0" } } });
     expect(updateBanner(hosts, one, status.projects)).toEqual({ count: 1, title: "1 update available", text: "runtime for gsd-path" });
   });
+  it("compares a runtime with the chosen release, not the latest one", () => {
+    const chosen = plugin({ hosts: {}, releases: { latest: "1.4.0", selected: "1.3.2", versions: ["1.4.0", "1.3.2"] } });
+    expect(updateBanner(hosts, chosen, status.projects)).toBeNull();
+  });
   it("is hidden when nothing is pending or the status is not loaded", () => {
     expect(updateBanner(hosts, plugin({ hosts: {}, projects: [setup()] }), status.projects)).toBeNull();
     expect(updateBanner(hosts, null, status.projects)).toBeNull();

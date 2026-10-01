@@ -25,9 +25,9 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
   // A project that is no longer watched falls back to the board, as in the daemon dashboard.
   const project = route.page === "project" || route.page === "env"
     ? status?.projects.find((p) => p.root === route.root) : undefined;
-  // The rows the Skills page shows as "Update available": the count badge on the Skills nav item.
-  // They load again on each page change and when /status reports another skills state.
-  const skills = usePlugin(route.page + JSON.stringify(status?.plugin));
+  // One plugin state for the nav badge, the Skills page, the board and the project setup card.
+  // It loads again on each page or project change and when /status reports other skills or projects.
+  const skills = usePlugin(JSON.stringify([route.page, "root" in route && route.root, status?.projects.map((p) => p.root), status?.plugin]));
   const pending = pendingSkills(skills.hosts, skills.plugin).length;
 
   return (
@@ -58,10 +58,10 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
       {route.page === "skills" ? <Skills skills={skills} />
         : route.page === "stats" ? <Stats status={status} root={route.root} />
         : route.page === "settings" ? <Settings shell={shell} status={status} tab={route.tab} />
-        : !project ? <Board status={status} offline={offline} now={now} />
+        : !project ? <Board status={status} offline={offline} now={now} skills={skills} />
         : route.page === "env" ? <Environment project={project} />
         : route.page === "project" && route.file ? <Files project={project} path={route.file} />
-        : <ProjectPage project={project} now={now} stamp={status!.generated_at} />}
+        : <ProjectPage project={project} now={now} stamp={status!.generated_at} skills={skills} />}
     </>
   );
 }
