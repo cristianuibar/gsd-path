@@ -8,7 +8,8 @@ export type Problem = {
   message: string;
   fix: string;
   blocking: boolean;
-  detail?: { pid?: number | null; command?: string | null };
+  /** On a `port` problem: who holds the port. `daemon` is an older GSD Path daemon that could not be stopped. */
+  detail?: { owner?: "daemon" | "other"; pid?: number | null; command?: string | null };
 };
 export type Requirement = {
   id: string;

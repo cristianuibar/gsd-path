@@ -194,6 +194,7 @@ class RunningDaemonTests(LaunchCase):
         self.assertEqual(result["action"], "setup")
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("port", True)])
         detail = result["problems"][0]["detail"]
+        self.assertEqual(detail["owner"], "daemon")  # it answers as a daemon, so the app shows its fix text
         self.assertEqual(detail["pid"], impostor.pid)
         self.assertIn("http.server", detail["command"])  # the impostor's own command line
         self.assertIsNone(impostor.poll())
@@ -204,6 +205,7 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, self.installer(runner, fake_venv=False))
         self.assertEqual(result["action"], "setup")
         self.assertEqual([p["kind"] for p in result["problems"]], ["port"])
+        self.assertEqual(result["problems"][0]["detail"]["owner"], "other")
         self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
     def test_free_port_starts_daemon(self):

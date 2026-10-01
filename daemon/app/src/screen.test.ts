@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickScreen, requirementRows } from "./screen";
+import { heldByDaemon, pickScreen, programName, requirementRows } from "./screen";
 import type { Launch, Shell } from "./shell";
 
 const launch = (over: Partial<Launch> = {}): Launch => ({
@@ -49,6 +49,23 @@ describe("pickScreen", () => {
   it("a non-blocking problem does not hide the dashboard", () => {
     const noted = shell({ launch: launch({ autostart_ok: false, problems: [{ kind: "autostart", message: "m", fix: "f", blocking: false }] }) });
     expect(pickScreen(noted, done)).toBe("ready");
+  });
+});
+
+describe("the port screen", () => {
+  const port = (detail?: object) => ({ kind: "port", message: "m", fix: "f", blocking: true, detail });
+
+  it("tells a stuck GSD Path daemon from another program", () => {
+    expect(heldByDaemon(port({ owner: "daemon", pid: 7 }))).toBe(true);
+    expect(heldByDaemon(port({ owner: "other", pid: 7 }))).toBe(false);
+    expect(heldByDaemon(port())).toBe(false);
+  });
+  it("names the program, also when its path has a space", () => {
+    expect(programName("node server.js")).toBe("node");
+    expect(programName("/usr/bin/python3 -m http.server 8765")).toBe("python3");
+    expect(programName('"C:\\Program Files\\nodejs\\node.exe" server.js')).toBe("node.exe");
+    expect(programName(null)).toBeNull();
+    expect(programName("")).toBeNull();
   });
 });
 

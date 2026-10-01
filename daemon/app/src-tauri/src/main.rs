@@ -9,7 +9,7 @@ use std::process::{Child, Command, Stdio};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -30,6 +30,11 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(3);
 const TRAY_ID: &str = "main";
 // The tray popover window (src/screens/Tray.tsx).
 const POPOVER: &str = "tray";
+// One click on the tray icon can first take focus from the popover (which hides it) and then
+// arrive as a click. The longest press that is still one click: the Windows default double-click time.
+const CLICK: Duration = Duration::from_millis(500);
+// The argument the login entry passes: start in the tray, with no window.
+const HIDDEN_ARG: &str = "--hidden";
 
 /// What the frontend shows (src/shell.ts). `launch` is the daemon's launch JSON, passed through.
 #[derive(Clone, Serialize)]
@@ -48,9 +53,11 @@ struct Shell {
     python: Option<Vec<String>>,
     child: Option<Child>,
     view: ShellState,
+    popover_hidden: Option<Instant>, // when a focus loss hid the tray popover
 }
 
-struct AppState(Mutex<Shell>);
+/// The shell, and the lock one launch check holds from start to end.
+struct AppState(Mutex<Shell>, Mutex<()>);
 
 /// What to do with a launch result. Anything that is not a clean start or reuse blocks.
 #[derive(Debug, PartialEq)]
@@ -75,6 +82,26 @@ fn decide(launch: &Value) -> Next {
         },
         _ => Next::Blocked,
     }
+}
+
+/// Launch at login is turned on one time, so a user who turns it off keeps it off.
+fn enables_autostart(ready: bool, autostart_ok: bool, already_set: bool) -> bool {
+    ready && autostart_ok && !already_set
+}
+
+/// The tray click that follows a focus-loss hide is the click that closed the popover.
+fn closed_by_this_click(hidden: Option<Instant>, now: Instant) -> bool {
+    hidden.map_or(false, |at| now.duration_since(at) < CLICK)
+}
+
+/// A start at login stays in the tray, unless the user must act.
+fn opens_window_after_boot(hidden: bool, phase: &str) -> bool {
+    hidden && phase == "blocked"
+}
+
+/// The PATH a child process printed between two `__PATH__` marks.
+fn marked_path(output: &str) -> Option<String> {
+    output.split("__PATH__").nth(1).filter(|path| !path.is_empty()).map(str::to_string)
 }
 
 #[derive(Clone, PartialEq)]
@@ -139,19 +166,23 @@ fn command(argv: &[String]) -> Command {
     command
 }
 
-/// Apps started from Finder or a desktop menu get a minimal PATH; use the login shell's.
-#[cfg(unix)]
-fn use_login_path() {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-    let Ok(output) = Command::new(shell)
-        .args(["-l", "-c", "printf '\\n__PATH__%s__PATH__' \"$PATH\""])
-        .stdin(Stdio::null())
-        .output()
-    else {
-        return;
+/// Use the PATH a new terminal would get, so a program installed after the app started is found.
+/// Unix: apps started from Finder or a desktop menu get a minimal PATH; read the login shell's.
+/// Windows: a running process keeps its first PATH; read the machine and user values again
+/// (.NET expands their %VAR% references).
+fn refresh_path() {
+    let argv: Vec<String> = if cfg!(windows) {
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+         "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output ('__PATH__'+\
+          [Environment]::GetEnvironmentVariable('Path','Machine')+';'+\
+          [Environment]::GetEnvironmentVariable('Path','User')+'__PATH__')"]
+            .map(String::from).into()
+    } else {
+        vec![std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()), "-l".into(), "-c".into(),
+             "printf '\\n__PATH__%s__PATH__' \"$PATH\"".into()]
     };
-    let text = String::from_utf8_lossy(&output.stdout);
-    if let Some(path) = text.split("__PATH__").nth(1).filter(|path| !path.is_empty()) {
+    let Ok(output) = command(&argv).output() else { return };
+    if let Some(path) = marked_path(&String::from_utf8_lossy(&output.stdout)) {
         std::env::set_var("PATH", path);
     }
 }
@@ -230,9 +261,21 @@ fn publish(app: &AppHandle, change: impl FnOnce(&mut ShellState)) -> ShellState 
     view
 }
 
-/// Run the launch check and act on it. Runs off the main thread.
+/// Run the launch check and act on it. Runs off the main thread. A request that arrives
+/// while a check runs waits for that check and returns its result.
 fn boot(app: &AppHandle) -> ShellState {
+    let state = app.state::<AppState>();
+    let Ok(_running) = state.1.try_lock() else {
+        drop(state.1.lock());
+        return state.0.lock().unwrap().view.clone();
+    };
+    run_boot(app)
+}
+
+/// One launch check. The caller holds the boot lock.
+fn run_boot(app: &AppHandle) -> ShellState {
     publish(app, |view| view.phase = "checking");
+    refresh_path();
     let python = {
         let state = app.state::<AppState>();
         let mut shell = state.0.lock().unwrap();
@@ -257,22 +300,29 @@ fn boot(app: &AppHandle) -> ShellState {
     let mut error = None;
     let mut phase = "ready";
     match decide(&launch) {
-        Next::Start(argv) => match start_daemon(app, &argv) {
-            Ok(child) => app.state::<AppState>().0.lock().unwrap().child = Some(child),
-            Err(failure) => {
-                phase = "blocked";
-                error = Some(format!("The monitor did not start: {failure}. See ~/.gsd-path/logs/app-daemon.log."));
+        Next::Start(argv) => {
+            stop_owned(app); // a start replaces the stored process; never drop one that still runs
+            match start_daemon(app, &argv) {
+                Ok(child) => app.state::<AppState>().0.lock().unwrap().child = Some(child),
+                Err(failure) => {
+                    phase = "blocked";
+                    error = Some(format!("The monitor did not start: {failure}. See ~/.gsd-path/logs/app-daemon.log."));
+                }
             }
-        },
+        }
         Next::Reuse => {}
         Next::Blocked => phase = "blocked",
     }
     // Launch at login waits until every old startup entry is proven gone.
     let autostart = app.autolaunch();
-    if phase == "ready" && launch["autostart_ok"] == Value::Bool(true) && !cfg!(debug_assertions)
-        && !autostart.is_enabled().unwrap_or(false)
-    {
-        let _ = autostart.enable();
+    if let Some(dir) = app_dir(app).filter(|_| !cfg!(debug_assertions)) {
+        let marker = dir.join("autostart-set");
+        if enables_autostart(phase == "ready", launch["autostart_ok"] == Value::Bool(true), marker.exists())
+            && autostart.enable().is_ok()
+        {
+            let _ = fs::create_dir_all(&dir);
+            let _ = fs::write(&marker, "");
+        }
     }
     let enabled = autostart.is_enabled().unwrap_or(false);
     publish(app, move |view| {
@@ -325,6 +375,10 @@ fn toggle_popover(app: &AppHandle) {
             .ok()
     });
     let Some(window) = window else { return };
+    let hidden = app.state::<AppState>().0.lock().unwrap().popover_hidden.take();
+    if closed_by_this_click(hidden, Instant::now()) {
+        return;
+    }
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
         return;
@@ -353,13 +407,15 @@ async fn boot_command(app: AppHandle) -> Result<ShellState, String> {
 #[tauri::command]
 async fn use_port(app: AppHandle, port: u16) -> Result<ShellState, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _running = state.1.lock();
         stop_owned(&app);
         if let Some(dir) = app_dir(&app) {
             let _ = fs::create_dir_all(&dir);
             let _ = fs::write(dir.join("port"), port.to_string());
         }
-        app.state::<AppState>().0.lock().unwrap().view.port = port;
-        boot(&app)
+        state.0.lock().unwrap().view.port = port;
+        run_boot(&app)
     })
     .await
     .map_err(|e| e.to_string())
@@ -533,11 +589,9 @@ fn on_menu(app: &AppHandle, id: &str) {
 }
 
 fn main() {
-    #[cfg(unix)]
-    use_login_path();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app, None)))
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![HIDDEN_ARG])))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api, tray_action])
@@ -552,7 +606,7 @@ fn main() {
                 autostart: false,
                 owned: false,
             };
-            app.manage(AppState(Mutex::new(Shell { python: None, child: None, view })));
+            app.manage(AppState(Mutex::new(Shell { python: None, child: None, view, popover_hidden: None }), Mutex::new(())));
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle().clone();
@@ -580,8 +634,16 @@ fn main() {
                     }
                 })
                 .build(app)?;
-            show_window(&handle, None);
-            spawn_boot(&handle);
+            let hidden = std::env::args().any(|arg| arg == HIDDEN_ARG);
+            if !hidden {
+                show_window(&handle, None);
+            }
+            let first = handle.clone();
+            thread::spawn(move || {
+                if opens_window_after_boot(hidden, boot(&first).phase) {
+                    show_window(&first, None);
+                }
+            });
             thread::spawn(move || {
                 let mut last = view;
                 loop {
@@ -604,6 +666,7 @@ fn main() {
             }
             // The popover closes when the user clicks elsewhere.
             WindowEvent::Focused(false) if window.label() == POPOVER => {
+                window.state::<AppState>().0.lock().unwrap().popover_hidden = Some(Instant::now());
                 let _ = window.hide();
             }
             _ => {}
@@ -652,6 +715,37 @@ mod tests {
         assert_eq!(decide(&json!({"action": "setup", "problems": []})), Next::Blocked);
         assert_eq!(decide(&json!({"action": "start", "serve_argv": null, "problems": []})), Next::Blocked);
         assert_eq!(decide(&json!({})), Next::Blocked);
+    }
+
+    #[test]
+    fn autostart_is_turned_on_one_time_and_only_after_a_clean_start() {
+        assert!(enables_autostart(true, true, false));
+        assert!(!enables_autostart(true, true, true)); // the user may have turned it off since
+        assert!(!enables_autostart(true, false, false)); // an old startup entry remains
+        assert!(!enables_autostart(false, true, false));
+    }
+
+    #[test]
+    fn the_click_that_closed_the_popover_does_not_open_it_again() {
+        let hidden = Instant::now();
+        assert!(closed_by_this_click(Some(hidden), hidden + Duration::from_millis(50)));
+        assert!(!closed_by_this_click(Some(hidden), hidden + Duration::from_secs(2)));
+        assert!(!closed_by_this_click(None, hidden));
+    }
+
+    #[test]
+    fn a_start_at_login_opens_the_window_only_for_a_problem() {
+        assert!(opens_window_after_boot(true, "blocked"));
+        assert!(!opens_window_after_boot(true, "ready"));
+        assert!(!opens_window_after_boot(false, "blocked")); // the window is already open
+    }
+
+    #[test]
+    fn the_path_is_read_between_the_marks() {
+        assert_eq!(marked_path("motd line\n__PATH__/opt/bin:/usr/bin__PATH__").as_deref(), Some("/opt/bin:/usr/bin"));
+        assert_eq!(marked_path("__PATH__C:\\Windows;C:\\Py Launcher__PATH__\r\n").as_deref(), Some("C:\\Windows;C:\\Py Launcher"));
+        assert_eq!(marked_path("__PATH____PATH__"), None);
+        assert_eq!(marked_path("command not found"), None);
     }
 
     #[test]

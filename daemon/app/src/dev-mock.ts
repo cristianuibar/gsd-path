@@ -24,7 +24,10 @@ const STATES: Record<string, Shell> = {
   "no-python": shell({ phase: "blocked", python_missing: true, launch: null }),
   "no-python-windows": shell({ os: "windows", phase: "blocked", python_missing: true, launch: null }),
   "no-git": blocked("git", "Git is not installed.", "Run `xcode-select --install`, or install Git from https://git-scm.com/download/mac."),
-  port: blocked("port", "Another program is using port 8765.", "Quit it, then choose Retry.", { pid: 4412, command: "node" }),
+  port: blocked("port", "Another program is using port 8765.", "Quit it, then choose Retry.", { owner: "other", pid: 4412, command: "node" }),
+  "port-daemon": blocked("port", "An older GSD Path daemon is using port 8765 and could not be stopped.",
+    "Stop it (Activity Monitor, Task Manager, or `kill`), then choose Retry.",
+    { owner: "daemon", pid: 4412, command: "python3 -m gsd_daemon serve --port 8765" }),
   install: blocked("install", "The daemon could not be installed into ~/.gsd-path/venv.", "Check your network connection, then choose Retry."),
   migrated: shell({ launch: launch({ replaced: "0.0.9", legacy: [
     { name: "launch-agent", removed: true, fix: "" }, { name: "login-item", removed: true, fix: "" },

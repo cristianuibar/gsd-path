@@ -22,7 +22,7 @@ npm run build     # type check and bundle
 (cd src-tauri && cargo test)
 ```
 
-`src/dev-mock.ts` lists the mock states (`?state=no-python`, `port`, `migrated`, `migrate-failed`, …).
+`src/dev-mock.ts` lists the mock states (`?state=no-python`, `port`, `port-daemon`, `migrated`, `migrate-failed`, …).
 Add `&done` to skip setup and `&offline` to stop the mock monitor. The mock serves the sample projects in
 `src/fixtures.ts`: `http://localhost:1420/?state=ready&done#/projects`, and `#/tray` for the popover.
 

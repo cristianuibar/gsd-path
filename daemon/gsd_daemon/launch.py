@@ -203,11 +203,14 @@ def stop_daemon(port: int, reported_pid: Optional[int], installer: Installer) ->
 
 # -- venv ----------------------------------------------------------------------
 
-def port_owner(port: int, installer: Installer, pid: Optional[int] = None) -> dict:
-    """Who holds the port, for the app's "port in use" screen. Best effort."""
+def port_owner(port: int, installer: Installer, owner: str, pid: Optional[int] = None) -> dict:
+    """Who holds the port, for the app's "port in use" screen. Best effort.
+
+    ``owner`` is ``daemon`` (an older GSD Path daemon that could not be stopped) or ``other``.
+    """
     if pid is None or pid < 0:
         pid = listener_pid(port, installer)
-    return {"pid": pid, "command": process_command(pid, installer) or None if pid else None}
+    return {"owner": owner, "pid": pid, "command": process_command(pid, installer) or None if pid else None}
 
 
 def installed_version(installer: Installer) -> Optional[str]:
@@ -325,7 +328,7 @@ def _check(port: int, installer: Installer, result: dict) -> None:
         problems.append(_problem(
             "port", f"Another program is using port {port}.",
             f"Quit the program that uses port {port}, then choose Retry.",
-            detail=port_owner(port, installer)))
+            detail=port_owner(port, installer, "other")))
     if any(problem["blocking"] for problem in problems):
         return
 
@@ -352,7 +355,7 @@ def _check(port: int, installer: Installer, result: dict) -> None:
             problems.append(_problem(
                 "port", f"{who} is using port {port} and could not be stopped.",
                 "Stop it (Activity Monitor, Task Manager, or `kill`), then choose Retry.",
-                detail=port_owner(port, installer, stuck)))
+                detail=port_owner(port, installer, "daemon", stuck)))
             return
         result["replaced"] = holder.get("version") or "unknown"
 

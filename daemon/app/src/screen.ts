@@ -1,6 +1,6 @@
 // Which screen the window shows, and what the Requirements step lists.
 // Pure functions of the shell state, so they can be tested without a window.
-import type { Requirement, Shell } from "./shell";
+import type { Problem, Requirement, Shell } from "./shell";
 
 export type Screen =
   | "checking" | "first-launch" | "requirements" | "python" | "port" | "problem" | "ready";
@@ -20,6 +20,15 @@ export function pickScreen(shell: Shell, seen: Seen): Screen {
   if (!seen.setupDone && asRows) return "requirements";
   return shell.python_missing ? "python" : "problem";
 }
+
+/** The program name in a command line. Windows puts a path with a space in quotes. */
+export function programName(command: string | null | undefined): string | null {
+  const program = command?.match(/^"([^"]+)"|^(\S+)/);
+  return (program?.[1] ?? program?.[2])?.split(/[\\/]/).pop() || null;
+}
+
+/** The port is held by an older GSD Path daemon that could not be stopped, not by another program. */
+export const heldByDaemon = (problem: Problem) => problem.detail?.owner === "daemon";
 
 export type RowAction = { label: string; copy: string } | { label: string; url: string };
 export type RequirementRow = {

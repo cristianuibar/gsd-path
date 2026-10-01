@@ -1,5 +1,5 @@
 // States where no monitor runs: Python missing, port taken, or another blocking problem.
-import { pythonFix } from "../screen";
+import { heldByDaemon, programName, pythonFix } from "../screen";
 import type { Problem, Shell } from "../shell";
 import { ActionButton, CopyButton, FixText, firstCommand } from "../ui";
 
@@ -29,7 +29,21 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
 }) {
   const { pid } = problem.detail ?? {};
   // The daemon reports the whole command line; the program name is enough here.
-  const command = problem.detail?.command?.split(" ")[0].split(/[\\/]/).pop();
+  const command = programName(problem.detail?.command);
+  if (heldByDaemon(problem)) {
+    return (
+      <Page>
+        <div className="problem">
+          <b>Port {shell.port} is already in use</b>
+          <span>{problem.message} <FixText text={problem.fix} /></span>
+          <div className="actions">
+            <button className="btn primary" onClick={onRetry}>Check again</button>
+            <button className="btn" onClick={() => onUsePort(shell.port + 1)}>Use port {shell.port + 1}</button>
+          </div>
+        </div>
+      </Page>
+    );
+  }
   return (
     <Page>
       <div className="problem">
