@@ -218,6 +218,12 @@ class SessionIndex:
         self._unresolved: Dict[str, Tuple[int, int]] = {}
         self._parsed: Dict[str, Tuple[Tuple[int, float], List[dict]]] = {}
 
+    def set_dirs(self, patterns: Iterable[str]) -> None:
+        """Use new session folders and forget records parsed from folders no longer listed."""
+        self.dirs = expand_session_dirs(patterns)
+        self._parsed = {key: value for key, value in self._parsed.items()
+                        if any(self._path_under_root(key, base) for base in self.dirs)}
+
     def _load_cache(self) -> Dict[str, Optional[str]]:
         if self.cache_path is None:
             return {}

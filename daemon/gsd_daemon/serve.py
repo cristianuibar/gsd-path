@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from . import __version__
+from . import settings_api
 from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import PluginManager
@@ -50,6 +51,16 @@ def load_token() -> str:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(token)
     return token
+
+# JSON routes that live in their own modules. A handler takes (request handler, body)
+# and returns the payload; ValueError becomes a 400 with its message.
+_JSON_GET = {
+    "/api/config": settings_api.read_config,
+    "/api/diagnostics": settings_api.diagnostics,
+}
+_JSON_POST = {
+    "/api/config": settings_api.write_config,
+}
 
 
 class _BadRequest(Exception):
@@ -998,6 +1009,12 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._respond(200, "application/json", json.dumps({"ok": True}))
             return
+        if path in _JSON_GET:
+            if not self._same_origin():
+                self._respond(403, 'application/json', json.dumps({'error': 'Same-origin requests only.'}))
+                return
+            self._json_route(_JSON_GET[path], None)
+            return
         if path == "/api/fs/browse":
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             code, payload = _browse_dirs((query.get("path") or [None])[0])
@@ -1064,16 +1081,14 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/config/parents":
             self._parents_op()
             return
-        if path not in _PLUGIN_ENDPOINTS:
+        if path not in _JSON_POST and path not in _PLUGIN_ENDPOINTS:
             self._respond(404, "text/plain", "not found")
             return
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length) or b"{}")
-            if not isinstance(body, dict):
-                raise ValueError("body must be a JSON object")
-        except ValueError:
-            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+        body = self._json_body()
+        if body is None:
+            return
+        if path in _JSON_POST:
+            self._json_route(_JSON_POST[path], body)
             return
         if not _PLUGIN_OP_LOCK.acquire(blocking=False):
             self._respond(409, "application/json",
@@ -1100,6 +1115,26 @@ class _Handler(BaseHTTPRequestHandler):
             code, payload = 500, {"error": str(error)}
         finally:
             _PLUGIN_OP_LOCK.release()
+        self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
+
+    def _json_body(self) -> Optional[dict]:
+        """The request body as a JSON object, or None after a 400 answer."""
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+        except ValueError:
+            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+            return None
+        return body
+
+    def _json_route(self, route, body) -> None:
+        try:
+            code, payload = 200, route(self, body)
+        except ValueError as error:
+            code, payload = 400, {"error": str(error)}
+        except Exception as error:
+            code, payload = 500, {"error": str(error)}
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
 
     def _same_origin(self) -> bool:
@@ -1279,6 +1314,18 @@ class _Handler(BaseHTTPRequestHandler):
         return DASHBOARD_PAGE.replace("__DAEMON_JSON__", json.dumps(daemon)).replace("__RECORDS_CSS__", RECORDS_CSS).replace("__RECORDS_JS__", RECORDS_JS).replace("__LAYOUT_CSS__", LAYOUT_CSS).replace("__LAYOUT_JS__", LAYOUT_JS)
 
 
+class _StopEvent(threading.Event):
+    """Ends the poll loop; setting it also wakes a loop that waits for its next poll."""
+
+    def __init__(self, wake: threading.Event) -> None:
+        super().__init__()
+        self._wake = wake
+
+    def set(self) -> None:
+        super().set()
+        self._wake.set()
+
+
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
           plugin: Optional[PluginManager] = None,
           token: Optional[str] = None) -> ThreadingHTTPServer:
@@ -1286,6 +1333,7 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
     scan_lock = threading.Lock()
+    wake = threading.Event()  # set to start the next poll at once
 
     def scan(scan_sessions=True):
         with scan_lock:
@@ -1296,9 +1344,10 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
 
     handler = type("Handler", (_Handler,),
                    {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
+                    "scan_lock": scan_lock, "wake": staticmethod(wake.set),
                     "token": token})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    stop = threading.Event()
+    stop = _StopEvent(wake)
     server.watcher_stop = stop  # callers may set() to end the poll loop
 
     def poll_loop() -> None:
@@ -1308,7 +1357,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                 scan()
             except Exception:
                 pass  # a failed cycle must never kill the poll loop
-            stop.wait(watcher.config.poll_seconds)
+            wake.wait(watcher.config.poll_seconds)
+            wake.clear()
 
     threading.Thread(target=poll_loop, daemon=True).start()
     return server

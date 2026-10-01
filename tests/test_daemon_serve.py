@@ -344,7 +344,7 @@ class PostOriginTests(unittest.TestCase):
 
     ROUTES = ("/api/plugin/install", "/api/plugin/update", "/api/plugin/uninstall",
               "/api/plugin/check", "/api/plugin/release",
-              "/api/config/parents", "/api/path-config", "/api/refresh")
+              "/api/config/parents", "/api/config", "/api/path-config", "/api/refresh")
 
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
