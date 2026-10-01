@@ -206,7 +206,7 @@ class RunningDaemonTests(LaunchCase):
         self.assertEqual(detail["pid"], impostor.pid)
         self.assertNotIn("/", detail["name"])  # the program's name, not its path or arguments
         self.assertIn("python", detail["name"].lower())
-        self.assertIn("http.server", detail["command"])  # the impostor's own command line
+        self.assertNotIn("command", detail)  # a command line can hold secrets; the app gets only the name
         self.assertIsNone(impostor.poll())
 
     def test_other_service_on_port_blocks_without_install(self):

@@ -220,9 +220,7 @@ def port_owner(port: int, installer: Installer, owner: str, pid: Optional[int] =
     """
     if pid is None or pid < 0:
         pid = listener_pid(port, installer)
-    return {"owner": owner, "pid": pid,
-            "name": process_name(pid, installer) or None if pid else None,
-            "command": process_command(pid, installer) or None if pid else None}
+    return {"owner": owner, "pid": pid, "name": process_name(pid, installer) or None if pid else None}
 
 
 def installed_version(installer: Installer) -> Optional[str]:

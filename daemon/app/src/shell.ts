@@ -9,7 +9,7 @@ export type Problem = {
   fix: string;
   blocking: boolean;
   /** On a `port` problem: who holds the port (`name` is the program's name). `daemon` is an older GSD Path daemon that could not be stopped. */
-  detail?: { owner?: "daemon" | "other"; pid?: number | null; name?: string | null; command?: string | null };
+  detail?: { owner?: "daemon" | "other"; pid?: number | null; name?: string | null };
 };
 export type Requirement = {
   id: string;
