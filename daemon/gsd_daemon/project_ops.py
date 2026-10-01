@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import List
 
-from .plugin import OP_LOCK, _tail
+from .plugin import GIT_HOOK_NAMES, OP_LOCK, _tail
 
-# op -> installer flag. Each takes "--project <root>".
+# op -> installer flag. Each takes "--project <root>". hooks-init also takes the
+# request's `hosts` as host flags; the installer refuses it without one.
 INSTALLER_OPS = {
     "hooks-init": "--hooks-init",
     "hooks-refresh": "--hooks-refresh",
@@ -21,7 +23,8 @@ INSTALLER_OPS = {
     "doctor": "--doctor",
 }
 OPS = (*INSTALLER_OPS, "members", "member-hooks", "member-repair")
-
+# Same text as MEMBER_HOOK_MARKER in install.py, which writes these hooks.
+MEMBER_HOOK_MARKER = "gsd-path member guard"
 
 
 class Busy(Exception):
@@ -46,14 +49,18 @@ def _members(plugin, root: str) -> dict:
         rc, stdout, _stderr = _members_helper(plugin, "detect", "--checkout", member["checkout"])
         detected = json.loads(stdout) if rc == 0 else {}
         member["marker"] = {"current": detected.get("current") is True, "reason": detected.get("reason")}
-        member["hooks"] = plugin.detect_project(member["checkout"])["hooks"]
+        hooks_dir = plugin._git_hooks_dir(Path(member["checkout"]))
+        member["hooks"] = hooks_dir is not None and all(
+            plugin._marker_file(hooks_dir / name, MEMBER_HOOK_MARKER) for name in GIT_HOOK_NAMES
+        )
     return result
 
 
 def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     preview: List[str] = ["--dry-run"] if body.get("dry_run") else []
     if op in INSTALLER_OPS:
-        return plugin._run_installer(op, [INSTALLER_OPS[op], "--project", root, *preview])
+        hosts = [f"--{host}" for host in plugin._validate_hosts(body.get("hosts") or [])] if op == "hooks-init" else []
+        return plugin._run_installer(op, [INSTALLER_OPS[op], *hosts, "--project", root, *preview])
     if op == "members":
         return _members(plugin, root)
     if op == "member-repair":
@@ -69,7 +76,7 @@ def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
 
 
 def run(handler, body: dict) -> dict:
-    """POST /api/project/op ``{root, op, dry_run?, member?}``."""
+    """POST /api/project/op ``{root, op, dry_run?, member?, hosts?}``."""
     root, op = body.get("root"), body.get("op")
     if not isinstance(root, str) or root not in handler.watcher.projects:
         raise ValueError("root is not a watched project")

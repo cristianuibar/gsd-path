@@ -50,13 +50,21 @@ class Case(unittest.TestCase):
 
 class InstallerOpTests(Case):
     def test_each_op_runs_its_installer_flag_on_the_project(self):
-        for op, flag in (("hooks-init", "--hooks-init"), ("hooks-refresh", "--hooks-refresh"),
+        for op, flag in (("hooks-refresh", "--hooks-refresh"),
                          ("hooks-refresh-full", "--hooks-refresh-full"), ("runtime-restore", "--runtime-restore")):
             with self.subTest(op=op):
                 self.calls.clear()
                 result = self.run_op(op=op)
                 self.assertTrue(result["ok"], result)
                 self.assertEqual(self.calls, [[sys.executable, str(self.plugin.install_py), flag, "--project", self.root]])
+
+    def test_hooks_init_passes_the_chosen_hosts_to_the_installer(self):
+        self.run_op(op="hooks-init", hosts=["claude", "codex"])
+        self.assertEqual(self.helper_args(), [["--hooks-init", "--claude", "--codex", "--project", self.root]])
+        self.calls.clear()
+        with self.assertRaises(ValueError):
+            self.run_op(op="hooks-init", hosts=["--all"])
+        self.assertEqual(self.calls, [])
 
     def test_dry_run_adds_the_installer_preview_flag(self):
         self.run_op(op="hooks-refresh", dry_run=True)
@@ -112,7 +120,14 @@ class MemberTests(Case):
         row = result["members"][0]
         self.assertEqual((row["name"], row["checkout"], row["integration"]), ("api", self.member, "default"))
         self.assertEqual(row["marker"], {"current": True, "reason": None})
-        self.assertIn("hooks", row)
+        self.assertIs(row["hooks"], False)
+        hooks_dir = Path(self.member) / ".git" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        for name in ("pre-commit", "commit-msg", "pre-push"):
+            (hooks_dir / name).write_text("#!/bin/sh\n# gsd-path member guard: runs the coordinator's guard\n")
+        self.assertIs(self.run_op(op="members")["members"][0]["hooks"], True)
+        (hooks_dir / "pre-push").write_text("#!/bin/sh\n")
+        self.assertIs(self.run_op(op="members")["members"][0]["hooks"], False)
 
     def test_a_failed_validation_returns_the_helper_text_with_its_fix(self):
         text = f"error: member marker for api is missing or stale; run members.py repair --repo {self.root}\n"

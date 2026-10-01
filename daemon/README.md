@@ -145,11 +145,12 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   it is never zero.
 - `GET /api/hosts` — `{hosts: [{id, name, found, path, skills_root}]}`: each
   supported coding agent and whether its command is on this computer.
-- `POST /api/project/op` — `{root, op, dry_run?, member?}` for a watched
+- `POST /api/project/op` — `{root, op, dry_run?, member?, hosts?}` for a watched
   project. `op` is `hooks-init`, `hooks-refresh`, `hooks-refresh-full`,
   `runtime-restore`, `doctor`, `members`, `member-hooks`, or `member-repair`.
   Each runs one helper from the plugin source (`install.py` or `members.py`)
-  and returns its output; the daemon adds no rule of its own. A second
+  and returns its output; the daemon adds no rule of its own. `hooks-init`
+  passes `hosts` (host ids) to the installer, which needs at least one. A second
   operation while one runs returns 409.
 - `POST /api/env/list`, `/api/env/reveal`, `/api/env/save` — read and change
   one of a watched project's `.env`, `.env.local`, `.env.development`,
