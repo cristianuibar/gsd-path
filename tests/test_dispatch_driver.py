@@ -1605,5 +1605,17 @@ class DispatchDriverTests(unittest.TestCase):
 
 
 
+class DispatchPinnedRuntimeTests(unittest.TestCase):
+    def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "-B", "-m", "unittest", "-q",
+             "tests.test_dispatch_pinned_runtime_inprocess"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
