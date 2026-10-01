@@ -26,6 +26,8 @@ _PLUGIN_ENDPOINTS = (
     "/api/plugin/install",
     "/api/plugin/update",
     "/api/plugin/uninstall",
+    "/api/plugin/check",
+    "/api/plugin/release",
 )
 
 
@@ -988,6 +990,7 @@ class _Handler(BaseHTTPRequestHandler):
             payload = self._plugin_compact()
             try:
                 payload["hosts"] = self.plugin.detect_global()
+                payload["releases"] = self.plugin.releases()
                 roots = sorted(str(status.root) for status in self.watcher.projects.values())
                 payload["projects"] = [self.plugin.detect_project(root) for root in roots]
             except Exception as error:  # detection must never break the dashboard
@@ -1208,6 +1211,17 @@ class _Handler(BaseHTTPRequestHandler):
             result = manager.apply_plan(plan, confirm=True)
             result["plan"] = plan
             return 200, result
+        if path == "/api/plugin/check":
+            refresh = manager.refresh_source(ttl_hours=0)
+            return 200, {**manager.check_update(), "ok": refresh["refreshed"], "error": refresh["error"]}
+        if path == "/api/plugin/release":
+            version = body.get("version", "")
+            if version is not None and (not isinstance(version, str) or not version):
+                raise _BadRequest("version must be a release, or null to follow the latest release")
+            try:
+                return 200, manager.select_release(version)
+            except ValueError as error:
+                raise _BadRequest(str(error))
         raise _BadRequest("unknown plugin operation")
 
     def log_message(self, format, *args) -> None:  # noqa: A002 - stdlib signature

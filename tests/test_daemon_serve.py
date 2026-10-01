@@ -343,6 +343,7 @@ class PostOriginTests(unittest.TestCase):
     """Every POST route refuses cross-site pages, DNS rebinding, and non-JSON bodies."""
 
     ROUTES = ("/api/plugin/install", "/api/plugin/update", "/api/plugin/uninstall",
+              "/api/plugin/check", "/api/plugin/release",
               "/api/config/parents", "/api/path-config", "/api/refresh")
 
     def setUp(self) -> None:
