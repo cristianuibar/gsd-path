@@ -925,30 +925,29 @@ def closed_target_reason(targets):
     return None
 
 
-def enforce_pipeline_reentry(paths, working_directories):
-    reason = closed_target_reason((path, working_directories) for path in paths)
-    if reason:
-        deny(reason)
-    classified = pipeline_target_kinds((path, working_directories) for path in paths)
+def pipeline_product_phase_reason(classified):
+    """Why product writes are denied outside the routed build phase, or None when allowed."""
     if classified is None:
-        return
+        return None
     repo, state, kinds = classified
     for path, kind in kinds:
         if kind == "protected":
-            deny(f"{CONTROL_FILE_REASON} {path}")
-    kinds = [kind for _, kind in kinds]
-    if all(kind == "external" for kind in kinds):
-        return
+            return f"{CONTROL_FILE_REASON} {path}"
+    kind_values = [kind for _, kind in kinds]
+    if all(kind == "external" for kind in kind_values):
+        return None
+    if not any(kind == "product" for kind in kind_values):
+        return None
     try:
         status = project_status(repo)
     except (OSError, ValueError, json.JSONDecodeError):
-        deny(REENTRY_FAILURE_REASON)
+        return REENTRY_FAILURE_REASON
     route = status.get("route")
     state_data = status.get("state") if isinstance(status.get("state"), dict) else {}
     completion = status.get("completion")
     if (state_data.get("phase") == "shipped"
             and isinstance(completion, dict) and completion.get("status") == "verified"):
-        return
+        return None
     routed_build = (
         state_data.get("phase") == "build"
         and isinstance(route, dict)
@@ -956,18 +955,29 @@ def enforce_pipeline_reentry(paths, working_directories):
         and route.get("phase") == "build"
     )
     if routed_build:
-        return
-    if all(kind in {"external", "artifact"} for kind in kinds):
-        return
+        return None
+    if all(kind in {"external", "artifact"} for kind in kind_values):
+        return None
     phase = state_data.get("phase", "unknown")
     if isinstance(route, dict) and route.get("action") != "run-phase":
         next_step = f"{route.get('action', 'route')}: {route.get('reason', 'no reason')}"
     else:
         next_step = status.get("next_skill") or "gsd-path"
-    deny(
+    return (
         f"GSD Path is {phase}; direct product-file changes require the routed "
         f"build phase. Review {status.get('path', state)}; next: {next_step}"
     )
+
+
+def enforce_pipeline_reentry(paths, working_directories):
+    reason = closed_target_reason((path, working_directories) for path in paths)
+    if reason:
+        deny(reason)
+    reason = pipeline_product_phase_reason(
+        pipeline_target_kinds((path, working_directories) for path in paths)
+    )
+    if reason:
+        deny(reason)
 
 
 def in_archive(path):
@@ -1319,6 +1329,37 @@ def shell_write_targets(tokens, working_directories, assignments=None):
                     yield argument, directories
 
 
+def shell_write_needs_build_phase_gate(targets):
+    """Phase-gate shell product writes only on bound milestone branches in-tree."""
+    repo = repository_root()
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if branch.returncode or not STATUS_BRANCH.fullmatch(branch.stdout.strip()):
+        return False
+    for path, working_directories in targets:
+        for target in dict.fromkeys(target_paths(path, working_directories, repo)):
+            directory = (
+                target
+                if target.is_dir() and not is_link_like(target)
+                else target.parent
+            )
+            while not directory.exists() and directory != directory.parent:
+                directory = directory.parent
+            root = subprocess.run(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if root.returncode != 0 or Path(root.stdout.strip()) != repo:
+                return False
+    return True
+
+
 def protected_shell_write_reason(tokens, working_directories):
     assignments = shell_assignment_values(tokens)
     targets = []
@@ -1342,6 +1383,8 @@ def protected_shell_write_reason(tokens, working_directories):
     for target, kind in classified[2]:
         if kind == "protected":
             return f"{PROTECTED_SHELL_WRITE_REASON} {target}"
+    if shell_write_needs_build_phase_gate(targets):
+        return pipeline_product_phase_reason(classified)
     return None
 
 
