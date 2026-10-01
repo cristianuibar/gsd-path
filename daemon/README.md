@@ -169,8 +169,9 @@ Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 `Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
 except `/api/refresh` must also send `Content-Type: application/json`, or it
 returns 415. This blocks other web pages and DNS rebinding. `GET /api/config`,
-`GET /api/diagnostics`, and `GET /api/project-files` apply the same same-origin
-check and return 403 otherwise.
+`GET /api/stats`, `GET /api/hosts`, `GET /api/diagnostics`, and
+`GET /api/project-files` apply the same same-origin check and return 403
+otherwise.
 
 `serve --require-token` adds one more check. The daemon creates
 `~/.gsd-path/app/api-token` (readable by the user only) if it is missing, and

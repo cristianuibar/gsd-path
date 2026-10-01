@@ -1,12 +1,12 @@
 """Which coding agents (hosts) are installed on this computer.
 
 A host is found when its command is on PATH or in the folder its own installer
-uses. The commands are the ones the host runners in ``tests/hosts`` start.
+uses. The commands are the ones the host runners in ``tests/hosts`` start,
+except for Zed (see ``KNOWN``).
 """
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from typing import Callable, List, Optional
 
 from .plugin import HOSTS, PluginManager
