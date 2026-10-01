@@ -80,13 +80,14 @@ def write_config(handler, body: dict) -> dict:
         raise ValueError(f"unknown setting: {', '.join(unknown)}")
     checked = {key: CHECKS[key](key, value) for key, value in body.items()}
     watcher = handler.watcher
-    dataclasses.replace(watcher.config, **checked).save()
-    for key, value in checked.items():
-        setattr(watcher.config, key, value)
-    # The session index copied these two at start; give it the new values.
-    watcher.sessions.set_dirs(watcher.config.session_dirs)
-    watcher.sessions.prices = watcher.config.prices
-    handler.scan()
+    with handler.scan_lock:
+        dataclasses.replace(watcher.config, **checked).save()
+        for key, value in checked.items():
+            setattr(watcher.config, key, value)
+        # The session index copied these two at start; give it the new values.
+        watcher.sessions.set_dirs(watcher.config.session_dirs)
+        watcher.sessions.prices = watcher.config.prices
+    handler.scan(scan_sessions=False)
     return watcher.config.to_dict()
 
 

@@ -129,8 +129,10 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 - `POST /api/config` — a JSON object with any of those keys. Every value is
   checked first; one bad value or an unknown key returns 400 and changes
   nothing. Prices must be finite numbers. Valid changes are saved, then
-  apply to the running daemon and start a scan; a failed save returns 500 and
-  changes nothing. Usage from a removed session folder no longer counts. The
+  apply to the running daemon and start a project scan; a failed save returns
+  500 and changes nothing. The request does not read host session logs: the
+  next background poll reads them with the new folders and prices. Usage from
+  a removed session folder no longer counts. The
   answer is the full settings object.
 - `GET /api/diagnostics` — a support report: daemon and Python versions,
   platform, settings, project count, plugin state, and the last lines of each

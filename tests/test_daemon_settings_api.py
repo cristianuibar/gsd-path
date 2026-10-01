@@ -76,7 +76,25 @@ class ConfigRouteTests(Case):
         # The running session index uses the new folders and prices on the next scan.
         self.assertEqual(self.watcher.sessions.dirs, [str(self.sessions)])
         self.assertEqual(self.watcher.sessions.prices, changes["prices"])
-        self.assertEqual(self.scans, [True])
+        # The request scans projects only; the next background poll reads the session logs.
+        self.assertEqual(self.scans, [False])
+
+    def test_change_waits_for_a_scan_in_progress(self):
+        done = threading.Event()
+        answer = []
+
+        def post():
+            answer.append(self.request("POST", "/api/config", {"session_dirs": [str(self.sessions)]}))
+            done.set()
+
+        with self.server.RequestHandlerClass.scan_lock:  # a background poll holds this lock while it scans
+            threading.Thread(target=post, daemon=True).start()
+            self.assertFalse(done.wait(0.5))
+            self.assertEqual(self.watcher.sessions.dirs, [])
+            self.assertEqual(self.watcher.config.session_dirs, [])
+        self.assertTrue(done.wait(5))
+        self.assertEqual(answer[0][0], 200, answer)
+        self.assertEqual(self.watcher.sessions.dirs, [str(self.sessions)])
 
     def test_one_key_changes_only_that_key(self):
         before = self.watcher.config.to_dict()

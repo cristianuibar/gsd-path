@@ -1281,7 +1281,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                     append_event(event)
 
     handler = type("Handler", (_Handler,),
-                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan)})
+                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
+                    "scan_lock": scan_lock})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     stop = threading.Event()
     server.watcher_stop = stop  # callers may set() to end the poll loop
