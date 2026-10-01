@@ -1,6 +1,10 @@
 // Development only: lets `npm run dev` show every screen in a plain browser,
 // without the Rust shell. Pick a state with ?state=<name>. Never part of a build.
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { mockEnvironment } from "./mocks/environment";
+import { mockSettings } from "./mocks/settings";
+import { mockSkills } from "./mocks/skills";
+import { mockStats } from "./mocks/stats";
 import { status } from "./fixtures";
 import type { Launch, Shell } from "./shell";
 
@@ -75,10 +79,19 @@ function projectFiles(params: URLSearchParams) {
 mockIPC((command, args) => {
   if (command === "api") {
     if (query.has("offline")) throw new Error("connection refused");
-    const url = new URL((args as { path: string }).path, "http://daemon.invalid");
+    const { method, path, body } = args as { method: string; path: string; body: unknown };
+    const url = new URL(path, "http://daemon.invalid");
+    // Each later page owns its routes in src/mocks/<page>.ts.
+    for (const page of [mockSkills, mockStats, mockSettings, mockEnvironment]) {
+      const answer = page(method, url, body);
+      if (answer !== undefined) return answer;
+    }
     return url.pathname === "/api/project-files" ? projectFiles(url.searchParams) : API[url.pathname];
   }
   if (command === "open_url") return void window.open((args as { url: string }).url);
   if (command === "tray_action") return void console.log("tray_action", args);
+  if (command === "pick_folder") return "/Users/me/work";
+  if (command === "open_logs") return void console.log("open_logs");
+  if (command === "set_autostart") return { ...state, autostart: (args as { enabled: boolean }).enabled };
   return state; // shell_state, boot_command, use_port
 }, { shouldMockEvents: true });

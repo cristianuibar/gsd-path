@@ -48,7 +48,11 @@ export type Status = {
   generated_at: string | null;
   projects: Project[];
   daemon?: { poll_seconds?: number };
-  plugin?: { latest?: string | null; update_available?: boolean };
+  plugin?: {
+    latest?: string | null;
+    update_available?: boolean;
+    hosts?: Record<string, { installed: boolean; version: string | null }>;
+  };
 };
 
 export type Tone = "ok" | "warn" | "bad";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { boardRow, filterCounts, visibleProjects } from "./board";
+import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from "./board";
 import { asking, blocked, building, shipped, status } from "./fixtures";
+import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import { nameOf } from "./status";
 
 const NOW = Date.parse(status.generated_at!);
@@ -55,5 +56,60 @@ describe("boardRow", () => {
   });
   it("names the worktree next to the project folder", () => {
     expect(boardRow({ ...building, worktree_root: "/work/wt/a" }, NOW).path).toBe("/work/gsd-path · Worktree: /work/wt/a");
+  });
+});
+
+const setup = (over: Partial<ProjectSetup> = {}): ProjectSetup =>
+  ({ root: "/work/gsd-path", local_skills: [], runtime: true, contracts: true, hooks: true, runtime_version: "1.4.0", ...over });
+
+describe("setupPill", () => {
+  it("says Up to date for the latest runtime with guard hooks", () => {
+    expect(setupPill(setup(), "1.4.0")).toEqual({ label: "Up to date", tone: "ok" });
+  });
+  it("puts a runtime update before missing guards", () => {
+    expect(setupPill(setup({ runtime_version: "1.3.2", hooks: false }), "1.4.0")).toEqual({ label: "Runtime update", tone: "acc" });
+    expect(setupPill(setup({ runtime_version: null }), "1.4.0")).toEqual({ label: "Runtime update", tone: "acc" }); // an old runtime without a stamp
+  });
+  it("warns when the guard hooks are missing", () => {
+    expect(setupPill(setup({ hooks: false }), "1.4.0")).toEqual({ label: "No guards", tone: "warn" });
+  });
+  it("says when the project has no runtime", () => {
+    expect(setupPill(setup({ runtime: false, runtime_version: null }), "1.4.0")).toEqual({ label: "No runtime", tone: "warn" });
+  });
+  it("does not report an update when the latest release is not known", () => {
+    expect(setupPill(setup({ runtime_version: "1.3.2" }), null)).toEqual({ label: "Up to date", tone: "ok" });
+  });
+  it("shows nothing for a project the plugin status does not list", () => {
+    expect(setupPill(undefined, "1.4.0")).toBeNull();
+  });
+});
+
+describe("updateBanner", () => {
+  const hosts: HostInfo[] = [
+    { id: "codex", name: "Codex", found: true, path: null, skills_root: "/h/.agents/skills" },
+    { id: "claude", name: "Claude Code", found: true, path: null, skills_root: "/h/.claude/skills" },
+    { id: "zed", name: "Zed", found: true, path: null, skills_root: "/h/.agents/skills" },
+  ];
+  const plugin = (over: Partial<PluginStatus> = {}): PluginStatus => ({
+    latest: "1.4.0", update_available: true,
+    hosts: { codex: { installed: true, version: "1.3.2" }, zed: { installed: true, version: "1.3.2" }, claude: { installed: true, version: "1.4.0" } },
+    projects: [setup({ runtime_version: "1.3.2" }), setup({ root: "/work/atlas", hooks: false }), setup({ root: "/work/gone", runtime_version: "1.0.0" })],
+    ...over,
+  });
+  it("lists only the pending skills and runtime updates", () => {
+    expect(updateBanner(hosts, plugin(), status.projects)).toEqual({
+      count: 2, title: "2 updates available", text: "skills for Codex and Zed, runtime for gsd-path" });
+  });
+  it("counts one update in the singular", () => {
+    const one = plugin({ hosts: { claude: { installed: true, version: "1.4.0" } } });
+    expect(updateBanner(hosts, one, status.projects)).toEqual({ count: 1, title: "1 update available", text: "runtime for gsd-path" });
+  });
+  it("compares a runtime with the chosen release, not the latest one", () => {
+    const chosen = plugin({ hosts: {}, releases: { latest: "1.4.0", selected: "1.3.2", versions: ["1.4.0", "1.3.2"] } });
+    expect(updateBanner(hosts, chosen, status.projects)).toBeNull();
+  });
+  it("is hidden when nothing is pending or the status is not loaded", () => {
+    expect(updateBanner(hosts, plugin({ hosts: {}, projects: [setup()] }), status.projects)).toBeNull();
+    expect(updateBanner(hosts, null, status.projects)).toBeNull();
   });
 });

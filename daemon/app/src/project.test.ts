@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asking, blocked, building, shipped, status } from "./fixtures";
-import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "./project";
+import { doctorReport, facts, memberRows, milestoneRows, nowBox, phaseTrack, setupRows, usageTiles } from "./project";
+import type { ProjectSetup } from "./skills";
 
 const NOW = Date.parse(status.generated_at!);
 
@@ -98,5 +99,89 @@ describe("usageTiles", () => {
     const bare = usageTiles({ ...building, spend: { turns: 3, cost: null, priced_turns: 0, timed_turns: 0 } })!;
     expect(Object.fromEntries(bare)).toMatchObject({
       Cost: "—", Turns: "3", "Cache hit": "—", "Agent time": "—", "Cost / turn": "—", "Time / turn": "—" });
+  });
+});
+
+const setup = (over: Partial<ProjectSetup> = {}): ProjectSetup =>
+  ({ root: "/work/gsd-path", local_skills: [], runtime: true, contracts: true, hooks: true, runtime_version: "1.4.0", ...over });
+const NAMES = { claude: "Claude Code", codex: "Codex" };
+const row = (rows: ReturnType<typeof setupRows>, key: string) => rows.find((item) => item.key === key)!;
+
+describe("setupRows", () => {
+  it("lists runtime, guard hooks, skills, health check and environment", () => {
+    expect(setupRows(setup(), "1.4.0", null, NAMES)).toEqual([
+      { key: "runtime", label: "Runtime", value: "1.4.0", sub: "Guard hooks are kept on update", ok: true, action: null },
+      { key: "hooks", label: "Guard hooks", value: "Installed", sub: "pre-commit, commit-msg, pre-push", ok: false,
+        action: { label: "Refresh", primary: false, run: "hooks-refresh" } },
+      { key: "skills", label: "Skills", value: "Global only", sub: "Agents read the shared install. No project copies.", ok: false, action: null },
+      { key: "doctor", label: "Health check", value: "Not run yet", sub: "Read-only. It changes nothing.", ok: false,
+        action: { label: "Run", primary: false, run: "doctor" } },
+      { key: "env", label: "Environment", value: ".env files", sub: "Variables for this project.", ok: false,
+        action: { label: "Edit…", primary: false, run: "env" } },
+    ]);
+  });
+  it("offers the runtime update when a newer release exists", () => {
+    expect(row(setupRows(setup({ runtime_version: "1.3.2" }), "1.4.0", null, NAMES), "runtime")).toEqual({
+      key: "runtime", label: "Runtime", value: "1.3.2", sub: "Newer runtime available", ok: false,
+      action: { label: "Update to 1.4.0", primary: true, run: "update" } });
+  });
+  it("offers the update for a runtime without a version stamp", () => {
+    expect(row(setupRows(setup({ runtime_version: null }), "1.4.0", null, NAMES), "runtime")).toMatchObject({
+      value: "No version stamp", action: { label: "Update to 1.4.0", run: "update" } });
+  });
+  it("offers Restore when the runtime files are missing, and nothing when no runtime was installed", () => {
+    expect(row(setupRows(setup({ runtime: false }), "1.4.0", null, NAMES), "runtime")).toMatchObject({
+      value: "1.4.0", sub: "The runtime files are missing.", ok: false, action: { label: "Restore", run: "runtime-restore" } });
+    expect(row(setupRows(setup({ runtime: false, runtime_version: null }), "1.4.0", null, NAMES), "runtime")).toMatchObject({
+      value: "Not installed", action: null, ok: false });
+  });
+  it("offers Add guards when the guard hooks are missing", () => {
+    expect(row(setupRows(setup({ hooks: false }), "1.4.0", null, NAMES), "hooks")).toMatchObject({
+      value: "None", sub: "Edits to archived work and unapproved ship commits are not blocked.",
+      action: { label: "Add guards", primary: true, run: "hooks-init" } });
+  });
+  it("names the agents with skills inside the project", () => {
+    expect(row(setupRows(setup({ local_skills: ["claude", "codex", "kiro"] }), "1.4.0", null, NAMES), "skills")).toMatchObject({
+      value: "Claude Code, Codex, kiro", sub: "Project copies in this repository." });
+  });
+  it("shows the health check result and offers to run it again", () => {
+    expect(row(setupRows(setup(), "1.4.0", { ok: true, stdout_tail: "note: fine", error: null }, NAMES), "doctor")).toMatchObject({
+      value: "Passed", action: { label: "Run again", run: "doctor" } });
+    expect(row(setupRows(setup(), "1.4.0", { ok: false, stdout_tail: "", error: "project: no guard" }, NAMES), "doctor").value).toBe("Findings");
+  });
+  it("says why the rows are missing when the plugin status does not list the project", () => {
+    expect(setupRows(undefined, "1.4.0", null, NAMES).map((item) => item.key)).toEqual(["doctor", "env"]);
+  });
+});
+
+describe("doctorReport", () => {
+  it("splits notes, other lines and findings", () => {
+    expect(doctorReport({ ok: false, stdout_tail: "note: claude ok\nchecked 3 targets\n", error: "project: AGENTS.md block is stale\nproject: no guard" })).toEqual({
+      ok: false, summary: "Findings",
+      lines: [{ kind: "note", text: "claude ok" }, { kind: "line", text: "checked 3 targets" },
+        { kind: "error", text: "project: AGENTS.md block is stale" }, { kind: "error", text: "project: no guard" }],
+    });
+  });
+  it("passes without findings", () => {
+    expect(doctorReport({ ok: true, stdout_tail: "note: all good", error: null })).toEqual({
+      ok: true, summary: "Passed", lines: [{ kind: "note", text: "all good" }] });
+  });
+});
+
+describe("memberRows", () => {
+  const member = (name: string, current: boolean, hooks: boolean, reason: string | null = null) => ({
+    name, checkout: "/work/" + name, remote: "git@github.com:x/" + name + ".git", integration: "pull-request", marker: { current, reason }, hooks });
+  it("shows marker and hooks pills and the action each member needs", () => {
+    expect(memberRows([member("api", true, true), member("web", false, true, "coordinator moved"), member("worker", true, false)], ["/work/api"])).toEqual([
+      { name: "api", checkout: "/work/api", watched: true, integration: "pull-request", reason: null, actions: [],
+        marker: { label: "Marker ok", tone: "ok" }, hooks: { label: "Member hooks installed", tone: "ok" } },
+      { name: "web", checkout: "/work/web", watched: false, integration: "pull-request", reason: "coordinator moved", actions: ["repair"],
+        marker: { label: "Marker stale", tone: "bad" }, hooks: { label: "Member hooks installed", tone: "ok" } },
+      { name: "worker", checkout: "/work/worker", watched: false, integration: "pull-request", reason: null, actions: ["hooks"],
+        marker: { label: "Marker ok", tone: "ok" }, hooks: { label: "No member hooks", tone: "warn" } },
+    ]);
+  });
+  it("offers both actions when the marker is stale and the hooks are missing", () => {
+    expect(memberRows([member("api", false, false)], [])[0].actions).toEqual(["repair", "hooks"]);
   });
 });

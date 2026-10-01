@@ -2,11 +2,13 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { facts, milestoneRows, nowBox, phaseTrack, usageTiles } from "../project";
-import { filesHash } from "../route";
+import { filesHash, statsHash } from "../route";
 import { api } from "../shell";
 import { DASH, duration, healthTone, int, money, nameOf, shortDate, shortTime, tokens } from "../status";
 import type { Project } from "../status";
 import { Fold, Table } from "../ui";
+import type { usePlugin } from "../skillsApi";
+import { SetupCard } from "./SetupCard";
 
 type Row = Record<string, unknown>;
 type Records = { verify_records: Row[]; usage_records: Row[]; turns: Row[]; activity: Row[]; sources: Row[] };
@@ -29,7 +31,7 @@ function RecordTable({ rows, columns }: { rows: Row[] | undefined; columns: [str
   return <Table head={columns.map(([, label]) => label)} rows={rows.map((row) => columns.map(([key]) => cell(row[key])))} />;
 }
 
-export function ProjectPage({ project: p, now, stamp }: { project: Project; now: number; stamp: string | null }) {
+export function ProjectPage({ project: p, now, stamp, skills }: { project: Project; now: number; stamp: string | null; skills: ReturnType<typeof usePlugin> }) {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [records, setRecords] = useState<{ data?: Records; error?: string; busy?: boolean; at?: string }>({});
 
@@ -148,9 +150,11 @@ export function ProjectPage({ project: p, now, stamp }: { project: Project; now:
         </section>
 
         <section>
+          <SetupCard project={p} skills={skills}>
           <h2>Usage</h2>
-          {!tiles || !sp ? <p className="note">No host session logs matched this project yet.</p> : <>
+          {!tiles || !sp ? <p className="note">No host session logs matched this project yet. <a href={statsHash(p.root)}>See charts ›</a></p> : <>
             <dl className="tiles">{tiles.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
+            <a className="see-charts" href={statsHash(p.root)}>See charts ›</a>
             <h2>Models</h2>
             <Table head={["Model", "Host", "Turns", "Tokens", "Cost"]} num={[2, 3, 4]} rows={(sp.models ?? []).map((m) => [
               <span className="mono">{m.model}</span>, m.host, int(m.turns), tokens(m.tokens), money(m.cost)])} />
@@ -176,6 +180,7 @@ export function ProjectPage({ project: p, now, stamp }: { project: Project; now:
               <span className="mono">{shortDate(event.at)}</span>, event.type, event.detail])} />
           ) : <p className="note">No recorded changes yet.</p>}
           {p.lesson && <><h2>Latest lesson</h2><p className="vision">{p.lesson}</p></>}
+          </SetupCard>
         </section>
       </div>
 

@@ -1,21 +1,34 @@
 // The Projects board: one row per project, with filters and search.
 import { useState } from "react";
-import { boardRow, filterCounts, visibleProjects } from "../board";
-import { projectHash } from "../route";
+import { boardRow, filterCounts, setupPill, updateBanner, visibleProjects } from "../board";
+import { projectHash, settingsHash } from "../route";
+import { targetVersion } from "../skills";
+import type { usePlugin } from "../skillsApi";
+import { DASH } from "../status";
 import type { Status } from "../status";
 import { Cells } from "../ui";
+import "./skills.css";
 
-export function Board({ status, offline, now }: { status: Status | null; offline: boolean; now: number }) {
+export function Board({ status, offline, now, skills }: { status: Status | null; offline: boolean; now: number; skills: ReturnType<typeof usePlugin> }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const projects = status?.projects ?? [];
   const shown = visibleProjects(projects, filter, query);
+  const { plugin, hosts, error: setupError } = skills;
+  const banner = updateBanner(hosts, plugin, projects);
+  const setupOf = (root: string) => setupPill(plugin?.projects.find((item) => item.root === root), targetVersion(plugin));
   const empty = !status ? (offline ? "Cannot load projects. Start the monitor." : "Loading projects…")
     : !projects.length ? "No projects yet. Projects in your watched folders appear here."
     : "No projects match this filter.";
 
   return (
     <main className="page" aria-label="Projects">
+      {banner && (
+        <div className="update-banner" role="status">
+          <b>{banner.title}</b><span>{banner.text}</span>
+          <a className="btn small" href={settingsHash("updates")}>Review updates</a>
+        </div>
+      )}
       <div className="board-head">
         <h1 className="title">Projects</h1>
         <p>What shipped. Where things stand. What’s ahead.</p>
@@ -36,11 +49,11 @@ export function Board({ status, offline, now }: { status: Status | null; offline
         </label>
       </div>
       {shown.length ? (
-        <div className="scroll-x"><div className="board">
+        <div className="scroll-x"><div className="board with-setup">
           <div className="board-th">
-            <span>Project</span><span>Current milestone</span><span>Status</span><span className="num">Tasks</span><span className="num">Usage</span>
+            <span>Project</span><span>Current milestone</span><span>Status</span><span className="num">Tasks</span><span className="num">Usage</span><span>Setup</span>
           </div>
-          {shown.map((project) => boardRow(project, now)).map((row) => (
+          {shown.map((project) => ({ ...boardRow(project, now), setup: setupOf(project.root) })).map((row) => (
             <div key={row.root} className="board-row" onClick={() => { location.hash = projectHash(row.root); }}>
               <div>
                 <a className="pname" href={projectHash(row.root)}><i className={`dot small ${row.tone}`} />{row.name}</a>
@@ -57,6 +70,10 @@ export function Board({ status, offline, now }: { status: Status | null; offline
               </div>
               <div className="num">{row.tasks}</div>
               <div className="num">{row.cost}<div className="meta">{row.turns}</div></div>
+              <div>
+                {row.setup ? <span className={`pill ${row.setup.tone}`}>{row.setup.label}</span>
+                  : <span className="meta" title={setupError ?? undefined}>{plugin ? "Not reported" : setupError ? "Not available" : DASH}</span>}
+              </div>
             </div>
           ))}
         </div></div>
