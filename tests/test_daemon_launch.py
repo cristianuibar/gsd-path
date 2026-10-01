@@ -1,6 +1,8 @@
 import json
 import os
+import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -230,6 +232,28 @@ class VenvTests(LaunchCase):
         self.assertTrue(has_code)
         self.assertFalse(target.exists(), "the build copy was not removed")
         self.assertEqual(installer.package_dir, DAEMON)
+
+    def test_build_copy_of_a_bundle_without_write_bits_is_writable(self):
+        bundle = Path(self.tmp.name) / "bundle"
+        shutil.copytree(DAEMON, bundle / "daemon", ignore=shutil.ignore_patterns("__pycache__"))
+        paths = [bundle / "daemon", *(bundle / "daemon").rglob("*")]
+        for path in paths:
+            path.chmod(path.stat().st_mode & ~0o222)
+        self.addCleanup(lambda: [path.chmod(0o755) for path in paths])
+        locked = []
+
+        def respond(cmd):
+            if "pip" in Path(cmd[0]).name and cmd[1:3] == ["install", "--upgrade"]:
+                target = Path(cmd[-1])
+                # pip must be able to delete its own copy of this tree.
+                locked.extend(p for p in [target, *target.rglob("*")]
+                              if not p.stat().st_mode & stat.S_IWUSR)
+                locked.append(None)
+            return installed(None)(cmd)
+        installer = self.installer(ScriptRunner(respond))
+        installer.repo_root = bundle
+        self.assertEqual(ensure_venv(installer), __version__)
+        self.assertEqual(locked, [None])
 
     def test_install_failure_is_a_blocking_problem(self):
         def respond(cmd):

@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -219,6 +220,9 @@ def ensure_venv(installer: Installer) -> str:
                         ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("pyproject.toml", "README.md"):
             shutil.copy2(source / name, copy / name)
+        # A bundle without write bits gives a copy that pip cannot delete from its build directory.
+        for path in (copy, *copy.rglob("*")):
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
         installer.repo_root = Path(work)
         try:
             code = installer.install(no_tray=True, no_autostart=True)
