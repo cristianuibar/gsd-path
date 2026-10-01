@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -12,6 +13,8 @@ from unittest import mock
 from scripts import isolation, pipeline_state
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import _common
 MEMBERS = ROOT / "scripts" / "members.py"
 GIT_GUARD = ROOT / "scripts" / "git_guard.py"
 STATE = (
@@ -194,6 +197,25 @@ class MemberLandingTests(unittest.TestCase):
                          ["T002: Add config", "T001: Change app"])
         self.assertFalse(self.journal().exists())
         self.assertFalse(self.journal().with_name("T002.json").exists())
+
+    def test_member_landing_lock_waits_past_ten_seconds(self) -> None:
+        lock_path = self.journal().with_name(".lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        ready = threading.Event()
+
+        def holder() -> None:
+            with _common.exclusive_lock(lock_path):
+                ready.set()
+                time.sleep(12)
+
+        thread = threading.Thread(target=holder)
+        thread.start()
+        self.assertTrue(ready.wait(5))
+        start = time.monotonic()
+        with isolation._member_landing_lock(self.coordinator):
+            waited = time.monotonic() - start
+        thread.join(20)
+        self.assertGreaterEqual(waited, 11.0)
 
     def test_undeclared_member_path_is_refused_before_any_ref_moves(self) -> None:
         self.edit()
