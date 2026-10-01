@@ -1,0 +1,27 @@
+{
+  "name": "gsd-path-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OpenGSD Path desktop app: a Tauri shell and React dashboard for the gsd-path daemon",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "typescript": "^5",
+    "vite": "^8",
+    "vitest": "^5"
+  }
+}

@@ -143,6 +143,14 @@ class LaunchCase(unittest.TestCase):
 
 
 class ProbeTests(LaunchCase):
+    def test_program_name_is_the_base_name_also_for_a_path_with_a_space(self):
+        answers = {"darwin": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n",
+                   "linux": "node\n", "win32": "node\r\n"}
+        names = {platform: launch_module.process_name(
+                     7, self.installer(ScriptRunner(lambda cmd, out=out: (0, out)), platform=platform, retired=False, fake_venv=False))
+                 for platform, out in answers.items()}
+        self.assertEqual(names, {"darwin": "Google Chrome", "linux": "node", "win32": "node"})
+
     def test_free_port(self):
         self.assertEqual(probe_port(free_port()), {"state": "free"})
 
@@ -180,7 +188,8 @@ class RunningDaemonTests(LaunchCase):
         with mock.patch.object(launch_module, "__version__", "9.0.0"):
             result = launch(port, self.installer(runner))
         self.assertEqual(result["action"], "start", result["problems"])
-        self.assertEqual(result["serve_argv"][-2:], ["--port", str(port)])
+        self.assertEqual(result["serve_argv"][-3:], ["--port", str(port), "--require-token"])
+        self.assertEqual(result["replaced"], __version__)
         self.assertIsNotNone(old.wait(timeout=5))
         self.assertEqual(probe_port(port), {"state": "free"})
 
@@ -192,6 +201,12 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, self.installer(runner))
         self.assertEqual(result["action"], "setup")
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("port", True)])
+        detail = result["problems"][0]["detail"]
+        self.assertEqual(detail["owner"], "daemon")  # it answers as a daemon, so the app shows its fix text
+        self.assertEqual(detail["pid"], impostor.pid)
+        self.assertNotIn("/", detail["name"])  # the program's name, not its path or arguments
+        self.assertIn("python", detail["name"].lower())
+        self.assertNotIn("command", detail)  # a command line can hold secrets; the app gets only the name
         self.assertIsNone(impostor.poll())
 
     def test_other_service_on_port_blocks_without_install(self):
@@ -200,6 +215,7 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, self.installer(runner, fake_venv=False))
         self.assertEqual(result["action"], "setup")
         self.assertEqual([p["kind"] for p in result["problems"]], ["port"])
+        self.assertEqual(result["problems"][0]["detail"]["owner"], "other")
         self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
     def test_free_port_starts_daemon(self):
@@ -209,7 +225,10 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, installer)
         self.assertEqual(result["action"], "start")
         self.assertEqual(result["serve_argv"],
-                         [str(installer.venv_python), "-m", "gsd_daemon", "serve", "--port", str(port)])
+                         [str(installer.venv_python), "-m", "gsd_daemon", "serve", "--port", str(port),
+                          "--require-token"])
+        self.assertIsNone(result["replaced"])
+        self.assertEqual(result["legacy"], [])
 
 
 class VenvTests(LaunchCase):
@@ -398,6 +417,8 @@ class LegacyAutostartTests(LaunchCase):
         self.assertFalse(result["autostart_ok"])
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]],
                          [("autostart", False)])
+        self.assertEqual(result["legacy"], [
+            {"name": "launch-agent", "removed": False, "fix": result["problems"][0]["fix"]}])
         self.assertFalse((installer.gsd_home / RETIRED_MARKER).exists())
 
     @NEEDS_UID
@@ -457,8 +478,12 @@ class LegacyAutostartTests(LaunchCase):
         installer = self.installer(runner, platform="win32", retired=False)
         installer.shortcut_path.parent.mkdir(parents=True)
         installer.shortcut_path.write_text("lnk")
-        self.assertEqual(launch_module.retire_legacy(installer), [])
+        result = launch(free_port(), installer)
         self.assertFalse(installer.shortcut_path.exists())
+        self.assertEqual([(row["name"], row["removed"]) for row in result["legacy"]], [("startup-shortcut", True)])
+        self.assertTrue(result["autostart_ok"])
+        # The next launch has nothing to report.
+        self.assertEqual(launch(free_port(), installer)["legacy"], [])
 
 
 class CliTests(LaunchCase):

@@ -1,0 +1,38 @@
+// The Projects board: filters, search and one row per project.
+import { ago, DASH, healthTone, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
+import type { Cell, Project, Tone } from "./status";
+
+const FILTERS = [["all", "All"], ["active", "In progress"], ["blocked", "Blocked"], ["shipped", "Shipped"]];
+
+const inFilter = (p: Project, filter: string) => filter === "all" || stateOf(p) === filter;
+
+/** The filter buttons with their counts. Unverified shows only when a project is in that state. */
+export function filterCounts(projects: Project[]): { key: string; label: string; count: number }[] {
+  const count = (key: string) => projects.filter((p) => inFilter(p, key)).length;
+  const all = [...FILTERS, ["unverified", "Unverified"]].map(([key, label]) => ({ key, label, count: count(key) }));
+  return all.filter((item) => item.key !== "unverified" || item.count > 0);
+}
+
+/** The projects a filter and a search text leave, in board order. */
+export function visibleProjects(projects: Project[], filter: string, query: string): Project[] {
+  const text = query.trim().toLowerCase();
+  return sortProjects(projects).filter((p) => inFilter(p, filter) &&
+    [p.repository, p.project, p.root, p.milestone].filter(Boolean).join(" ").toLowerCase().includes(text));
+}
+
+export type BoardRow = {
+  root: string; name: string; tone: Tone; path: string; number: string; slug: string; cells: Cell[]; phase: string;
+  state: string; label: string; note: string; ago: string; tasks: string; cost: string; turns: string;
+};
+
+export function boardRow(p: Project, now: number): BoardRow {
+  const { cur } = milestoneStack(p);
+  return {
+    root: p.root, name: nameOf(p), tone: healthTone(p),
+    path: (p.project_root || p.root) + (p.worktree_root ? ` · Worktree: ${p.worktree_root}` : ""),
+    number: cur.number, slug: cur.slug, cells: phaseCells(p), phase: p.phase || "No phase recorded",
+    state: stateOf(p), label: stateLabel(p), note: reasons(p), ago: ago(p.last_activity_iso, now),
+    tasks: p.tasks_total ? `${p.tasks_done ?? 0}/${p.tasks_total}` : DASH,
+    ...spendCell(p.spend),
+  };
+}
