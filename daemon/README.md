@@ -217,7 +217,8 @@ project's shipping mode, future review-panel preference, and model/effort choice
 Sources and lock reasons are shown. Save changes individually; Reset removes that
 scope's override. Watched folders and appearance retain their existing controls.
 
-User defaults require the daemon's plugin source checkout; project settings need
+User defaults require the daemon's plugin source (see
+[Plugin lifecycle](#plugin-lifecycle)) to be present; project settings need
 an updated selected runtime. Missing support shows an update message. Settings
 never fetch, install, or upgrade automatically.
 
@@ -277,8 +278,8 @@ gsd-path-daemon plugin update [--global | --project PATH] [--dry-run]
 gsd-path-daemon plugin uninstall (--global [--host H ...] | --project PATH) [--dry-run] [--yes]
 ```
 
-`plugin status` and the update check work offline from runtime declarations, legacy VERSION stamps, and
-the cache — they never clone. Uninstall without `--yes` prints the removal
+`plugin status` and the `/status` update state work offline from runtime declarations, legacy VERSION stamps, and
+the cache — they never read the registry or clone. Uninstall without `--yes` prints the removal
 plan and stops; `--yes` is required to apply anything.
 
 **API** (all POST bodies are JSON; operations run in a worker thread under
@@ -287,7 +288,7 @@ one global op-lock — a second concurrent operation gets
 
 - `GET /status` — now includes a top-level `plugin` key
   (`{latest, update_available, hosts}`) built cheaply from VERSION probes
-  and the cache only — no git fetch.
+  and the cache only — no registry read, no git fetch.
 - `GET /api/plugin/status` — full detection: global hosts plus
   `projects: [...]` for every watched root. Each project's `runtime_version`
   comes from its runtime declaration, falling back to legacy
@@ -342,7 +343,7 @@ installer.
 
 Top level: `schema` (`gsd-path-daemon/status/v1`), `generated_at`,
 `projects`, and `plugin` (`{latest, update_available, hosts}` — cheap
-VERSION-stamp probes plus the update-check cache, never a git fetch; see
+VERSION-stamp probes plus the update-check cache, never a source refresh; see
 "Plugin lifecycle"). Each project object carries (keys are stable and additive):
 
 - Identity/state: `root` (discovered project path), `project` (project state name),
