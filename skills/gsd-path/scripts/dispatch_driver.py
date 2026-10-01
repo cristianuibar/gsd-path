@@ -657,13 +657,11 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         member = str(state["member"])
         landed = isolation.land_member(primary, member, task_id, str(state["title"]),
                                        str(state["contract_file"]), base, str(state["member_base"]))
-        append_log(task_path, verify_log)
-        landing = str(landed["landing"])
-        # Only a landing whose parent is the member base proves the verified member tree.
-        ledger = isolation.git_output(worktree, "rev-parse", f"{landing}^") == str(state["member_base"])
         if ledger:
             build_state.verify_record(str(primary), command, landing, "pass", execution=execution, member=member)
-        isolation.retire_member_task(primary, member, task_id)
+        coordinator_task = primary / str(state.get("contract_file") or state["task_file"])
+        append_log(coordinator_task, verify_log)
+        isolation.retire_member_task(primary, member, task_id, force=True)
         return {"task": task_id, "commit": str(landed["commit"]), "mode": "member",
                 "landing": landing, "verify": execution, "ledger": ledger}
     landed = isolation.land(primary, worktree, base, task_id, str(state["title"]), task_file,
