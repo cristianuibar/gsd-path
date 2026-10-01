@@ -43,6 +43,13 @@ class DetectTests(unittest.TestCase):
         self.assertEqual((rows["grok"]["found"], rows["grok"]["path"]), (True, str(binary)))
         self.assertFalse(rows["kimi"]["found"])
 
+    def test_a_host_this_table_does_not_know_is_still_listed(self):
+        from unittest import mock
+        with mock.patch.object(hosts, "HOSTS", ("newhost",)), \
+                mock.patch.object(self.plugin, "global_root", return_value=self.home / ".newhost" / "skills"):
+            rows = hosts.detect(self.plugin, which={"newhost": "/bin/newhost"}.get)
+        self.assertEqual([(row["id"], row["name"], row["found"]) for row in rows], [("newhost", "Newhost", True)])
+
     def test_a_skills_folder_alone_does_not_mean_the_host_is_installed(self):
         (self.home / ".claude" / "skills").mkdir(parents=True)
         self.assertFalse(self.detect()["claude"]["found"])

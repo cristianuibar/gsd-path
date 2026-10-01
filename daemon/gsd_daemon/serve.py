@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from . import __version__
-from . import settings_api, stats
+from . import env_files, hosts, project_ops, settings_api, stats
 from .history import append_event, resolve_history_path
 from .model import aggregate
 from .plugin import OP_LOCK, PluginManager
@@ -58,9 +58,15 @@ _JSON_GET = {
     "/api/config": settings_api.read_config,
     "/api/diagnostics": settings_api.diagnostics,
     "/api/stats": stats.route,
+    "/api/hosts": lambda handler, _body: {"hosts": hosts.detect(handler.plugin)},
 }
 _JSON_POST = {
     "/api/config": settings_api.write_config,
+    "/api/project/op": project_ops.run,
+    # Env content has no GET route: every env request needs the write token.
+    "/api/env/list": env_files.list_route,
+    "/api/env/reveal": env_files.reveal_route,
+    "/api/env/save": env_files.save_route,
 }
 
 
@@ -1135,7 +1141,8 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError as error:
             code, payload = 400, {"error": str(error)}
         except Exception as error:
-            code, payload = 500, {"error": str(error)}
+            # A route names its own refusal code (403 for no token, 409 for a busy daemon).
+            code, payload = getattr(error, "status", 500), {"error": str(error)}
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
 
     def _same_origin(self) -> bool:

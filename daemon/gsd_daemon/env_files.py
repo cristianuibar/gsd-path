@@ -155,3 +155,36 @@ def save(root, name: str, changes, dry_run: bool = False) -> dict:
             pass
         raise
     return {"written": True, "diff": diff}
+
+
+# -- routes ---------------------------------------------------------------------
+
+class Refused(Exception):
+    status = 403
+
+
+def _project(handler, body: dict) -> str:
+    # Env content leaves only a daemon whose writes need the token (the app's own daemon).
+    if not handler.token:
+        raise Refused("Environment editing needs the OpenGSD Path app. "
+                      "Restart the monitor from the app, then try again.")
+    root = body.get("root")
+    if not isinstance(root, str) or root not in handler.watcher.projects:
+        raise ValueError("root is not a watched project")
+    return root
+
+
+def list_route(handler, body: dict) -> dict:
+    return list_file(_project(handler, body), body.get("file"))
+
+
+def reveal_route(handler, body: dict) -> dict:
+    root = _project(handler, body)
+    name = body.get("name")
+    if not isinstance(name, str):
+        raise ValueError("name is required")
+    return {"value": reveal(root, body.get("file"), name)}
+
+
+def save_route(handler, body: dict) -> dict:
+    return save(_project(handler, body), body.get("file"), body.get("changes"), dry_run=bool(body.get("dry_run")))

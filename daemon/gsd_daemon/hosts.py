@@ -24,13 +24,15 @@ KNOWN = {
     "zed": ("Zed", ("zed",), ()),
     "kiro": ("Kiro", ("kiro-cli", "kiro"), ()),
     "kimi": ("Kimi Code", ("kimi",), (".kimi-code/bin/kimi",)),
+    "muse": ("Muse Code", ("muse",), ()),
 }
 
 
 def detect(plugin: PluginManager, which: Callable[[str], Optional[str]] = shutil.which) -> List[dict]:
     rows = []
     for host in HOSTS:
-        name, commands, places = KNOWN[host]
+        # A host added to the plugin before this table: its id is its name and its command.
+        name, commands, places = KNOWN.get(host, (host.capitalize(), (host,), ()))
         path = next((found for found in map(which, commands) if found), None)
         if path is None:
             path = next((str(place) for place in (plugin.user_home / item for item in places) if place.exists()), None)
