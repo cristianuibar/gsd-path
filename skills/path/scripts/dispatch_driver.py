@@ -470,11 +470,10 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
                          json.dumps(execution, indent=2, sort_keys=True) + "\n")
     execution["evidence"] = str(evidence_dir / "verify.json")
     output = "\n".join(f"  {line}" for line in tail(execution["stdout"] + execution["stderr"]).splitlines())
-    verify_log = (f"- {now()[:10]} — orchestrator Verify ({location}): "
-                  f"{'pass' if passed else 'fail'}, exit {execution['exit_code']}"
-                  + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
+    append_log(task_path, f"- {now()[:10]} — orchestrator Verify ({location}): "
+                          f"{'pass' if passed else 'fail'}, exit {execution['exit_code']}"
+                          + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
     if not passed:
-        append_log(task_path, verify_log)
         if state["mode"] == "parallel":
             isolation.deactivate_task(worktree, task_id, str(state["task_branch"]))
         elif state["mode"] == "member":
@@ -485,17 +484,15 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         landed = isolation.land_member(primary, member, task_id, str(state["title"]),
                                        str(state["contract_file"]), base, str(state["member_base"]))
         landing = str(landed["landing"])
+        # Only a landing whose parent is the member base proves the verified member tree.
         ledger = isolation.git_output(worktree, "rev-parse", f"{landing}^") == str(state["member_base"])
         if ledger:
             build_state.verify_record(str(primary), command, landing, "pass", execution=execution, member=member)
-        coordinator_task = primary / str(state.get("contract_file") or state["task_file"])
-        append_log(coordinator_task, verify_log)
-        isolation.retire_member_task(primary, member, task_id, force=True)
+        isolation.retire_member_task(primary, member, task_id)
         return {"task": task_id, "commit": str(landed["commit"]), "mode": "member",
                 "landing": landing, "verify": execution, "ledger": ledger}
     landed = isolation.land(primary, worktree, base, task_id, str(state["title"]), task_file,
                             list(state["files"]))
-    append_log(task_path, verify_log)
     commit = str(landed["commit"])
     # Only a landing whose parent is the recorded base proves the verified tree.
     ledger = isolation.git_output(primary, "rev-parse", f"{commit}^") == base
