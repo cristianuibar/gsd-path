@@ -139,6 +139,10 @@ class ServeTests(unittest.TestCase):
         payload = json.loads(body)
         self.assertEqual(payload["schema"], "gsd-path-daemon/status/v1")
         self.assertIn("generated_at", payload)
+        # The app identifies and compares a running daemon by these two fields.
+        from gsd_daemon import __version__
+        self.assertEqual(payload["daemon"]["version"], __version__)
+        self.assertEqual(payload["daemon"]["pid"], os.getpid())
         self.assertEqual(len(payload["projects"]), 1)
         project = payload["projects"][0]
         for key in ("project", "milestone", "phase", "status", "branch", "git",
