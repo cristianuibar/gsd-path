@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,6 +69,9 @@ LOG_NAME = "plugin.log"
 STDOUT_TAIL_LINES = 40
 
 Runner = Callable[..., Tuple[int, str, str]]
+
+# One installer or helper at a time, across every route: two must never write the same files together.
+OP_LOCK = threading.Lock()
 
 
 def _default_runner(argv: Sequence[str], cwd: Optional[str] = None) -> Tuple[int, str, str]:

@@ -15,7 +15,7 @@ from . import __version__
 from . import settings_api, stats
 from .history import append_event, resolve_history_path
 from .model import aggregate
-from .plugin import PluginManager
+from .plugin import OP_LOCK, PluginManager
 from .path_settings import configure
 from .project_files import FileAccessError, request_files
 from .project_data import project_records
@@ -26,7 +26,7 @@ from .watcher import Watcher
 
 DEFAULT_PORT = 8765
 
-_PLUGIN_OP_LOCK = threading.Lock()
+_PLUGIN_OP_LOCK = OP_LOCK
 _PLUGIN_ENDPOINTS = (
     "/api/plugin/install",
     "/api/plugin/update",
