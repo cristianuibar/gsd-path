@@ -428,10 +428,14 @@ class PluginManager:
     def releases(self) -> dict:
         """The published releases, newest first, and the chosen one (None follows latest)."""
         cache = self._read_cache()
-        return {"latest": cache.get("latest"), "selected": cache.get("selected"),
+        if self.git_source:
+            return {"source": "git", "latest": cache.get("latest"), "selected": None, "versions": []}
+        return {"source": "npm", "latest": cache.get("latest"), "selected": cache.get("selected"),
                 "versions": list(cache.get("versions") or [])}
 
     def select_release(self, version: Optional[str]) -> dict:
+        if self.git_source:
+            raise ValueError("a release cannot be chosen: the plugin source is the git repository in plugin_repo")
         self._fetch_release(select=version)
         return self.releases()
 
@@ -559,7 +563,9 @@ class PluginManager:
     def check_update(self, fetch: bool = False) -> dict:
         if fetch:
             self.refresh_source()
-        latest = self._read_cache().get("latest")
+        cache = self._read_cache()
+        latest = cache.get("latest")
+        in_use = self.releases()["selected"] or latest
         installed = {
             host: entry["version"]
             for host, entry in self.detect_global().items()
@@ -569,7 +575,7 @@ class PluginManager:
             "installed": installed,
             "latest": latest,
             "update_available": any(
-                _is_newer(latest, version) for version in installed.values()
+                _is_newer(in_use, version) for version in installed.values()
             ),
         }
 

@@ -296,9 +296,13 @@ one global op-lock — a second concurrent operation gets
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
 - `POST /api/plugin/check` — reads the registry now →
-  `{ok, error, latest, update_available, installed}`.
+  `{ok, error, latest, update_available, installed}`. `latest` is the registry
+  `latest`; `update_available` compares the installed versions with the
+  release in use (the chosen release, or `latest` when none is chosen).
 - `POST /api/plugin/release` — `{version}` chooses a published release;
-  `{version: null}` follows `latest` again → `{latest, selected, versions}`.
+  `{version: null}` follows `latest` again →
+  `{source, latest, selected, versions}`. `source` is `"npm"` or `"git"`.
+  With the git source the route answers 400 and reads nothing.
   `GET /api/plugin/status` carries the same object as `releases`.
 - `POST /api/plugin/uninstall` — `{scope, hosts?, root?, dry_run?}` returns
   the plan; `{..., confirm: true}` applies it. Neither `dry_run` nor

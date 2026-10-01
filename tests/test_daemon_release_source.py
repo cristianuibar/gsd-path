@@ -160,7 +160,7 @@ class ManagerTests(Case):
         manager = self.manager(Registry(["1.3.2", "1.10.0", "1.4.0", "2.0.0-beta.1"], latest="1.10.0"))
         self.assertEqual(manager.refresh_source(ttl_hours=0),
                          {"refreshed": True, "latest": "1.10.0", "error": None})
-        self.assertEqual(manager.releases(), {"latest": "1.10.0", "selected": None,
+        self.assertEqual(manager.releases(), {"source": "npm", "latest": "1.10.0", "selected": None,
                                               "versions": ["1.10.0", "1.4.0", "1.3.2"]})
 
     def test_offline_refresh_keeps_the_cached_state(self):
@@ -235,6 +235,23 @@ class ManagerTests(Case):
         manager.install_global(["claude"])
         self.assertEqual(git[0][:3], ["git", "clone", "https://example.invalid/fork.git"])
         self.assertEqual(registry.calls, [])
+        with self.assertRaises(ValueError):
+            manager.select_release("1.4.0")
+        self.assertEqual(registry.calls, [])
+        self.assertFalse((self.root / "home" / "releases").exists())
+        self.assertEqual(manager.releases(), {"source": "git", "latest": None, "selected": None, "versions": []})
+
+    def test_update_available_compares_with_the_release_in_use(self):
+        manager = self.manager(Registry(["1.3.2", "1.4.0"], latest="1.4.0"))
+        skill = self.root / "user" / ".claude" / "skills" / "gsd-path"
+        skill.mkdir(parents=True)
+        (skill / "VERSION").write_text("1.3.2\n", encoding="utf-8")
+        manager.refresh_source(ttl_hours=0)
+        self.assertTrue(manager.check_update()["update_available"])
+        manager.select_release("1.3.2")
+        result = manager.check_update()
+        self.assertEqual((result["latest"], result["installed"], result["update_available"]),
+                         ("1.4.0", {"claude": "1.3.2"}, False))
 
 
 class RouteTests(Case):
@@ -265,7 +282,8 @@ class RouteTests(Case):
         self.assertEqual((status, payload["ok"], payload["latest"]), (200, True, "1.4.0"))
         self.assertIn(release_source.REGISTRY_URL, self.registry.calls)
         status, payload = self.request("GET", "/api/plugin/status")
-        self.assertEqual(payload["releases"], {"latest": "1.4.0", "selected": None, "versions": ["1.4.0", "1.3.2"]})
+        self.assertEqual(payload["releases"], {"source": "npm", "latest": "1.4.0", "selected": None,
+                                               "versions": ["1.4.0", "1.3.2"]})
 
     def test_check_reports_a_registry_failure(self):
         self.registry.down = True
@@ -287,6 +305,14 @@ class RouteTests(Case):
                 status, payload = self.request("POST", "/api/plugin/release", body)
                 self.assertEqual(status, 400, payload)
         self.assertIsNone(self.plugin.releases()["selected"])
+
+    def test_release_route_refuses_the_git_source(self):
+        self.plugin.git_source = True
+        asked = len(self.registry.calls)
+        status, payload = self.request("POST", "/api/plugin/release", {"version": "1.3.2"})
+        self.assertEqual(status, 400, payload)
+        self.assertEqual(len(self.registry.calls), asked)
+        self.assertEqual(self.plugin.releases()["source"], "git")
 
 
 if __name__ == "__main__":
