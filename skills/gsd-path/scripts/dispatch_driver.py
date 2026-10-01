@@ -150,15 +150,8 @@ def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, 
     """Open a dispatch attempt record for a host-spawned coder before it runs."""
     root = records_root(primary)
     root.mkdir(parents=True, exist_ok=True)
-    if not should_open_native_shell(root, task_id, base):
-        return
-    task_dir = root / task_id
-    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
-    attempt_dir = task_dir / f"attempt-{attempt}"
-    attempt_dir.mkdir(parents=True)
     record: Dict[str, object] = {
         "task_id": task_id,
-        "attempt": attempt,
         "base": base,
         "worktree": worktree,
         "task_file": task_file,
@@ -183,6 +176,31 @@ def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, 
         record["member_base"] = member_base
     if contract_file is not None:
         record["contract_file"] = contract_file
+    task_dir = root / task_id
+    if not should_open_native_shell(root, task_id, base):
+        attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                          key=lambda path: attempt_number(path.parent))
+        if not attempts:
+            return
+        state_path = attempts[-1]
+        state = load_state(state_path)
+        attempt = state.get("attempt")
+        state.update(record)
+        if attempt is not None:
+            state["attempt"] = attempt
+        state["outcome"] = None
+        for key in ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit",
+                    "answer", "command", "usage_recorded"):
+            state.pop(key, None)
+        save_state(state_path, state)
+        exit_path = state_path.with_name("exit.json")
+        if exit_path.is_file():
+            exit_path.unlink()
+        return
+    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
+    attempt_dir = task_dir / f"attempt-{attempt}"
+    attempt_dir.mkdir(parents=True)
+    record["attempt"] = attempt
     save_state(attempt_dir / "state.json", record)
 
 
@@ -625,10 +643,11 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
                          json.dumps(execution, indent=2, sort_keys=True) + "\n")
     execution["evidence"] = str(evidence_dir / "verify.json")
     output = "\n".join(f"  {line}" for line in tail(execution["stdout"] + execution["stderr"]).splitlines())
-    append_log(task_path, f"- {now()[:10]} — orchestrator Verify ({location}): "
-                          f"{'pass' if passed else 'fail'}, exit {execution['exit_code']}"
-                          + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
+    verify_log = (f"- {now()[:10]} — orchestrator Verify ({location}): "
+                  f"{'pass' if passed else 'fail'}, exit {execution['exit_code']}"
+                  + (f"; output tail:\n  ```\n{output}\n  ```" if output else ""))
     if not passed:
+        append_log(task_path, verify_log)
         if state["mode"] == "parallel":
             isolation.deactivate_task(worktree, task_id, str(state["task_branch"]))
         elif state["mode"] == "member":
@@ -638,6 +657,7 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         member = str(state["member"])
         landed = isolation.land_member(primary, member, task_id, str(state["title"]),
                                        str(state["contract_file"]), base, str(state["member_base"]))
+        append_log(task_path, verify_log)
         landing = str(landed["landing"])
         # Only a landing whose parent is the member base proves the verified member tree.
         ledger = isolation.git_output(worktree, "rev-parse", f"{landing}^") == str(state["member_base"])
@@ -648,6 +668,7 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
                 "landing": landing, "verify": execution, "ledger": ledger}
     landed = isolation.land(primary, worktree, base, task_id, str(state["title"]), task_file,
                             list(state["files"]))
+    append_log(task_path, verify_log)
     commit = str(landed["commit"])
     # Only a landing whose parent is the recorded base proves the verified tree.
     ledger = isolation.git_output(primary, "rev-parse", f"{commit}^") == base
@@ -2246,7 +2267,8 @@ def main(argv=None) -> int:
                         raise DriverStop(f"task {arguments.task_id} still has a running child")
                     if record.get("command"):
                         raise DriverStop(f"task {arguments.task_id} still has a running child")
-                    merged = dict(state_from_task(primary, arguments.task_id), **record)
+                    live = state_from_task(primary, arguments.task_id)
+                    merged = dict(record, **live)
                     merged["_path"] = record["_path"]
                     try:
                         landing = finish_task(primary, merged)
