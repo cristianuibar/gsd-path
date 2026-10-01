@@ -667,7 +667,7 @@ class TrustEvidenceTests(unittest.TestCase):
     def add_api_hosts(self):
         path = self.repo / "scripts/skill-resources.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
-        for host in ("qwen", "kiro", "zed", "copilot"):
+        for host in ("qwen", "kiro", "zed", "copilot", "muse"):
             manifest["hosts"][host] = {
                 "local_root": f".{host}/skills", "guard_tier": "git-only",
                 "child_apis": [f"{host}.spawn"],
@@ -683,12 +683,12 @@ class TrustEvidenceTests(unittest.TestCase):
         result = check_trust_evidence.validate_repository(self.repo)
         self.assertEqual(["alpha", "beta"], result["hosts"])
         manifest = json.loads((self.repo / "scripts/skill-resources.json").read_text(encoding="utf-8"))
-        self.assertTrue({"qwen", "kiro", "zed", "copilot"}.issubset(manifest["hosts"]))
+        self.assertTrue({"qwen", "kiro", "zed", "copilot", "muse"}.issubset(manifest["hosts"]))
 
     def test_excluded_host_changes_do_not_select_other_hosts(self):
         self.add_api_hosts()
         self.git("tag", "v1.2.2")
-        for host in ("qwen", "kiro", "zed", "copilot"):
+        for host in ("qwen", "kiro", "zed", "copilot", "muse"):
             with self.subTest(host=host):
                 self.release_change(f"platforms/{host}/dispatch.md")
                 self.assertEqual([], self.scope()["hosts"])

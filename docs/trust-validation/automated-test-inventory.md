@@ -96,4 +96,4 @@ the interactive wizard and npm entry point.
 
 ## Installer targets exercised in tests
 
-`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, antigravity, and zed through one shared `.agents/skills` deployment; claude; cursor (+ subagent); grok; opencode; copilot; qwen; kiro; and kimi. Global vs `--local` project roots tested.
+`install.test.mjs` / `test_install.py` exercise multi-target install including: codex, antigravity, zed, and muse through one shared `.agents/skills` deployment; claude; cursor (+ subagent); grok; opencode; copilot; qwen; kiro; and kimi. Global vs `--local` project roots tested.

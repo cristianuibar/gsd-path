@@ -426,10 +426,10 @@ def frontmatter_value(content: str, key: str) -> Optional[str]:
     for line in lines[1:]:
         if line == "---":
             break
-        match = re.match(rf"^{re.escape(key)}:\s*([^#]*?)\s*(?:#.*)?$", line)
+        match = re.match(rf"^{re.escape(key)}:(.*)$", line)
         if match:
-            value = match.group(1).strip().strip('"').strip("'")
-            return value
+            value = _common.strip_yaml_comment(match.group(1))
+            return value.strip().strip('"').strip("'")
     return None
 
 
@@ -586,14 +586,11 @@ def resolved_archive_target(
     expected_number = milestone_number(branch)
     configured = parsed_state.archive
     entries = archive_sequence_entries(project)
-    missing_prior = [
-        number for number in range(1, expected_number) if number not in entries
-    ]
     later = sorted(number for number in entries if number > expected_number)
-    if missing_prior or later:
+    if later:
         raise ArchiveError(
             f"archive sequence does not match bound branch {branch}: "
-            f"missing={missing_prior}, later={later}"
+            f"later={later}"
         )
 
     if configured is not None:
@@ -1065,9 +1062,10 @@ def prepare_locked(project: Path, active_root: Path, slug: str) -> dict:
         final = active_root / "review" / "FINAL.md"
         reviewed = re.search(r"(?m)^Reviewed HEAD:\s*(\S+)", final.read_text(encoding="utf-8")) if final.is_file() else None
         head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve HEAD").strip()
-        if reviewed and reviewed.group(1) != head:
+        if reviewed and not _common.reviewed_head_covers(project, reviewed.group(1), head):
             raise ArchiveError(
                 f"FINAL.md Reviewed HEAD {reviewed.group(1)} does not match current HEAD {head}; "
+                f"{_common.RUNTIME_PIN_ALLOWANCE}; "
                 "re-run the final review on the current commit before archiving"
             )
         target = resolved_archive_target(project, slug, parsed_state)
@@ -1680,6 +1678,7 @@ def abandon_locked(
 
 
 run_git = _common.run_git
+reviewed_head_covers = _common.reviewed_head_covers
 run_command = _common.run_command
 
 
@@ -1899,9 +1898,10 @@ def preflight(repo: Path) -> dict:
     require_stageable_carry_forward(project, archive)
     require_clean_older_archives(project, configured)
     head = require_git_success(run_git(project, "rev-parse", "HEAD"), "resolve preflight HEAD")
-    if reviewed_head != head:
+    if not reviewed_head_covers(project, reviewed_head, head):
         raise ArchiveError(
-            f"FINAL.md Reviewed HEAD {reviewed_head} does not match current HEAD {head}"
+            f"FINAL.md Reviewed HEAD {reviewed_head} does not match current HEAD {head}; "
+            f"{_common.RUNTIME_PIN_ALLOWANCE}"
         )
     return {
         "archive": configured,
@@ -2093,9 +2093,10 @@ def validate(repo: Path, *, historical: bool = False) -> dict:
 
     members = member_ship_rows(project, archive, ship_commit)
     ship_parent = require_git_success(run_git(project, "rev-parse", f"{ship_commit}^"), "resolve ship parent")
-    if reviewed_head != ship_parent:
+    if not reviewed_head_covers(project, reviewed_head, ship_parent):
         raise ArchiveError(
-            f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}"
+            f"FINAL.md Reviewed HEAD {reviewed_head} does not match ship parent {ship_parent}; "
+            f"{_common.RUNTIME_PIN_ALLOWANCE}"
         )
     require_canonical_commit_body(
         project,

@@ -13,9 +13,13 @@ dashboard on macOS, Windows, and Linux. It lets users manage installs, update
 the plugin and the app, and see project stats.
 
 - **Shell.** Tauri gives a tray icon, a window, and notifications. The window
-  shows the daemon's existing dashboard in the OS web view (WKWebView,
-  WebView2, WebKitGTK), so one UI serves every OS. The app starts the daemon
-  when needed. On first launch, it uses the daemon's existing uninstall cleanup
+  shows a React + Vite frontend that is bundled in the app and runs in the OS
+  web view (WKWebView, WebView2, WebKitGTK), so one UI serves every OS and
+  the setup and error screens work while no daemon runs (owner ruling
+  2026-10-01; this replaces "the window shows the daemon's existing
+  dashboard"). In the app, the frontend never calls the daemon directly: one Rust command
+  sends each request to the daemon on `127.0.0.1`, so the daemon needs no
+  CORS rule. The app starts the daemon when needed. On first launch, it uses the daemon's existing uninstall cleanup
   to retire the old LaunchAgent, Startup shortcut, systemd unit, and Swift app
   login item before replacing a daemon. It checks that each old registration is
   gone before enabling Tauri autostart and shows a manual fix if cleanup fails.
@@ -36,7 +40,18 @@ the plugin and the app, and see project stats.
   copy a helper's rules. The existing copy of the guard-command check in
   `plugin.py` is debt to remove, not a pattern to follow.
 - **Writes.** Every daemon write route accepts same-origin requests only,
-  like `/api/path-config`. The app never writes pipeline state. Multi-repo
+  like `/api/path-config`. A daemon started with `--require-token` also
+  requires a token header on every write. The token is in a file only the
+  user can read; the Rust side adds it, so it never enters the web view. A
+  browser page can then read from that daemon but not write: the dashboard
+  opened in a browser is read-only, its write actions are refused, and the
+  page tells the user to use the app. A daemon started without the flag
+  behaves as before. The app never writes pipeline state. It can edit a
+  project's `.env` files on request: values are masked, shown as a diff
+  before save, and never logged. Every env route (list, reveal, save) is a
+  POST that needs the token, so no GET returns env content. The env routes
+  exist only on a daemon started with `--require-token`; a daemon without
+  the flag refuses them with a reason. Multi-repo
   actions are member hook install and marker repair; joining a member stays
   in the router.
 - **Updates.** The app updates through the Tauri updater from `latest.json`
@@ -57,7 +72,11 @@ projects, and child processes lose their interpreter); keeping the Swift app
 beside the new one (two macOS apps).
 
 **Consequences:** CI builds the app on macOS, Windows, and Linux and needs a
-Rust toolchain. The Swift app in `daemon/macos` is removed once the new app
+Rust toolchain and Node for the frontend build. The daemon's inline dashboard
+is removed once the frontend matches it; the daemon then serves the built
+frontend for "Open in browser". There the frontend uses same-origin `fetch`
+with no token: reads always work, and writes work only on a daemon started
+without `--require-token`. The Swift app in `daemon/macos` is removed once the new app
 matches it. Removing autostart from `gsd_daemon install` means scripted installs
 no longer start the daemon at login; the app becomes the only autostart path.
 The npm package is unchanged; the installer and docs point to the app. The work
