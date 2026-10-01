@@ -16,10 +16,11 @@ use serde_json::Value;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::path::BaseDirectory;
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_positioner::{Position, WindowExt};
 
 // Daemon DEFAULT_PORT (daemon/gsd_daemon/serve.py).
 const DEFAULT_PORT: u16 = 8765;
@@ -27,6 +28,8 @@ const DEFAULT_PORT: u16 = 8765;
 const POLL: Duration = Duration::from_secs(5);
 const STATUS_TIMEOUT: Duration = Duration::from_secs(3);
 const TRAY_ID: &str = "main";
+// The tray popover window (src/screens/Tray.tsx).
+const POPOVER: &str = "tray";
 
 /// What the frontend shows (src/shell.ts). `launch` is the daemon's launch JSON, passed through.
 #[derive(Clone, Serialize)]
@@ -38,6 +41,7 @@ struct ShellState {
     launch: Option<Value>,
     error: Option<String>,
     autostart: bool,
+    owned: bool, // this app started the daemon, so it can stop and restart it
 }
 
 struct Shell {
@@ -218,6 +222,7 @@ fn publish(app: &AppHandle, change: impl FnOnce(&mut ShellState)) -> ShellState 
         let state = app.state::<AppState>();
         let mut shell = state.0.lock().unwrap();
         change(&mut shell.view);
+        shell.view.owned = shell.child.is_some();
         shell.view.clone()
     };
     let _ = app.emit("shell", &view);
@@ -278,7 +283,13 @@ fn boot(app: &AppHandle) -> ShellState {
 
 // -- window and commands ------------------------------------------------------------
 
-fn show_window(app: &AppHandle) {
+/// Script for the main window: go to one project's page (src/route.ts).
+fn project_script(root: &str) -> String {
+    format!("location.hash='#/project/'+encodeURIComponent({})", Value::from(root))
+}
+
+/// Show the main window. `script` runs in it after it shows.
+fn show_window(app: &AppHandle, script: Option<String>) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         let window = handle.get_webview_window("main").or_else(|| {
@@ -291,8 +302,36 @@ fn show_window(app: &AppHandle) {
         if let Some(window) = window {
             let _ = window.show();
             let _ = window.set_focus();
+            if let Some(script) = &script {
+                let _ = window.eval(script.as_str());
+            }
         }
     });
+}
+
+/// Left click on the tray icon: show the popover next to the icon, or hide it.
+/// The size has no design value for the height; the list scrolls inside it.
+fn toggle_popover(app: &AppHandle) {
+    let window = app.get_webview_window(POPOVER).or_else(|| {
+        WebviewWindowBuilder::new(app, POPOVER, WebviewUrl::App("index.html#/tray".into()))
+            .title("OpenGSD Path")
+            .inner_size(380.0, 560.0)
+            .resizable(false)
+            .decorations(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .visible(false)
+            .build()
+            .ok()
+    });
+    let Some(window) = window else { return };
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+    let _ = window.move_window_constrained(Position::TrayCenter);
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 fn spawn_boot(app: &AppHandle) {
@@ -332,6 +371,15 @@ fn open_url(app: AppHandle, url: String) -> Result<(), String> {
         return Err("only https and local dashboard links can be opened".into());
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// A button in the tray popover: an id of the native tray menu. With `root`, "open" shows that project.
+#[tauri::command]
+fn tray_action(app: AppHandle, action: String, root: Option<String>) {
+    match root {
+        Some(root) if action == "open" => show_window(&app, Some(project_script(&root))),
+        _ => on_menu(&app, &action),
+    }
 }
 
 /// One request from the frontend to the daemon. The write token is added here, so
@@ -463,14 +511,14 @@ fn refresh_tray(app: &AppHandle) {
 
 fn on_menu(app: &AppHandle, id: &str) {
     match id {
-        "open" | "update" | "setup" => show_window(app),
+        "open" | "update" | "setup" => show_window(app, None),
         "browser" => {
             let _ = app.opener().open_url(format!("http://127.0.0.1:{}/", port(app)), None::<&str>);
         }
         "start" => spawn_boot(app),
         "stop" => {
             stop_owned(app);
-            refresh_tray(app);
+            publish(app, |_| {}); // tells the windows, then refreshes the tray
         }
         "restart" => {
             stop_owned(app);
@@ -488,10 +536,11 @@ fn main() {
     #[cfg(unix)]
     use_login_path();
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app, None)))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api])
+        .plugin(tauri_plugin_positioner::init())
+        .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api, tray_action])
         .setup(|app| {
             let view = ShellState {
                 phase: "checking",
@@ -501,6 +550,7 @@ fn main() {
                 launch: None,
                 error: None,
                 autostart: false,
+                owned: false,
             };
             app.manage(AppState(Mutex::new(Shell { python: None, child: None, view })));
             #[cfg(target_os = "macos")]
@@ -519,10 +569,18 @@ fn main() {
                 .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip(&view.text)
                 .menu(&tray_menu(&handle, &view)?)
-                .show_menu_on_left_click(true)
+                // Linux sends no tray click events, so the menu stays on left click there.
+                // On macOS and Windows a left click opens the popover; the menu is on right click.
+                .show_menu_on_left_click(cfg!(target_os = "linux"))
                 .on_menu_event(|app, event| on_menu(app, event.id.as_ref()))
+                .on_tray_icon_event(|tray, event| {
+                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        toggle_popover(tray.app_handle());
+                    }
+                })
                 .build(app)?;
-            show_window(&handle);
+            show_window(&handle, None);
             spawn_boot(&handle);
             thread::spawn(move || {
                 let mut last = view;
@@ -538,12 +596,17 @@ fn main() {
             });
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // Closing the window keeps the app in the tray.
-            if let WindowEvent::CloseRequested { api, .. } = event {
+            WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // The popover closes when the user clicks elsewhere.
+            WindowEvent::Focused(false) if window.label() == POPOVER => {
+                let _ = window.hide();
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building the OpenGSD Path app");
@@ -589,6 +652,18 @@ mod tests {
         assert_eq!(decide(&json!({"action": "setup", "problems": []})), Next::Blocked);
         assert_eq!(decide(&json!({"action": "start", "serve_argv": null, "problems": []})), Next::Blocked);
         assert_eq!(decide(&json!({})), Next::Blocked);
+    }
+
+    #[test]
+    fn a_project_folder_reaches_the_page_as_one_string_literal() {
+        for root in ["/work/gsd-path", "C:\\Users\\me\\my app", "/work/a\"b');alert(1);//\n</script>"] {
+            let script = project_script(root);
+            let literal = script
+                .strip_prefix("location.hash='#/project/'+encodeURIComponent(")
+                .and_then(|rest| rest.strip_suffix(")"))
+                .expect("the script sets the project route");
+            assert_eq!(serde_json::from_str::<String>(literal).unwrap(), root);
+        }
     }
 
     #[test]

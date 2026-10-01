@@ -14,7 +14,7 @@ const launch = (over: Partial<Launch> = {}): Launch => ({
 });
 const shell = (over: Partial<Shell> = {}): Shell => ({
   phase: "ready", os: "macos", port: 8765, python_missing: false, launch: launch(), error: null,
-  autostart: true, ...over,
+  autostart: true, owned: true, ...over,
 });
 const blocked = (kind: string) =>
   shell({ phase: "blocked", launch: launch({ action: "setup", problems: [{ kind, message: "m", fix: "f", blocking: true }] }) });

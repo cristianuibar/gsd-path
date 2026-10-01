@@ -7,6 +7,10 @@ Slices: [native-app-work.md](../../docs/native-app-work.md). Screens: [design ha
   result, starts the daemon with `--require-token`, and stops only a daemon it started. The `api` command
   carries frontend requests to the daemon and adds the write token.
 - `src/` — the React + Vite frontend. `shell.ts` is the contract with the shell; `screen.ts` picks the screen.
+  When the monitor runs, `route.ts` picks the page from `location.hash`: `#/projects` (the board),
+  `#/project/<folder>` (one project), `#/project/<folder>/files/<path>` (History & files), and `#/tray`
+  (the tray popover, a second window). `status.ts`, `board.ts`, `project.ts`, and `tray.ts` turn the
+  daemon's `/status` payload into what the pages show.
 
 ## Develop
 
@@ -19,7 +23,8 @@ npm run build     # type check and bundle
 ```
 
 `src/dev-mock.ts` lists the mock states (`?state=no-python`, `port`, `migrated`, `migrate-failed`, …).
-Add `&done` to skip setup and `&offline` to stop the mock monitor.
+Add `&done` to skip setup and `&offline` to stop the mock monitor. The mock serves the sample projects in
+`src/fixtures.ts`: `http://localhost:1420/?state=ready&done#/projects`, and `#/tray` for the popover.
 
 ## Run the real app safely
 

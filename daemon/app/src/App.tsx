@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { parseRoute } from "./route";
 import { pickScreen } from "./screen";
 import { boot, getShell, onShellChange, usePort } from "./shell";
 import type { Shell } from "./shell";
 import { FirstLaunch } from "./screens/FirstLaunch";
 import { BlockingProblems, PortInUse, PythonMissing } from "./screens/Problems";
-import { Ready } from "./screens/Ready";
+import { Dashboard } from "./screens/Dashboard";
 import { Requirements } from "./screens/Requirements";
+import { Tray } from "./screens/Tray";
 
 const SETUP_DONE = "gsd-path.setup-done";
 
@@ -13,15 +15,21 @@ export function App() {
   const [shell, setShell] = useState<Shell | null>(null);
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE) === "1");
   const [firstLaunchSeen, setFirstLaunchSeen] = useState(false);
+  const [hash, setHash] = useState(location.hash);
 
   useEffect(() => {
     getShell().then(setShell);
     // The tray can also start, stop, or restart the monitor.
     const stop = onShellChange(setShell);
-    return () => { stop.then((off) => off()); };
+    const onHash = () => setHash(location.hash);
+    addEventListener("hashchange", onHash);
+    return () => { stop.then((off) => off()); removeEventListener("hashchange", onHash); };
   }, []);
 
   if (!shell) return null;
+  const route = parseRoute(hash);
+  // The tray popover is a window of its own; setup screens stay in the main window.
+  if (route.page === "tray") return <Tray shell={shell} />;
   const retry = () => { setShell({ ...shell, phase: "checking" }); boot().then(setShell); };
   const finishSetup = () => { localStorage.setItem(SETUP_DONE, "1"); setSetupDone(true); };
 
@@ -41,6 +49,6 @@ export function App() {
     case "problem":
       return <BlockingProblems shell={shell} onRetry={retry} />;
     case "ready":
-      return <Ready shell={shell} onStart={retry} />;
+      return <Dashboard shell={shell} route={route} onStart={retry} />;
   }
 }

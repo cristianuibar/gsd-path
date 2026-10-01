@@ -37,6 +37,8 @@ export type Shell = {
   error: string | null;
   /** Launch at login is on. */
   autostart: boolean;
+  /** This app started the monitor, so it can stop and restart it. */
+  owned: boolean;
 };
 
 export const getShell = () => invoke<Shell>("shell_state");
@@ -47,5 +49,8 @@ export const openUrl = (url: string) => invoke<void>("open_url", { url });
 /** One request to the daemon. Rust adds the write token; it never reaches this page. */
 export const api = <T>(method: "GET" | "POST", path: string, body?: unknown) =>
   invoke<T>("api", { method, path, body: body ?? null });
+/** A tray popover button; the ids of the native tray menu. With `root`, "open" shows that project. */
+export const trayAction = (action: "open" | "start" | "restart" | "quit", root?: string) =>
+  invoke<void>("tray_action", { action, root: root ?? null });
 export const onShellChange = (handler: (shell: Shell) => void) =>
   listen<Shell>("shell", (event) => handler(event.payload));

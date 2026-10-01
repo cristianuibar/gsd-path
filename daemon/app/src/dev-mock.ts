@@ -1,6 +1,7 @@
 // Development only: lets `npm run dev` show every screen in a plain browser,
 // without the Rust shell. Pick a state with ?state=<name>. Never part of a build.
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { status } from "./fixtures";
 import type { Launch, Shell } from "./shell";
 
 const launch = (over: Partial<Launch> = {}): Launch => ({
@@ -13,7 +14,7 @@ const launch = (over: Partial<Launch> = {}): Launch => ({
   ...over,
 });
 const shell = (over: Partial<Shell> = {}): Shell => ({
-  phase: "ready", os: "macos", port: 8765, python_missing: false, launch: launch(), error: null, autostart: true, ...over,
+  phase: "ready", os: "macos", port: 8765, python_missing: false, launch: launch(), error: null, autostart: true, owned: true, ...over,
 });
 const blocked = (kind: string, message: string, fix: string, detail?: object): Shell =>
   shell({ phase: "blocked", launch: launch({ action: "setup", problems: [{ kind, message, fix, blocking: true, detail }] }) });
@@ -38,11 +39,43 @@ const state = STATES[query.get("state") ?? "ready"] ?? STATES.ready;
 if (query.has("done")) localStorage.setItem("gsd-path.setup-done", "1");
 else localStorage.removeItem("gsd-path.setup-done");
 
+// The daemon's read endpoints, by path (without the query).
+const API: Record<string, unknown> = {
+  "/status": status,
+  "/api/refresh": { ok: true },
+  "/activity": { events: [
+    { root: "/work/gsd-path", at: "2026-09-29T03:58:00+00:00", type: "phase-changed", detail: "plan → build" },
+    { root: "/work/atlas", at: "2026-10-01T01:00:00+00:00", type: "blocked", detail: "ship" }] },
+  "/api/project-data": {
+    verify_records: [{ recorded_at: "2026-09-29T03:58:11+00:00", task: "T002", command: "python -m unittest", commit: "0e9a3b1", result: "pass" }],
+    usage_records: [{ task: "T001", phase: "build", model: "kimi-k2", tokens_in: 1200, tokens_out: 400, cost: 0.12 }],
+    turns: [], activity: [],
+    sources: [{ path: ".project/STATE.md", status: "available" }, { path: ".project/LESSONS.md", status: "missing" }],
+  },
+};
+const FILES = [
+  { path: ".project/STATE.md", group: "Project records" }, { path: ".project/ROADMAP.md", group: "Project records" },
+  { path: "README.md", group: "Repository" }];
+function projectFiles(params: URLSearchParams) {
+  const path = params.get("path") ?? "";
+  if (params.get("action") === "list") return { files: FILES, coverage: [], scope: "Git-tracked files, plus .project records." };
+  if (params.get("action") === "history") {
+    return { revisions: [{ revision: "0e9a3b1c55d2".padEnd(40, "0"), at: "2026-09-29T03:58:00+00:00", label: "T002: watch folders" }],
+      reason: "Committed versions of this path." };
+  }
+  if (!FILES.some((file) => file.path === path)) throw new Error("File is not available.");
+  return { group: "Project records", bytes: 64, revision: params.get("revision"), modified: 1790000000, preview_warning: null,
+    text: `# ${path}\n\nSee [the roadmap](ROADMAP.md).`,
+    html: `<h1>${path}</h1><p>See <a href="#" data-document-link="ROADMAP.md">the roadmap</a>.</p>` };
+}
+
 mockIPC((command, args) => {
   if (command === "api") {
     if (query.has("offline")) throw new Error("connection refused");
-    return { projects: [{}, {}, {}, {}] };
+    const url = new URL((args as { path: string }).path, "http://daemon.invalid");
+    return url.pathname === "/api/project-files" ? projectFiles(url.searchParams) : API[url.pathname];
   }
   if (command === "open_url") return void window.open((args as { url: string }).url);
+  if (command === "tray_action") return void console.log("tray_action", args);
   return state; // shell_state, boot_command, use_port
 }, { shouldMockEvents: true });
