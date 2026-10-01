@@ -12,6 +12,8 @@ from unittest import mock
 from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
 from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
 
+PIPELINE_STATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_state.py"
+
 
 SETTLED_SYNTHESIS = """# Synthesis
 
@@ -1516,7 +1518,7 @@ class PipelineStateTests(unittest.TestCase):
                 state_path.write_bytes(content.encode("utf-8"))
                 command = [
                     sys.executable,
-                    str(Path(pipeline_state.__file__).resolve()),
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
                     "transition",
                     "--repo",
                     str(repo),
@@ -1649,7 +1651,7 @@ class PipelineStateTests(unittest.TestCase):
                 )
                 command = [
                     sys.executable,
-                    str(Path(pipeline_state.__file__).resolve()),
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
                     "approve",
                     "--repo",
                     str(repo),
@@ -1677,7 +1679,7 @@ class PipelineStateTests(unittest.TestCase):
             repo, _ = self._approval_repo(tmp, "plan")
             command = [
                 sys.executable,
-                str(Path(pipeline_state.__file__).resolve()),
+                str(PIPELINE_STATE_SCRIPT.resolve()),
                 "approve",
                 "--repo",
                 str(repo),
