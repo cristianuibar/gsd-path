@@ -58,11 +58,16 @@ a leftover temporary file on Windows, which lets an interrupted create resume.
   checks that each attack is refused or has no effect: a junction at
   `.project`, renaming `.project` mid-write (blocked by the pin), a symlink at
   `STATE.md`, rollback, and an existing `STATE.md`.
-- Evidence reads during `classify` still use the `lstat`, open, `fstat`
-  fallback on Windows. That fallback detects a swapped final file. It does not
-  detect a parent directory that is swapped for a junction before the final
-  `lstat`, which could let classification read one file outside the repository.
-  Moving evidence reads onto the same pinned handles is a follow-up. Reads
-  never write, so this does not weaken the create guarantee.
+- Evidence reads and the worktree walk during `classify` use the same pinned
+  handles on Windows (`read_windows_anchored_evidence`,
+  `iter_worktree_files_windows_anchored`). Each parent directory is opened
+  relative to its pinned parent and stays open, so it cannot be swapped for a
+  junction while a read is in progress. `os.fstat` on a handle does not report
+  the reparse tag, so `is_link_like` also calls `lstat` on the path, which is
+  stable while the handle pins it. The walk still lists names by path, because
+  Windows CPython cannot list a directory from a descriptor; each name is then
+  opened relative to the pinned handle. `tests/test_detect_project.py` checks
+  that a rename is refused while the handles are held and that a junction is
+  excluded after release.
 - The code depends on `ntdll` through `ctypes`. `NtCreateFile` and
   `NtSetInformationFile` are documented and stable since Windows XP.
