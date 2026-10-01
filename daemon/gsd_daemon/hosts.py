@@ -20,9 +20,11 @@ KNOWN = {
     "copilot": ("Copilot CLI", ("copilot",), ()),
     "qwen": ("Qwen Code", ("qwen",), ()),
     "antigravity": ("Antigravity", ("agy",), ()),
-    "cursor": ("Cursor", ("cursor-agent", "cursor"), ()),
+    # The agent commands only: "cursor" and "kiro" are the IDE launchers.
+    "cursor": ("Cursor", ("cursor-agent",), ()),
+    # The runner starts eval-cli, which is only the test harness binary. A user has the editor's own command.
     "zed": ("Zed", ("zed",), ()),
-    "kiro": ("Kiro", ("kiro-cli", "kiro"), ()),
+    "kiro": ("Kiro", ("kiro-cli",), ()),
     "kimi": ("Kimi Code", ("kimi",), (".kimi-code/bin/kimi",)),
     "muse": ("Muse Code", ("muse",), ()),
 }
@@ -31,8 +33,7 @@ KNOWN = {
 def detect(plugin: PluginManager, which: Callable[[str], Optional[str]] = shutil.which) -> List[dict]:
     rows = []
     for host in HOSTS:
-        # A host added to the plugin before this table: its id is its name and its command.
-        name, commands, places = KNOWN.get(host, (host.capitalize(), (host,), ()))
+        name, commands, places = KNOWN[host]
         path = next((found for found in map(which, commands) if found), None)
         if path is None:
             path = next((str(place) for place in (plugin.user_home / item for item in places) if place.exists()), None)

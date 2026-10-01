@@ -77,6 +77,57 @@ class ReadTests(Case):
         self.assertEqual(outside.read_text(encoding="utf-8"), "SECRET=1\n")
 
 
+class QuotedValueTests(Case):
+    PEM = "-----BEGIN KEY-----\nAbCd12==\nEfGh34==\n-----END KEY-----"
+    SPANS = ('FIRST=1\nPRIVATE_KEY="' + PEM + '" # prod key\n'
+             "NOTE='line one\nB=not a variable'\nLAST=2\n")
+
+    def test_a_comment_after_the_closing_quote_is_not_part_of_the_value(self):
+        self.write(text='API_KEY="abc" # prod key\nSINGLE=\'a # b\' # note\nBLANK="" # x\nHASH="a#b"#c\n')
+        self.assertEqual(env_files.reveal(self.root, ".env", "API_KEY"), "abc")
+        self.assertEqual(env_files.reveal(self.root, ".env", "SINGLE"), "a # b")
+        self.assertEqual(env_files.reveal(self.root, ".env", "HASH"), "a#b")
+        empty = {item["name"]: item["empty"] for item in env_files.list_file(self.root, ".env")["vars"]}
+        self.assertEqual(empty, {"API_KEY": False, "SINGLE": False, "BLANK": True, "HASH": False})
+        self.assertEqual(env_files.save(self.root, ".env", [{"name": "API_KEY", "value": "abc"}])["diff"], [])
+
+    def test_a_value_that_spans_lines_is_one_variable(self):
+        self.write(text=self.SPANS)
+        listing = env_files.list_file(self.root, ".env")
+        self.assertEqual([item["name"] for item in listing["vars"]], ["FIRST", "PRIVATE_KEY", "NOTE", "LAST"])
+        self.assertEqual(env_files.reveal(self.root, ".env", "PRIVATE_KEY"), self.PEM)
+        self.assertEqual(env_files.reveal(self.root, ".env", "NOTE"), "line one\nB=not a variable")
+        with self.assertRaises(ValueError):
+            env_files.reveal(self.root, ".env", "AbCd12")
+
+    def test_a_change_replaces_the_whole_span_and_keeps_every_other_byte(self):
+        self.write(text=self.SPANS)
+        result = env_files.save(self.root, ".env", [{"name": "PRIVATE_KEY", "value": "short"},
+                                                    {"name": "NOTE", "value": "line one\nB=not a variable"}])
+        self.assertEqual(result["diff"], [{"name": "PRIVATE_KEY", "change": "change"}])
+        self.assertEqual(self.text(), "FIRST=1\nPRIVATE_KEY=short\nNOTE='line one\nB=not a variable'\nLAST=2\n")
+
+    def test_a_remove_deletes_the_whole_span_and_keeps_every_other_byte(self):
+        self.write(text=self.SPANS)
+        env_files.save(self.root, ".env", [{"name": "PRIVATE_KEY", "remove": True}])
+        self.assertEqual(self.text(), "FIRST=1\nNOTE='line one\nB=not a variable'\nLAST=2\n")
+
+    def test_a_quote_that_does_not_close_is_refused_by_name_without_a_value(self):
+        for text in ('A=1\nKEY="hunter2-secret\nB=2\n', "KEY='hunter2-secret\nB=2\n",
+                     'KEY="hunter2-secret\nmore" junk\nB=2\n'):
+            self.write(text=text)
+            calls = (lambda: env_files.list_file(self.root, ".env"),
+                     lambda: env_files.reveal(self.root, ".env", "B"),
+                     lambda: env_files.save(self.root, ".env", [{"name": "B", "value": "3"}]),
+                     lambda: env_files.save(self.root, ".env", [{"name": "KEY", "remove": True}]))
+            for call in calls:
+                with self.subTest(text=text), self.assertRaises(ValueError) as raised:
+                    call()
+                self.assertIn("KEY", str(raised.exception))
+                self.assertNotIn("hunter2", str(raised.exception))
+            self.assertEqual(self.text(), text)
+
+
 class SaveTests(Case):
     def test_dry_run_reports_the_diff_and_writes_nothing(self):
         self.write()

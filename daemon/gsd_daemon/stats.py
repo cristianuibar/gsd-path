@@ -56,6 +56,8 @@ def phase_seconds(events: Iterable[dict], roots: Iterable[str], now: datetime) -
     for entries in changes.values():
         entries.sort(key=lambda entry: entry[0])
         for index, (at, phase) in enumerate(entries):
+            if phase == "None":  # the phase became unreadable: this time belongs to no phase
+                continue
             end = entries[index + 1][0] if index + 1 < len(entries) else now
             totals[phase] = totals.get(phase, 0.0) + max(0.0, (end - at).total_seconds())
     if not totals:

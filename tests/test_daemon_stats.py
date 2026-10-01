@@ -73,6 +73,14 @@ class PhaseSecondsTests(unittest.TestCase):
         self.assertEqual(stats.phase_seconds(events, ["/p"], self.NOW),
                          [{"phase": "build", "seconds": 5400}, {"phase": "ship", "seconds": 1800}])
 
+    def test_an_unreadable_phase_is_not_charted_and_ends_the_phase_before_it(self):
+        events = [self.event("2026-10-01T09:00:00+00:00", "plan -> build"),
+                  self.event("2026-10-01T10:00:00+00:00", "build -> None"),
+                  self.event("2026-10-01T11:30:00+00:00", "None -> ship")]
+        self.assertEqual(stats.phase_seconds(events, ["/p"], self.NOW),
+                         [{"phase": "build", "seconds": 3600}, {"phase": "ship", "seconds": 1800}])
+        self.assertIsNone(stats.phase_seconds(events[1:2], ["/p"], self.NOW))
+
     def test_all_projects_add_up(self):
         events = [self.event("2026-10-01T11:00:00+00:00", "plan -> build"),
                   self.event("2026-10-01T10:00:00+00:00", "plan -> build", root="/q")]
