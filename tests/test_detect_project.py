@@ -1160,6 +1160,44 @@ class DetectProjectTests(unittest.TestCase):
             make_junction(external, docs)
             self.assertEqual(self.classify(repo)["verdict"], "greenfield")
 
+    def test_held_handle_status_without_reparse_tag_is_link_like(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            docs = Path(temporary) / "docs"
+            docs.mkdir()
+            handle_status = os.stat(docs)
+            junction = mock.Mock(
+                st_mode=handle_status.st_mode,
+                st_reparse_tag=0xA0000003,
+            )
+            with mock.patch.object(detect_project.os, "name", "nt"):
+                with mock.patch.object(
+                    detect_project.os, "lstat", return_value=handle_status
+                ):
+                    self.assertFalse(detect_project.is_link_like(docs, handle_status))
+                with mock.patch.object(
+                    detect_project.os, "lstat", return_value=junction
+                ):
+                    self.assertTrue(detect_project.is_link_like(docs, handle_status))
+
+    @unittest.skipUnless(os.name == "nt", "Windows share modes required")
+    def test_windows_walk_classifies_repo_with_exclusively_held_file(self) -> None:
+        import _winapi
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            held = repo / "held.py"
+            held.write_bytes(b"print('held')\n")
+            expected = self.classify(repo)
+            handle = _winapi.CreateFile(
+                str(held), _winapi.GENERIC_READ, 0, 0, _winapi.OPEN_EXISTING, 0, 0
+            )
+            try:
+                with self.assertRaises(PermissionError):
+                    held.read_bytes()
+                self.assertEqual(self.classify(repo), expected)
+            finally:
+                _winapi.CloseHandle(handle)
+
     @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
     def test_markdown_parent_replacement_stays_anchored(self) -> None:
