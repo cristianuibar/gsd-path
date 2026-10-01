@@ -758,7 +758,7 @@ def retire_member_task(
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
     copy_rejected = None
-    if force:
+    if force and task_file:
         rejected, copy_rejected = _rejected_member_attempt_error(coordinator, member, task_id, task_file, destination)
         if rejected:
             raise IsolationError(rejected)
