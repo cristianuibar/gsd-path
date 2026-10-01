@@ -140,10 +140,3 @@ const STATE_RANK = { blocked: 0, unverified: 1, active: 1, shipped: 2 };
 /** Board order: blocked, then in progress, then shipped; by name within each. */
 export const sortProjects = (projects: Project[]) => [...projects].sort((a, b) =>
   STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || nameOf(a).localeCompare(nameOf(b)));
-
-/** How many agents hold skills older than the latest release: the badge on the Skills nav item. */
-export function skillsPending(status: Status | null): number {
-  const plugin = status?.plugin;
-  if (!plugin?.update_available || !plugin.latest) return 0;
-  return Object.values(plugin.hosts ?? {}).filter((host) => host.installed && host.version !== plugin.latest).length;
-}

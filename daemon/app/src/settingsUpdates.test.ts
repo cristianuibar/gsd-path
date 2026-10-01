@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isNewer, opOutcome, updatePlan, updateRows } from "./settingsUpdates";
+import { allCurrent, opOutcome, updatePlan, updateRows } from "./settingsUpdates";
 import type { PluginStatus } from "./settingsUpdates";
 
 const plugin: PluginStatus = {
@@ -19,20 +19,6 @@ const plugin: PluginStatus = {
   ],
 };
 const names = { "/work/gsd-path": "gsd-path", "/work/atlas": "atlas" };
-
-describe("isNewer", () => {
-  it("compares version parts as numbers", () => {
-    expect(isNewer("1.10.0", "1.9.9")).toBe(true);
-    expect(isNewer("1.4.0", "1.4.0")).toBe(false);
-    expect(isNewer("1.3.9", "1.4.0")).toBe(false);
-    expect(isNewer("1.4.1", "1.4")).toBe(true);
-  });
-  it("is false when a version is missing or not numeric", () => {
-    expect(isNewer(null, "1.0.0")).toBe(false);
-    expect(isNewer("1.4.0", null)).toBe(false);
-    expect(isNewer("1.4.0", "unknown")).toBe(false);
-  });
-});
 
 describe("updateRows", () => {
   const rows = updateRows(plugin, names);
@@ -60,6 +46,23 @@ describe("updateRows", () => {
   it("says so when a version is not known, and offers no action", () => {
     expect(rows[2]).toMatchObject({ version: "—", state: "unknown", note: "Version unknown", step: null });
     expect(rows[5]).toMatchObject({ version: "—", state: "unknown", note: "Version unknown", step: null });
+  });
+  it("offers the update for a legacy runtime without a version stamp", () => {
+    const legacy = updateRows({ latest: "1.4.0", projects: [{ root: "/work/legacy", runtime: true, runtime_version: null }] }, {});
+    expect(legacy[0]).toEqual({
+      key: "project:/work/legacy", name: "Runtime in legacy", sub: "/work/legacy", version: "No version stamp → 1.4.0",
+      state: "pending", note: "Update legacy runtime", group: "project:/work/legacy",
+      step: { id: "project:/work/legacy", label: "Runtime in legacy", body: { scope: "project", root: "/work/legacy" } },
+    });
+    expect(updatePlan(legacy).map((step) => step.id)).toEqual(["project:/work/legacy"]);
+    expect(updateRows({ latest: null, projects: [{ root: "/work/legacy", runtime: true, runtime_version: null }] }, {})[0])
+      .toMatchObject({ state: "unknown", step: null });
+  });
+  it("says everything is up to date only when each row is current", () => {
+    expect(allCurrent(rows)).toBe(false);
+    expect(allCurrent([rows[5]])).toBe(false); // a version that is not known
+    expect(allCurrent([rows[0], rows[4]])).toBe(true);
+    expect(allCurrent([])).toBe(true);
   });
   it("marks every row unknown when the latest release is not known", () => {
     const blind = updateRows({ ...plugin, latest: null }, names);

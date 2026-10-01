@@ -1,4 +1,6 @@
 // Settings → Updates: the rows and the "Update all" plan, from GET /api/plugin/status.
+import { runtimePending } from "./board";
+import { isNewer, joinNames, versionParts } from "./skills";
 import { DASH } from "./status";
 
 export type PluginStatus = {
@@ -15,7 +17,7 @@ export type UpdateStep = { id: string; label: string; body: { scope: "global" } 
 export type UpdateRow = {
   key: string; name: string; sub: string; version: string;
   state: "pending" | "current" | "unknown";
-  /** Why the state is unknown. */
+  /** Why the state is unknown; for a pending row, the label of its button when it is not "Update". */
   note: string;
   step: UpdateStep | null;
   /** The id of the action that updates this row, pending or not: its preview and result show under the first row of the group. */
@@ -29,30 +31,11 @@ const AGENTS: Record<string, string> = {
 // One update refreshes the skills in every agent folder (install.py --update).
 const GLOBAL: UpdateStep = { id: "global", label: "Skills in every agent folder", body: { scope: "global" } };
 
-const parts = (version: string | null | undefined) => {
-  const numbers = (version ?? "").trim().split(".").map((part) => (/^\d+$/.test(part) ? Number(part) : NaN));
-  return version && !numbers.some(Number.isNaN) ? numbers : null;
-};
-
-/** The same rule as `_is_newer` in the daemon: numeric parts, left to right. */
-export function isNewer(latest: string | null | undefined, installed: string | null | undefined): boolean {
-  const a = parts(latest), b = parts(installed);
-  if (!a || !b) return false;
-  for (let index = 0; index < Math.max(a.length, b.length); index++) {
-    if (a[index] === undefined) return false; // equal so far and `latest` is shorter
-    if (b[index] === undefined) return true;
-    if (a[index] !== b[index]) return a[index] > b[index];
-  }
-  return false;
-}
-
-const list = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
-
 function row(key: string, name: string, sub: string, version: string | null, latest: string | null, step: UpdateStep): UpdateRow {
   const group = step.id;
-  const known = parts(version) ? version! : null;
+  const known = versionParts(version) ? version! : null;
   if (!known) return { key, name, sub, version: DASH, state: "unknown", note: "Version unknown", step: null, group };
-  if (!parts(latest)) return { key, name, sub, version: known, state: "unknown", note: "Latest release unknown", step: null, group };
+  if (!versionParts(latest)) return { key, name, sub, version: known, state: "unknown", note: "Latest release unknown", step: null, group };
   return isNewer(latest, known)
     ? { key, name, sub, version: `${known} → ${latest}`, state: "pending", note: "", step, group }
     : { key, name, sub, version: known, state: "current", note: "", step: null, group };
@@ -70,15 +53,22 @@ export function updateRows(plugin: PluginStatus, names: Record<string, string>):
     folders.set(root, folder);
   }
   const rows = [...folders].map(([root, folder]) =>
-    row("skills:" + root, "Skills in " + list(folder.agents), root, folder.version, latest, GLOBAL));
+    row("skills:" + root, "Skills in " + joinNames(folder.agents), root, folder.version, latest, GLOBAL));
   for (const project of plugin.projects ?? []) {
     if (!project.runtime) continue;
     const name = "Runtime in " + (names[project.root] ?? project.root.split(/[\\/]/).filter(Boolean).pop() ?? project.root);
-    rows.push(row("project:" + project.root, name, project.root, project.runtime_version ?? null, latest,
-      { id: "project:" + project.root, label: name, body: { scope: "project", root: project.root } }));
+    const key = "project:" + project.root;
+    const step: UpdateStep = { id: key, label: name, body: { scope: "project", root: project.root } };
+    // A legacy runtime has no version stamp: the project update migrates it, as on the board.
+    rows.push(!project.runtime_version && runtimePending(project, latest)
+      ? { key, name, sub: project.root, version: `No version stamp → ${latest}`, state: "pending", note: "Update legacy runtime", step, group: key }
+      : row(key, name, project.root, project.runtime_version ?? null, latest, step));
   }
   return rows;
 }
+
+/** "Everything is up to date" is true only when each row is current. */
+export const allCurrent = (rows: UpdateRow[]) => rows.every((item) => item.state === "current");
 
 /** "Update all": each pending action once, in list order. */
 export function updatePlan(rows: UpdateRow[]): UpdateStep[] {

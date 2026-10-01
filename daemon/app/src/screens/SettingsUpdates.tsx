@@ -1,6 +1,6 @@
 // Settings → Updates: skills per agent folder and the runtime of each project. Each update is previewed first.
 import { Fragment, useEffect, useState } from "react";
-import { opOutcome, updatePlan, updateRows } from "../settingsUpdates";
+import { allCurrent, opOutcome, updatePlan, updateRows } from "../settingsUpdates";
 import type { OpResult, PluginStatus, UpdateStep } from "../settingsUpdates";
 import { api } from "../shell";
 import { nameOf } from "../status";
@@ -78,7 +78,7 @@ export function UpdatesTab({ status }: { status: Status | null }) {
       {all === "stopped" && <div className="error" role="alert">An update failed. The updates after it did not run.</div>}
       {!plugin ? (!error && <p className="note">Reading the installed versions…</p>) : (
         <>
-          {!plan.length && !busy && (
+          {allCurrent(rows) && !busy && (
             <p className="set-fine" role="status">
               <i className="dot ok" />Everything is up to date.{!rows.length && " No skills or project runtimes are installed."}
             </p>
@@ -95,7 +95,7 @@ export function UpdatesTab({ status }: { status: Status | null }) {
                       {row.state === "current" ? <span className="pill ok">Up to date</span>
                         : row.state === "unknown" ? <span className="pill mute">{row.note}</span>
                         : <button className="btn small" disabled={busy || all === "confirm" || !!ops[row.group]}
-                            onClick={() => send(row.step!, true)}>Update</button>}
+                            onClick={() => send(row.step!, true)}>{row.note || "Update"}</button>}
                     </div>
                     {op && <OpPanel op={op} solo={all !== "confirm"} busy={busy}
                       onRun={() => run(op.step)} onRetry={() => send(op.step, true)} onClose={() => setOp(row.group, null)} />}

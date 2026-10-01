@@ -3,8 +3,8 @@ import { useState } from "react";
 import { api } from "../shell";
 import { failure, notDetected, sharedRoots, skillRows, targetVersion } from "../skills";
 import type { Failure, SkillRow, UninstallPlan } from "../skills";
-import { applyUninstall, installSkills, message, planUninstall, usePlugin } from "../skillsApi";
-import type { Status } from "../status";
+import { applyUninstall, installSkills, message, planUninstall } from "../skillsApi";
+import type { usePlugin } from "../skillsApi";
 import { FailureCard, Output, PlanBox, ReleasePicker } from "./SkillsParts";
 import "./skills.css";
 
@@ -15,8 +15,8 @@ type Panel =
   | { kind: "failed"; row: SkillRow; failure: Failure; output: string; retry: () => void }
   | { kind: "plan"; row: SkillRow; plan: UninstallPlan };
 
-export function Skills(_props: { status: Status | null }) {
-  const { plugin, hosts, error, reload } = usePlugin();
+export function Skills({ skills }: { skills: ReturnType<typeof usePlugin> }) {
+  const { plugin, hosts, error, reload } = skills;
   const [panel, setPanel] = useState<Panel | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // what runs now, for the status line
   const [check, setCheck] = useState<{ text: string; bad: boolean } | null>(null);

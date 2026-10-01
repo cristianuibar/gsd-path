@@ -1,7 +1,9 @@
 // The monitor runs: the header, the offline banner and the page the route names.
 import type { Route } from "../route";
 import type { Shell } from "../shell";
-import { clock, skillsPending } from "../status";
+import { pendingSkills } from "../skills";
+import { usePlugin } from "../skillsApi";
+import { clock } from "../status";
 import { Logo } from "../ui";
 import { useStatus } from "../useStatus";
 import { Board } from "./Board";
@@ -23,8 +25,10 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
   // A project that is no longer watched falls back to the board, as in the daemon dashboard.
   const project = route.page === "project" || route.page === "env"
     ? status?.projects.find((p) => p.root === route.root) : undefined;
-  // Skills updates waiting: the count badge on the Skills nav item.
-  const pending = skillsPending(status);
+  // The rows the Skills page shows as "Update available": the count badge on the Skills nav item.
+  // They load again on each page change and when /status reports another skills state.
+  const skills = usePlugin(route.page + JSON.stringify(status?.plugin));
+  const pending = pendingSkills(skills.hosts, skills.plugin).length;
 
   return (
     <>
@@ -51,7 +55,7 @@ export function Dashboard({ shell, route, onStart }: { shell: Shell; route: Rout
           <button className="btn small" onClick={onStart}>Start monitor</button>
         </div>
       )}
-      {route.page === "skills" ? <Skills status={status} />
+      {route.page === "skills" ? <Skills skills={skills} />
         : route.page === "stats" ? <Stats status={status} root={route.root} />
         : route.page === "settings" ? <Settings shell={shell} status={status} tab={route.tab} />
         : !project ? <Board status={status} offline={offline} now={now} />

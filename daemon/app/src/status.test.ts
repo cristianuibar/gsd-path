@@ -3,9 +3,7 @@ import { asking, blocked, building, shipped, status } from "./fixtures";
 import {
   ago, clock, duration, healthTone, milestoneStack, money, nameOf, phaseCells, pollMs, sortProjects, spendCell,
   stateLabel, stateOf, tokens,
-  skillsPending,
 } from "./status";
-import type { Status } from "./status";
 
 const NOW = Date.parse("2026-10-01T04:00:21+00:00");
 
@@ -109,20 +107,5 @@ describe("polling and order", () => {
   it("sorts blocked first, then in progress by name, then shipped", () => {
     expect(sortProjects(status.projects).map(nameOf)).toEqual(["atlas", "field-notes", "gsd-path", "done-thing"]);
     expect(status.projects.map(nameOf)).toEqual(["gsd-path", "atlas", "done-thing", "field-notes"]); // input untouched
-  });
-});
-
-describe("skillsPending", () => {
-  const plugin = (update_available: boolean, hosts: Record<string, { installed: boolean; version: string | null }>) =>
-    ({ plugin: { latest: "1.4.0", update_available, hosts } }) as unknown as Status;
-  it("counts installed agents that are not on the latest release", () => {
-    expect(skillsPending(plugin(true, {
-      claude: { installed: true, version: "1.3.2" }, codex: { installed: true, version: "1.4.0" },
-      kimi: { installed: false, version: null }, zed: { installed: true, version: null },
-    }))).toBe(2);
-  });
-  it("is zero when no update is available or the monitor has not answered", () => {
-    expect(skillsPending(plugin(false, { claude: { installed: true, version: "1.3.2" } }))).toBe(0);
-    expect(skillsPending(null)).toBe(0);
   });
 });

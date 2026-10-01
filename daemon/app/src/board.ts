@@ -1,6 +1,6 @@
 // The Projects board: filters, search and one row per project.
 import { ago, DASH, healthTone, milestoneStack, nameOf, phaseCells, reasons, sortProjects, spendCell, stateLabel, stateOf } from "./status";
-import { isNewer, skillRows } from "./skills";
+import { isNewer, pendingSkills } from "./skills";
 import type { HostInfo, PluginStatus, ProjectSetup } from "./skills";
 import type { Cell, Project, Tone } from "./status";
 
@@ -40,7 +40,7 @@ export function boardRow(p: Project, now: number): BoardRow {
 }
 
 /** A runtime older than the latest release, or an old runtime without a version stamp. */
-export const runtimePending = (setup: ProjectSetup, latest: string | null) =>
+export const runtimePending = (setup: { runtime?: boolean; runtime_version?: string | null }, latest: string | null) =>
   setup.runtime && !!latest && (!setup.runtime_version || isNewer(latest, setup.runtime_version));
 
 /** The Setup column. Null when the plugin status does not list the project. */
@@ -55,7 +55,7 @@ export function setupPill(setup: ProjectSetup | undefined, latest: string | null
 /** The banner above the board: only the updates that wait. Null when there are none. */
 export function updateBanner(hosts: HostInfo[], plugin: PluginStatus | null, projects: Project[]): { count: number; title: string; text: string } | null {
   if (!plugin) return null;
-  const skills = skillRows(hosts, plugin).filter((row) => row.status === "Update available").map((row) => "skills for " + row.label);
+  const skills = pendingSkills(hosts, plugin).map((row) => "skills for " + row.label);
   const runtimes = projects.filter((p) => {
     const setup = plugin.projects.find((item) => item.root === p.root);
     return setup && runtimePending(setup, plugin.latest);

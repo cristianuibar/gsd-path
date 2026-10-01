@@ -189,7 +189,7 @@ export function Environment({ project }: { project: Project }) {
       ) : <>
         <div className="env-bar">
           <div className="env-seg" role="group" aria-label="Env file">
-            {ENV_FILES.map((name) => <button key={name} aria-pressed={file === name} onClick={() => open(name)}>{name}</button>)}
+            {ENV_FILES.map((name) => <button key={name} aria-pressed={file === name} disabled={busy} onClick={() => open(name)}>{name}</button>)}
           </div>
           {pill && <span className={`pill ${pill.tone}`}>{pill.label}</span>}
         </div>

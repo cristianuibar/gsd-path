@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { failure, isNewer, joinNames, notDetected, releaseOptions, sharedRoots, skillRows, targetVersion } from "./skills";
+import { failure, isNewer, joinNames, notDetected, pendingSkills, releaseOptions, sharedRoots, skillRows, targetVersion } from "./skills";
 import type { HostInfo, PluginStatus } from "./skills";
 
 const host = (id: string, name: string, found: boolean, root: string): HostInfo =>
@@ -25,6 +25,17 @@ describe("versions", () => {
     expect(isNewer("1.10.0", "1.9.0")).toBe(true);
     expect(isNewer("1.4.0", "1.4.0")).toBe(false);
     expect(isNewer("1.3.2", "1.4.0")).toBe(false);
+  });
+  it("compares as the daemon does: a longer version with the same start is newer", () => {
+    expect(isNewer("1.2.0", "1.2")).toBe(true);
+    expect(isNewer("1.2", "1.2.0")).toBe(false);
+    expect(isNewer("1.4.1", "1.4")).toBe(true);
+  });
+  it("does not read a part that is not digits as a number", () => {
+    expect(isNewer("1..2", "1.0.1")).toBe(false);
+    expect(isNewer("2.0.0", "1..2")).toBe(false);
+    expect(isNewer("1.4.0-rc1", "1.3.0")).toBe(false);
+    expect(isNewer("1.4.0", "1.3.0 ")).toBe(true);
   });
   it("does not call an unknown version newer or older", () => {
     expect(isNewer(null, "1.4.0")).toBe(false);
@@ -76,6 +87,25 @@ describe("skillRows", () => {
   });
   it("is empty until the plugin status loads", () => {
     expect(skillRows(HOSTS, null)).toEqual([]);
+  });
+});
+
+describe("pendingSkills", () => {
+  it("counts a shared skills folder once", () => {
+    const old = plugin({ hosts: { codex: { installed: true, version: "1.3.2" }, zed: { installed: true, version: "1.3.2" } } });
+    expect(pendingSkills(HOSTS, old).map((row) => row.label)).toEqual(["Codex and Zed"]);
+  });
+  it("compares with the chosen release, not the latest one", () => {
+    const chosen = plugin({
+      releases: { latest: "1.4.0", selected: "1.3.2", versions: ["1.4.0", "1.3.2", "1.3.1"] },
+      hosts: { codex: { installed: true, version: "1.3.1" }, claude: { installed: true, version: "1.3.2" } },
+    });
+    expect(pendingSkills(HOSTS, chosen).map((row) => row.label)).toEqual(["Codex and Zed"]);
+  });
+  it("skips an unknown version and a version newer than the release", () => {
+    const odd = plugin({ hosts: { codex: { installed: true, version: null }, claude: { installed: true, version: "1.5.0" } } });
+    expect(pendingSkills(HOSTS, odd)).toEqual([]);
+    expect(pendingSkills(HOSTS, null)).toEqual([]);
   });
 });
 

@@ -16,17 +16,20 @@ export type PluginStatus = {
 export type OpResult = { ok: boolean; argv?: string[]; stdout_tail?: string; error?: string | null; source_notice?: string };
 export type UninstallPlan = { plan: { path: string; kind: string; reason: string }[]; skipped: { path: string; reason: string }[] };
 
-const parts = (version: string | null | undefined) => {
-  const numbers = (version ?? "").trim().split(".").map(Number);
-  return version && numbers.every(Number.isInteger) ? numbers : null;
+/** The same rule as _parse_version() in the daemon: digits between dots, else the version is unknown. */
+export const versionParts = (version: string | null | undefined) => {
+  const numbers = (version ?? "").trim().split(".").map((part) => (/^\d+$/.test(part) ? Number(part) : NaN));
+  return version && !numbers.some(Number.isNaN) ? numbers : null;
 };
 
-/** The same rule as _is_newer() in the daemon: an unknown version is never newer or older. */
+/** The same rule as _is_newer() in the daemon: a tuple compare, and an unknown version is never newer or older. */
 export function isNewer(latest: string | null | undefined, installed: string | null | undefined): boolean {
-  const a = parts(latest), b = parts(installed);
+  const a = versionParts(latest), b = versionParts(installed);
   if (!a || !b) return false;
   for (let k = 0; k < Math.max(a.length, b.length); k++) {
-    if ((a[k] ?? 0) !== (b[k] ?? 0)) return (a[k] ?? 0) > (b[k] ?? 0);
+    if (a[k] === undefined) return false; // equal so far and `latest` is shorter
+    if (b[k] === undefined) return true;
+    if (a[k] !== b[k]) return a[k] > b[k];
   }
   return false;
 }
@@ -77,6 +80,10 @@ export function skillRows(hosts: HostInfo[], plugin: PluginStatus | null): Skill
     return { ...base, version: entry.version, tone: "ok", status: "Installed", primary: other, preview: !!other, uninstall: true };
   });
 }
+
+/** The rows that show "Update available": the banner lists them and the Skills nav badge counts them. */
+export const pendingSkills = (hosts: HostInfo[], plugin: PluginStatus | null) =>
+  skillRows(hosts, plugin).filter((row) => row.status === "Update available");
 
 /** Agents that are not on this computer and have no skills folder with Path in it. */
 export const notDetected = (hosts: HostInfo[], plugin: PluginStatus | null) =>
