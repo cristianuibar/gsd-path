@@ -5,7 +5,7 @@ import { checkUpdate, installUpdate } from "../shell";
 import type { Shell } from "../shell";
 import { CopyButton } from "../ui";
 
-/** Settings and the tray ask the main window to show the dialog with this event. */
+/** Settings asks the main window to show the dialog with this event; the tray asks through the shell. */
 export const SHOW_UPDATE = "gsd-path:show-update";
 
 export function AppUpdateDialog({ shell, onClose }: { shell: Shell; onClose: () => void }) {

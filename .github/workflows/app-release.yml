@@ -53,27 +53,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `updater` is the platform name the app's updater asks for; `update` is the file it installs.
+          # `updates`: one or more `<platform>=<ext>`. The platform is the name the app's updater asks
+          # for; the ext is the file it installs.
           - os: macos-latest
             target: aarch64-apple-darwin
             bundles: app,dmg
-            updater: darwin-aarch64
-            update: app.tar.gz
+            updates: darwin-aarch64=app.tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
             bundles: app,dmg
-            updater: darwin-x86_64
-            update: app.tar.gz
+            updates: darwin-x86_64=app.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: msi
-            updater: windows-x86_64
-            update: msi
+            updates: windows-x86_64=msi
+          # An app installed from the .deb can install only a .deb.
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
-            updater: linux-x86_64
-            update: AppImage
+            updates: linux-x86_64=AppImage linux-x86_64-deb=deb
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -114,7 +112,7 @@ jobs:
             exit 1
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-      - name: Upload the signed update file
+      - name: Upload the signed update files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -122,15 +120,19 @@ jobs:
           set -euo pipefail
           shopt -s nullglob globstar
           # One update file and one signature per platform, under a fixed name that latest.json points to.
-          found=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*.${{ matrix.update }})
-          if [[ ${#found[@]} -ne 1 || ! -f "${found[0]}.sig" ]]; then
-            echo "expected one signed .${{ matrix.update }} update file, found: ${found[*]:-none}" >&2
-            exit 1
-          fi
-          name="updater-${{ matrix.updater }}.${{ matrix.update }}"
-          cp "${found[0]}" "$name"
-          cp "${found[0]}.sig" "$name.sig"
-          gh release upload "$GITHUB_REF_NAME" "$name" "$name.sig" --clobber
+          for update in ${{ matrix.updates }}; do
+            platform="${update%%=*}"
+            ext="${update#*=}"
+            found=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*."$ext")
+            if [[ ${#found[@]} -ne 1 || ! -f "${found[0]}.sig" ]]; then
+              echo "expected one signed .$ext update file, found: ${found[*]:-none}" >&2
+              exit 1
+            fi
+            name="updater-$platform.$ext"
+            cp "${found[0]}" "$name"
+            cp "${found[0]}.sig" "$name.sig"
+            gh release upload "$GITHUB_REF_NAME" "$name" "$name.sig" --clobber
+          done
 
   # Runs only when every platform built, so latest.json never names a missing file.
   publish-update:

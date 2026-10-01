@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { parseRoute } from "./route";
 import { pickScreen } from "./screen";
-import { boot, getShell, onShellChange, usePort } from "./shell";
+import { boot, getShell, onShellChange, onShowUpdate, usePort } from "./shell";
 import type { Shell } from "./shell";
 import { FirstLaunch } from "./screens/FirstLaunch";
 import { BlockingProblems, PortInUse, PythonMissing } from "./screens/Problems";
@@ -31,8 +31,10 @@ export function App() {
     addEventListener("hashchange", onHash);
     const showUpdate = () => setUpdateShown("asked");
     addEventListener(SHOW_UPDATE, showUpdate);
+    const stopShow = onShowUpdate(showUpdate);
     return () => {
       stop.then((off) => off());
+      stopShow.then((off) => off());
       removeEventListener("hashchange", onHash);
       removeEventListener(SHOW_UPDATE, showUpdate);
     };

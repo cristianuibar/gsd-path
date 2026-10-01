@@ -26,3 +26,6 @@ export function readyLine(shell: Shell, others: number): string | null {
   const more = others > 0 ? ` · ${others} more update${others === 1 ? "" : "s"}` : "";
   return `App ${shell.update.version} is ready${more}`;
 }
+
+/** The tray strip's Review: an app update opens its dialog; a skills update opens the dashboard. */
+export const reviewAction = (shell: Shell) => (readyLine(shell, 0) ? "app-update" : "open");

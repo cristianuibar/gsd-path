@@ -58,7 +58,8 @@ Settings → Updates, and asks before it installs. Each update file is signed wi
 (repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`); the public key is in
 `src-tauri/tauri.conf.json`. An update whose signature does not match is refused and nothing changes.
 
-The `App release` workflow signs one update file per platform (`updater-<platform>.<ext>` and its `.sig`) and,
+The `App release` workflow signs one update file per platform (`updater-<platform>.<ext>` and its `.sig`; Linux
+has two, the AppImage and the `.deb`, because an app installed from the `.deb` can install only a `.deb`) and,
 only when every platform built, writes `latest.json` with `scripts/latest-json.mjs` and replaces it on the
 `app-latest` pre-release. A local build makes no update files, because it has no signing key. If the private
 key or its password is lost, installed apps can accept no more updates.

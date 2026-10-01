@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appUpdateRow, readyLine, refusedText } from "./appUpdate";
+import { appUpdateRow, readyLine, refusedText, reviewAction } from "./appUpdate";
 import type { Shell } from "./shell";
 
 const shell = (over: Partial<Shell>) => ({ version: "0.1.0", update: null, update_error: null, ...over }) as Shell;
@@ -27,5 +27,11 @@ describe("app update", () => {
     expect(readyLine(shell({ update: { version: "0.1.1", notes: null } }), 0)).toBe("App 0.1.1 is ready");
     expect(readyLine(shell({}), 2)).toBeNull();
     expect(readyLine(shell({ update: { version: "0.1.1", notes: null }, update_error: "x" }), 0)).toBeNull();
+  });
+  it("Review opens the update dialog for an app update and the dashboard for a skills update", () => {
+    expect(reviewAction(shell({ update: { version: "0.1.1", notes: null } }))).toBe("app-update");
+    expect(reviewAction(shell({}))).toBe("open");
+    // A refused update shows no app line, so the strip is the skills update.
+    expect(reviewAction(shell({ update: { version: "0.1.1", notes: null }, update_error: "bad signature" }))).toBe("open");
   });
 });

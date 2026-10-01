@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // The updater asks for "<os>-<arch>"; each build uploads "updater-<os>-<arch>.<ext>" and its ".sig".
-export const PLATFORMS = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64"];
+// An app installed from the .deb asks for "linux-x86_64-deb" first and can install only a .deb.
+export const PLATFORMS = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64", "linux-x86_64-deb"];
 
 export function buildLatest({ tag, repo, notes, pubDate, assets }) {
   if (!/^app-v\d+\.\d+\.\d+/.test(tag)) throw new Error(`the tag must be app-v<version>, not ${tag}`);

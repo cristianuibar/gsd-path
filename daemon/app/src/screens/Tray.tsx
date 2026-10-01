@@ -1,6 +1,6 @@
 // The tray popover: a 380px window of its own (label "tray") that loads this bundle at #/tray.
 import { useState } from "react";
-import { readyLine } from "../appUpdate";
+import { readyLine, reviewAction } from "../appUpdate";
 import { boot, openUrl, trayAction } from "../shell";
 import type { Shell } from "../shell";
 import { clock } from "../status";
@@ -67,7 +67,7 @@ export function Tray({ shell }: { shell: Shell }) {
       {(appLine || status?.plugin?.update_available) && (
         <div className="tray-strip update">
           <span className="grow"><b>{appLine ?? `Skills ${status?.plugin?.latest ?? "update"} is ready`}</b></span>
-          <button className="btn tiny primary" onClick={() => trayAction("open")}>Review</button>
+          <button className="btn tiny primary" onClick={() => trayAction(reviewAction(shell))}>Review</button>
         </div>
       )}
       <div className="tray-foot">

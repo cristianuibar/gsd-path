@@ -256,12 +256,13 @@ fn start_daemon(app: &AppHandle, argv: &[String]) -> Result<Child, String> {
     }
 }
 
-fn stop_owned(app: &AppHandle) {
+/// Stop the daemon this app started. True when there was one.
+fn stop_owned(app: &AppHandle) -> bool {
     let child = app.state::<AppState>().0.lock().unwrap().child.take();
-    if let Some(mut child) = child {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    let Some(mut child) = child else { return false };
+    let _ = child.kill();
+    let _ = child.wait();
+    true
 }
 
 fn publish(app: &AppHandle, change: impl FnOnce(&mut ShellState)) -> ShellState {
@@ -486,22 +487,51 @@ async fn check_update(app: AppHandle) -> ShellState {
     publish(&app, move |view| checked(view, result))
 }
 
-/// Download the update, verify its signature, install it, and restart. An update whose
-/// signature does not match is refused by the updater; nothing is changed then.
+/// What follows the install step. `stopped`: the owned monitor was stopped for it.
+#[derive(Debug, PartialEq)]
+enum AfterInstall {
+    Restart,
+    Refused { error: String, start_monitor: bool },
+}
+
+fn after_install(result: Result<(), String>, stopped: bool) -> AfterInstall {
+    match result {
+        Ok(()) => AfterInstall::Restart, // the new version starts its own monitor
+        Err(error) => AfterInstall::Refused { error, start_monitor: stopped },
+    }
+}
+
+fn refuse_update(app: &AppHandle, error: String) -> Result<(), String> {
+    let reason = error.clone();
+    publish(app, move |view| view.update_error = Some(reason));
+    Err(error)
+}
+
+/// Download the update, verify its signature, stop the owned monitor, install, and restart.
+/// An update whose signature does not match is refused by the updater; nothing is changed then.
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
-    let outcome = async {
+    let downloaded = async {
         let update = find_update(&app).await?.ok_or("no update is available")?;
-        update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())
+        let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+        Ok::<_, String>((update, bytes))
     }
     .await;
-    if let Err(error) = outcome {
-        let reason = error.clone();
-        publish(&app, move |view| view.update_error = Some(reason));
-        return Err(error);
+    let (update, bytes) = match downloaded {
+        Ok(ready) => ready,
+        Err(error) => return refuse_update(&app, error),
+    };
+    // The monitor stops before the install: on Windows the installer step ends this process.
+    let stopped = stop_owned(&app);
+    match after_install(update.install(bytes).map_err(|e| e.to_string()), stopped) {
+        AfterInstall::Restart => app.restart(),
+        AfterInstall::Refused { error, start_monitor } => {
+            if start_monitor {
+                spawn_boot(&app);
+            }
+            refuse_update(&app, error)
+        }
     }
-    stop_owned(&app); // the new version starts its own monitor
-    app.restart()
 }
 
 /// Settings → App → Launch at login.
@@ -525,6 +555,11 @@ fn open_logs(app: AppHandle) -> Result<(), String> {
 fn tray_action(app: AppHandle, action: String, root: Option<String>) {
     match root {
         Some(root) if action == "open" => show_window(&app, Some(project_script(&root))),
+        // The main window opens the app update dialog (src/App.tsx).
+        _ if action == "app-update" => {
+            show_window(&app, None);
+            let _ = app.emit_to("main", "show-update", ());
+        }
         _ => on_menu(&app, &action),
     }
 }
@@ -782,7 +817,9 @@ fn main() {
         // Opening the app again from Finder or Spotlight starts no second process.
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_window(app, None),
-        RunEvent::Exit => stop_owned(app),
+        RunEvent::Exit => {
+            stop_owned(app);
+        }
         _ => {}
     });
 }
@@ -821,6 +858,15 @@ mod tests {
         state.update = Some(UpdateInfo { version: "0.1.1".into(), notes: None });
         checked(&mut state, Ok(None));
         assert_eq!((state.update, state.update_error), (None, None));
+    }
+
+    #[test]
+    fn a_refused_install_starts_the_monitor_again_only_when_it_was_stopped() {
+        assert_eq!(after_install(Ok(()), true), AfterInstall::Restart);
+        assert_eq!(after_install(Err("no space".into()), true),
+            AfterInstall::Refused { error: "no space".into(), start_monitor: true });
+        assert_eq!(after_install(Err("no space".into()), false),
+            AfterInstall::Refused { error: "no space".into(), start_monitor: false });
     }
 
     #[test]
