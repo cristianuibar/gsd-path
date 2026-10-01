@@ -657,6 +657,8 @@ def finish_task(primary: Path, state: Dict[str, object]) -> Dict[str, object]:
         member = str(state["member"])
         landed = isolation.land_member(primary, member, task_id, str(state["title"]),
                                        str(state["contract_file"]), base, str(state["member_base"]))
+        landing = str(landed["landing"])
+        ledger = isolation.git_output(worktree, "rev-parse", f"{landing}^") == str(state["member_base"])
         if ledger:
             build_state.verify_record(str(primary), command, landing, "pass", execution=execution, member=member)
         coordinator_task = primary / str(state.get("contract_file") or state["task_file"])
