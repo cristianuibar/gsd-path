@@ -415,7 +415,9 @@ def validate_plan_task_briefs(
             located = member_base(member) if isinstance(member, str) and member else None
             if located is None:
                 raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
-            base_repo = located[0]
+            # Done member tasks record the coordinator contract base in `base:`.
+            if check_handoffs._task_scalar(text, task_id, "status") != "done":
+                base_repo = located[0]
         recorded_base = check_handoffs._task_scalar(text, task_id, "base")
         try:
             landed_bases[task_id] = require_commit(base_repo, require_full_sha(recorded_base))
