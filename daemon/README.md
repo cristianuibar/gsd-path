@@ -124,6 +124,16 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   request scans skip host session logs, share a lock with background scans,
   and record changes when history is enabled.
 
+- `GET /api/config` — every setting in `daemon.json`: `parents`, `excludes`,
+  `max_depth`, `poll_seconds`, `notify`, `history`, `session_dirs`, `prices`.
+- `POST /api/config` — a JSON object with any of those keys. Every value is
+  checked first; one bad value or an unknown key returns 400 and changes
+  nothing. Valid changes apply to the running daemon, are saved, and start a
+  scan. The answer is the full settings object.
+- `GET /api/diagnostics` — a support report: daemon and Python versions,
+  platform, settings, project count, plugin state, and the last lines of each
+  file in `~/.gsd-path/logs`. It never holds the write token.
+
 Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 `localhost:<port>`, `Origin` is absent or `http://<Host>`, and
 `Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
