@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import io
 import json
 import os
@@ -1577,6 +1578,48 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
         self.assertEqual(receipt["status"], "skipped", receipt)
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
+
+
+
+class DispatchPinnedRuntimeTests(unittest.TestCase):
+    PINNED_MARKER = "gsd-path-pinned-runtime-marker-209"
+
+    def tearDown(self) -> None:
+        import scripts
+
+        scripts.__path__ = [str(PROJECT_ROOT / "scripts")]
+        for name in dispatch_driver._RUNTIME_ACTIVATION_ORDER:
+            importlib.reload(importlib.import_module(f"scripts.{name}"))
+        dispatch_driver.isolation = importlib.import_module("scripts.isolation")
+        dispatch_driver.build_state = importlib.import_module("scripts.build_state")
+        dispatch_driver.task_context = importlib.import_module("scripts.task_context")
+        dispatch_driver.contracts = importlib.import_module("scripts.check_handoffs")
+        dispatch_driver.pipeline_state = importlib.import_module("scripts.pipeline_state")
+        dispatch_driver.archive_milestone = importlib.import_module("scripts.archive_milestone")
+        dispatch_driver.review_findings = importlib.import_module("scripts.review_findings")
+        dispatch_driver.model_policy = importlib.import_module("scripts.model_policy")
+        dispatch_driver._refresh_stop_errors()
+
+    def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            (repo / ".gsd-path").mkdir(parents=True)
+            (repo / ".gsd-path/runtime.json").write_text('{"digest":"test"}', encoding="utf-8")
+            runtime = Path(temp) / "runtime"
+            shutil.copytree(
+                PROJECT_ROOT / "scripts",
+                runtime,
+                ignore=shutil.ignore_patterns("__pycache__", "dev"),
+            )
+            marker = f"\nPINNED_RUNTIME_MARKER = '{self.PINNED_MARKER}'\n"
+            (runtime / "isolation.py").write_bytes(
+                (runtime / "isolation.py").read_bytes() + marker.encode("utf-8"))
+            completed = subprocess.CompletedProcess([], 0, stdout=str(runtime))
+            with mock.patch.object(dispatch_driver.subprocess, "run", return_value=completed):
+                dispatch_driver._activate_pinned_runtime(repo)
+            self.assertEqual(getattr(dispatch_driver.isolation, "PINNED_RUNTIME_MARKER", None),
+                             self.PINNED_MARKER)
+            self.assertIn(dispatch_driver.isolation.IsolationError, dispatch_driver.STOP_ERRORS)
 
 
 if __name__ == "__main__":
