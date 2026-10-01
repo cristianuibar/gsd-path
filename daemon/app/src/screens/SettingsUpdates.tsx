@@ -4,12 +4,14 @@ import { allCurrent, opOutcome, updatePlan, updateRows } from "../settingsUpdate
 import type { OpResult, PluginStatus, UpdateStep } from "../settingsUpdates";
 import { api } from "../shell";
 import { nameOf } from "../status";
+import type { Shell } from "../shell";
+import { AppUpdateRow } from "./AppUpdate";
 import type { Status } from "../status";
 import { FixText } from "../ui";
 
 type Op = { step: UpdateStep; phase: "checking" | "preview" | "running" | "done" | "failed"; output: string; error: string };
 
-export function UpdatesTab({ status }: { status: Status | null }) {
+export function UpdatesTab({ shell, status }: { shell: Shell; status: Status | null }) {
   const [plugin, setPlugin] = useState<PluginStatus | null>(null);
   const [error, setError] = useState("");
   const [ops, setOps] = useState<Record<string, Op>>({});
@@ -67,6 +69,7 @@ export function UpdatesTab({ status }: { status: Status | null }) {
         <h2>Updates</h2>
         <button className="btn primary" disabled={busy || !plan.length || all === "confirm"} onClick={previewAll}>Update all</button>
       </div>
+      <AppUpdateRow shell={shell} />
       {error && <div className="error" role="alert">Cannot read the update status. <FixText text={error} /></div>}
       {all === "confirm" && (
         <div className="set-confirm" role="status">

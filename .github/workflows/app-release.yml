@@ -4,6 +4,11 @@ name: App release
 # to a GitHub pre-release. Builds are unsigned (macOS: ad-hoc), so they are for
 # testers only; see docs/adr/0005-native-dashboard-app.md.
 #
+# It also signs the update files with the updater key (repository secrets
+# TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and, when
+# every platform built, replaces latest.json on the fixed app-latest
+# pre-release. Installed apps read that file to find the update.
+#
 # Trigger: push a tag app-v<version>, where <version> is the version in
 # daemon/app/src-tauri/tauri.conf.json:
 #   git tag app-v0.1.0 && git push origin app-v0.1.0
@@ -48,18 +53,27 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `updater` is the platform name the app's updater asks for; `update` is the file it installs.
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
+            updater: darwin-aarch64
+            update: app.tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
+            updater: darwin-x86_64
+            update: app.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: msi
+            updater: windows-x86_64
+            update: msi
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,appimage
+            updater: linux-x86_64
+            update: AppImage
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -79,7 +93,14 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm ci
       - name: Build
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        # Update files are made only here: a local build has no signing key.
+        run: >
+          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          --config '{"bundle":{"createUpdaterArtifacts":true}}'
       - name: Upload the installers
         shell: bash
         env:
@@ -93,3 +114,43 @@ jobs:
             exit 1
           fi
           gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+      - name: Upload the signed update file
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          # One update file and one signature per platform, under a fixed name that latest.json points to.
+          found=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*.${{ matrix.update }})
+          if [[ ${#found[@]} -ne 1 || ! -f "${found[0]}.sig" ]]; then
+            echo "expected one signed .${{ matrix.update }} update file, found: ${found[*]:-none}" >&2
+            exit 1
+          fi
+          name="updater-${{ matrix.updater }}.${{ matrix.update }}"
+          cp "${found[0]}" "$name"
+          cp "${found[0]}.sig" "$name.sig"
+          gh release upload "$GITHUB_REF_NAME" "$name" "$name.sig" --clobber
+
+  # Runs only when every platform built, so latest.json never names a missing file.
+  publish-update:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Replace latest.json on the app-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir signatures
+          gh release download "$GITHUB_REF_NAME" --pattern 'updater-*.sig' --dir signatures
+          node daemon/app/scripts/latest-json.mjs "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" signatures > latest.json
+          cat latest.json
+          gh release view app-latest >/dev/null 2>&1 || gh release create app-latest --prerelease \
+            --title "OpenGSD Path app: update channel" \
+            --notes "Holds latest.json, the file installed apps read to find an update. Download the app from the newest app-v release."
+          gh release upload app-latest latest.json --clobber

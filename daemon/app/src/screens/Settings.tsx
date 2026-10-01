@@ -23,7 +23,7 @@ export function Settings({ shell, status, tab }: { shell: Shell; status: Status 
           {TABS.map(([key, label]) => <a key={key} href={settingsHash(key)} aria-current={tab === key ? "page" : undefined}>{label}</a>)}
         </nav>
         <section className="set-body">
-          {tab === "updates" ? <UpdatesTab status={status} />
+          {tab === "updates" ? <UpdatesTab shell={shell} status={status} />
             : tab === "path" ? <PathTab status={status} />
             : tab === "monitoring" ? <MonitoringTab form={form} />
             : tab === "usage" ? <UsageTab form={form} />

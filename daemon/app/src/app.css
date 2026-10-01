@@ -235,3 +235,11 @@ b{font-weight:600}
 .btn.quiet{padding:0 12px;border:0;background:none;color:var(--dim)}
 .btn.quiet:hover{background:var(--hover)}
 .tray-foot .primary{border:0}
+
+/* The app update dialog */
+.modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px}
+.modal-card{background:var(--card);border-radius:12px;box-shadow:0 12px 40px rgb(0 0 0/.3);width:100%;max-width:440px;padding:24px;display:grid;gap:12px}
+.modal-card>b{font-size:17px;font-weight:650}
+.modal-card>span{color:var(--dim)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap}
+.app-update{margin-bottom:16px}

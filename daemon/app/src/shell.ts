@@ -40,6 +40,12 @@ export type Shell = {
   autostart: boolean;
   /** This app started the monitor, so it can stop and restart it. */
   owned: boolean;
+  /** This app's version. */
+  version: string;
+  /** A newer app version that is ready to install. */
+  update: { version: string; notes: string | null } | null;
+  /** Why the last update check or install failed. With `update` set, the update was refused. */
+  update_error: string | null;
 };
 
 export const getShell = () => invoke<Shell>("shell_state");
@@ -59,5 +65,9 @@ export const pickFolder = () => invoke<string | null>("pick_folder");
 export const setAutostart = (enabled: boolean) => invoke<Shell>("set_autostart", { enabled });
 /** Show ~/.gsd-path/logs in the file manager. */
 export const openLogs = () => invoke<void>("open_logs");
+/** Ask the update server now. Returns the new shell state. */
+export const checkUpdate = () => invoke<Shell>("check_update");
+/** Download, verify, and install the ready update, then restart. Rejects when the update is refused. */
+export const installUpdate = () => invoke<void>("install_update");
 export const onShellChange = (handler: (shell: Shell) => void) =>
   listen<Shell>("shell", (event) => handler(event.payload));

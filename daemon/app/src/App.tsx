@@ -5,6 +5,7 @@ import { boot, getShell, onShellChange, usePort } from "./shell";
 import type { Shell } from "./shell";
 import { FirstLaunch } from "./screens/FirstLaunch";
 import { BlockingProblems, PortInUse, PythonMissing } from "./screens/Problems";
+import { AppUpdateDialog, SHOW_UPDATE } from "./screens/AppUpdate";
 import { Dashboard } from "./screens/Dashboard";
 import { Requirements } from "./screens/Requirements";
 import { Tray } from "./screens/Tray";
@@ -16,6 +17,11 @@ export function App() {
   const [setupDone, setSetupDone] = useState(() => localStorage.getItem(SETUP_DONE) === "1");
   const [firstLaunchSeen, setFirstLaunchSeen] = useState(false);
   const [hash, setHash] = useState(location.hash);
+  // The version the update dialog shows; "Later" closes it until Settings or the tray asks again.
+  const [updateShown, setUpdateShown] = useState<string | null>(null);
+  const offered = shell?.update?.version ?? null;
+  // A newly found update opens the dialog one time.
+  useEffect(() => { if (offered) setUpdateShown(offered); }, [offered]);
 
   useEffect(() => {
     getShell().then(setShell);
@@ -23,7 +29,13 @@ export function App() {
     const stop = onShellChange(setShell);
     const onHash = () => setHash(location.hash);
     addEventListener("hashchange", onHash);
-    return () => { stop.then((off) => off()); removeEventListener("hashchange", onHash); };
+    const showUpdate = () => setUpdateShown("asked");
+    addEventListener(SHOW_UPDATE, showUpdate);
+    return () => {
+      stop.then((off) => off());
+      removeEventListener("hashchange", onHash);
+      removeEventListener(SHOW_UPDATE, showUpdate);
+    };
   }, []);
 
   if (!shell) return null;
@@ -49,6 +61,11 @@ export function App() {
     case "problem":
       return <BlockingProblems shell={shell} onRetry={retry} />;
     case "ready":
-      return <Dashboard shell={shell} route={route} onStart={retry} />;
+      return (
+        <>
+          <Dashboard shell={shell} route={route} onStart={retry} />
+          {updateShown && <AppUpdateDialog shell={shell} onClose={() => setUpdateShown(null)} />}
+        </>
+      );
   }
 }

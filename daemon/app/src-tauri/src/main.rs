@@ -47,6 +47,15 @@ struct ShellState {
     error: Option<String>,
     autostart: bool,
     owned: bool, // this app started the daemon, so it can stop and restart it
+    version: String,
+    update: Option<UpdateInfo>,    // a newer app version that is ready to install
+    update_error: Option<String>, // the last check or install failed; with `update` set, the update was refused
+}
+
+#[derive(Clone, Serialize, PartialEq, Debug)]
+struct UpdateInfo {
+    version: String,
+    notes: Option<String>,
 }
 
 struct Shell {
@@ -452,6 +461,49 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
         .map(|path| path.to_string_lossy().into_owned())
 }
 
+// -- app update -------------------------------------------------------------------
+
+/// What a finished update check means for the shell state.
+fn checked(view: &mut ShellState, result: Result<Option<UpdateInfo>, String>) {
+    match result {
+        Ok(found) => (view.update, view.update_error) = (found, None),
+        // A failed check keeps an update that an earlier check found.
+        Err(error) => view.update_error = Some(error),
+    }
+}
+
+async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())
+}
+
+/// Ask the update server (latest.json on the app-latest pre-release) for a newer version.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> ShellState {
+    let result = find_update(&app)
+        .await
+        .map(|found| found.map(|update| UpdateInfo { version: update.version.clone(), notes: update.body.clone() }));
+    publish(&app, move |view| checked(view, result))
+}
+
+/// Download the update, verify its signature, install it, and restart. An update whose
+/// signature does not match is refused by the updater; nothing is changed then.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let outcome = async {
+        let update = find_update(&app).await?.ok_or("no update is available")?;
+        update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())
+    }
+    .await;
+    if let Err(error) = outcome {
+        let reason = error.clone();
+        publish(&app, move |view| view.update_error = Some(reason));
+        return Err(error);
+    }
+    stop_owned(&app); // the new version starts its own monitor
+    app.restart()
+}
+
 /// Settings → App → Launch at login.
 #[tauri::command]
 fn set_autostart(app: AppHandle, enabled: bool) -> Result<ShellState, String> {
@@ -634,8 +686,9 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![shell_state, boot_command, use_port, open_url, api, tray_action,
-            pick_folder, set_autostart, open_logs])
+            pick_folder, set_autostart, open_logs, check_update, install_update])
         .setup(|app| {
             let view = ShellState {
                 phase: "checking",
@@ -646,6 +699,9 @@ fn main() {
                 error: None,
                 autostart: false,
                 owned: false,
+                version: app.package_info().version.to_string(),
+                update: None,
+                update_error: None,
             };
             app.manage(AppState(Mutex::new(Shell { python: None, path: None, child: None, view, popover_hidden: None }), Mutex::new(())));
             #[cfg(target_os = "macos")]
@@ -685,6 +741,13 @@ fn main() {
                     show_window(&first, None);
                 }
             });
+            // Look for a newer app version once at start. A development build never updates itself.
+            if !cfg!(debug_assertions) {
+                let updater = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    check_update(updater).await;
+                });
+            }
             thread::spawn(move || {
                 let mut last = view;
                 loop {
@@ -728,6 +791,37 @@ fn main() {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn view() -> ShellState {
+        ShellState { phase: "ready", os: "macos", port: 8765, python_missing: false, launch: None, error: None,
+            autostart: false, owned: false, version: "0.1.0".into(), update: None, update_error: None }
+    }
+
+    #[test]
+    fn a_found_update_is_offered_and_clears_an_old_error() {
+        let mut state = view();
+        state.update_error = Some("network".into());
+        let found = UpdateInfo { version: "0.1.1".into(), notes: None };
+        checked(&mut state, Ok(Some(found.clone())));
+        assert_eq!((state.update, state.update_error), (Some(found), None));
+    }
+
+    #[test]
+    fn a_failed_check_keeps_the_update_found_before() {
+        let mut state = view();
+        let found = UpdateInfo { version: "0.1.1".into(), notes: None };
+        state.update = Some(found.clone());
+        checked(&mut state, Err("network is down".into()));
+        assert_eq!((state.update, state.update_error), (Some(found), Some("network is down".into())));
+    }
+
+    #[test]
+    fn no_newer_version_offers_nothing() {
+        let mut state = view();
+        state.update = Some(UpdateInfo { version: "0.1.1".into(), notes: None });
+        checked(&mut state, Ok(None));
+        assert_eq!((state.update, state.update_error), (None, None));
+    }
 
     #[test]
     fn a_clean_start_carries_the_daemon_command() {
