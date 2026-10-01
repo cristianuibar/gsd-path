@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from .config import resolve_config_path
+from . import subprocess_platform
 
 DEFAULT_REPO = "https://github.com/open-gsd/gsd-path.git"
 ENV_HOME = "GSD_DAEMON_HOME"
@@ -67,7 +68,7 @@ Runner = Callable[..., Tuple[int, str, str]]
 
 def _default_runner(argv: Sequence[str], cwd: Optional[str] = None) -> Tuple[int, str, str]:
     try:
-        proc = subprocess.run(
+        proc = subprocess_platform.run(
             [str(part) for part in argv],
             cwd=cwd,
             capture_output=True,

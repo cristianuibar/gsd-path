@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from .probe import is_project_root
 from .gitinfo import _git
+from . import subprocess_platform
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__"}
 
@@ -28,7 +29,7 @@ def _is_excluded(path: str, excludes: List[str]) -> bool:
 
 def _git_common_dir(root: str) -> Optional[str]:
     try:
-        result = subprocess.run(
+        result = subprocess_platform.run(
             ["git", "-C", root, "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,

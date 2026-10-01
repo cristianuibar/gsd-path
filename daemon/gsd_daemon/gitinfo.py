@@ -4,10 +4,12 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from . import subprocess_platform
+
 
 def _git(root: str, *args: str) -> Optional[str]:
     try:
-        result = subprocess.run(
+        result = subprocess_platform.run(
             ["git", "-C", root, *args],
             capture_output=True,
             text=True,
