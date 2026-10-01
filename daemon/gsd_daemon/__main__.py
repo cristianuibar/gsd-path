@@ -134,6 +134,8 @@ def main(argv=None) -> int:
     commands.add_parser("dump", help="full aggregated status JSON")
     serve_parser = commands.add_parser("serve", help="localhost status HTTP server")
     serve_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    serve_parser.add_argument("--require-token", action="store_true",
+                              help="refuse POST requests without the token in ~/.gsd-path/app/api-token")
     tray_parser = commands.add_parser("tray", help="run the system tray app (requires the tray extra)")
     tray_parser.add_argument("--serve", action="store_true",
                              help="also run the dashboard HTTP server in a background thread")
@@ -202,7 +204,7 @@ def main(argv=None) -> int:
         return 0
     if args.command == "serve":
         from . import serve as serve_module
-        serve_module.run(Watcher(config), port=args.port)
+        serve_module.run(Watcher(config), port=args.port, require_token=args.require_token)
         return 0
     if args.command == "tray":
         try:
