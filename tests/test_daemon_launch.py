@@ -143,6 +143,14 @@ class LaunchCase(unittest.TestCase):
 
 
 class ProbeTests(LaunchCase):
+    def test_program_name_is_the_base_name_also_for_a_path_with_a_space(self):
+        answers = {"darwin": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n",
+                   "linux": "node\n", "win32": "node\r\n"}
+        names = {platform: launch_module.process_name(
+                     7, self.installer(ScriptRunner(lambda cmd, out=out: (0, out)), platform=platform, retired=False, fake_venv=False))
+                 for platform, out in answers.items()}
+        self.assertEqual(names, {"darwin": "Google Chrome", "linux": "node", "win32": "node"})
+
     def test_free_port(self):
         self.assertEqual(probe_port(free_port()), {"state": "free"})
 
@@ -196,6 +204,8 @@ class RunningDaemonTests(LaunchCase):
         detail = result["problems"][0]["detail"]
         self.assertEqual(detail["owner"], "daemon")  # it answers as a daemon, so the app shows its fix text
         self.assertEqual(detail["pid"], impostor.pid)
+        self.assertNotIn("/", detail["name"])  # the program's name, not its path or arguments
+        self.assertIn("python", detail["name"].lower())
         self.assertIn("http.server", detail["command"])  # the impostor's own command line
         self.assertIsNone(impostor.poll())
 

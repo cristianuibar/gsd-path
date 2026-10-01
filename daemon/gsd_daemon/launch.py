@@ -178,6 +178,16 @@ def process_command(pid: int, installer: Installer) -> str:
     return installer.runner.run(argv, check=False).stdout.strip()
 
 
+def process_name(pid: int, installer: Installer) -> str:
+    """The program's name as the OS reports it: the base name of the executable."""
+    if installer.platform == "win32":
+        argv = ["powershell", "-NoProfile", "-Command", f"(Get-Process -Id {pid}).Name"]
+    else:
+        argv = ["ps", "-o", "comm=", "-p", str(pid)]
+    # macOS prints the whole path, which can hold spaces; Linux prints the name.
+    return installer.runner.run(argv, check=False).stdout.strip().rpartition("/")[2]
+
+
 def stop_daemon(port: int, reported_pid: Optional[int], installer: Installer) -> Optional[int]:
     """Stop a GSD Path daemon on the port. Returns the PID it could not stop, or None."""
     pid = reported_pid or listener_pid(port, installer)
@@ -210,7 +220,9 @@ def port_owner(port: int, installer: Installer, owner: str, pid: Optional[int] =
     """
     if pid is None or pid < 0:
         pid = listener_pid(port, installer)
-    return {"owner": owner, "pid": pid, "command": process_command(pid, installer) or None if pid else None}
+    return {"owner": owner, "pid": pid,
+            "name": process_name(pid, installer) or None if pid else None,
+            "command": process_command(pid, installer) or None if pid else None}
 
 
 def installed_version(installer: Installer) -> Optional[str]:

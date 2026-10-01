@@ -1,5 +1,5 @@
 // States where no monitor runs: Python missing, port taken, or another blocking problem.
-import { heldByDaemon, programName, pythonFix } from "../screen";
+import { heldByDaemon, pythonFix } from "../screen";
 import type { Problem, Shell } from "../shell";
 import { ActionButton, CopyButton, FixText, firstCommand } from "../ui";
 
@@ -27,9 +27,7 @@ export function PythonMissing({ shell, onRetry }: { shell: Shell; onRetry: () =>
 export function PortInUse({ shell, problem, onRetry, onUsePort }: {
   shell: Shell; problem: Problem; onRetry: () => void; onUsePort: (port: number) => void;
 }) {
-  const { pid } = problem.detail ?? {};
-  // The daemon reports the whole command line; the program name is enough here.
-  const command = programName(problem.detail?.command);
+  const { pid, name } = problem.detail ?? {};
   if (heldByDaemon(problem)) {
     return (
       <Page>
@@ -49,8 +47,8 @@ export function PortInUse({ shell, problem, onRetry, onUsePort }: {
       <div className="problem">
         <b>Port {shell.port} is already in use</b>
         <span>
-          {command
-            ? <>A program named <span className="mono">{command}</span>{pid ? ` (pid ${pid})` : ""} is listening there. </>
+          {name
+            ? <>A program named <span className="mono">{name}</span>{pid ? ` (pid ${pid})` : ""} is listening there. </>
             : "Another program is listening there. "}
           It is not a GSD Path monitor, so the app leaves it running.
         </span>

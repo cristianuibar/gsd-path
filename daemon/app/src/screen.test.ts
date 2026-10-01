@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heldByDaemon, pickScreen, programName, requirementRows } from "./screen";
+import { heldByDaemon, pickScreen, requirementRows } from "./screen";
 import type { Launch, Shell } from "./shell";
 
 const launch = (over: Partial<Launch> = {}): Launch => ({
@@ -59,13 +59,6 @@ describe("the port screen", () => {
     expect(heldByDaemon(port({ owner: "daemon", pid: 7 }))).toBe(true);
     expect(heldByDaemon(port({ owner: "other", pid: 7 }))).toBe(false);
     expect(heldByDaemon(port())).toBe(false);
-  });
-  it("names the program, also when its path has a space", () => {
-    expect(programName("node server.js")).toBe("node");
-    expect(programName("/usr/bin/python3 -m http.server 8765")).toBe("python3");
-    expect(programName('"C:\\Program Files\\nodejs\\node.exe" server.js')).toBe("node.exe");
-    expect(programName(null)).toBeNull();
-    expect(programName("")).toBeNull();
   });
 });
 

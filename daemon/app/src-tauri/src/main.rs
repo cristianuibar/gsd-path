@@ -51,6 +51,7 @@ struct ShellState {
 
 struct Shell {
     python: Option<Vec<String>>,
+    path: Option<String>, // the PATH child processes get; None: this process's own
     child: Option<Child>,
     view: ShellState,
     popover_hidden: Option<Instant>, // when a focus loss hid the tray popover
@@ -155,9 +156,13 @@ fn api_url(port: u16, method: &str, path: &str) -> Result<String, String> {
 
 // -- processes --------------------------------------------------------------------
 
-fn command(argv: &[String]) -> Command {
+/// A child process. `path` is its PATH, which also finds the program.
+fn command(argv: &[String], path: Option<&str>) -> Command {
     let mut command = Command::new(&argv[0]);
     command.args(&argv[1..]).stdin(Stdio::null());
+    if let Some(path) = path {
+        command.env("PATH", path);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -166,11 +171,11 @@ fn command(argv: &[String]) -> Command {
     command
 }
 
-/// Use the PATH a new terminal would get, so a program installed after the app started is found.
+/// The PATH a new terminal would get, so a program installed after the app started is found.
 /// Unix: apps started from Finder or a desktop menu get a minimal PATH; read the login shell's.
 /// Windows: a running process keeps its first PATH; read the machine and user values again
 /// (.NET expands their %VAR% references).
-fn refresh_path() {
+fn fresh_path() -> Option<String> {
     let argv: Vec<String> = if cfg!(windows) {
         ["powershell", "-NoProfile", "-NonInteractive", "-Command",
          "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Output ('__PATH__'+\
@@ -181,13 +186,15 @@ fn refresh_path() {
         vec![std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()), "-l".into(), "-c".into(),
              "printf '\\n__PATH__%s__PATH__' \"$PATH\"".into()]
     };
-    let Ok(output) = command(&argv).output() else { return };
-    if let Some(path) = marked_path(&String::from_utf8_lossy(&output.stdout)) {
-        std::env::set_var("PATH", path);
-    }
+    let output = command(&argv, None).output().ok()?;
+    marked_path(&String::from_utf8_lossy(&output.stdout))
 }
 
-fn find_python() -> Option<Vec<String>> {
+fn child_path(app: &AppHandle) -> Option<String> {
+    app.state::<AppState>().0.lock().unwrap().path.clone()
+}
+
+fn find_python(path: Option<&str>) -> Option<Vec<String>> {
     let candidates: &[&[&str]] = if cfg!(windows) {
         &[&["py", "-3"], &["python"], &["python3"]]
     } else {
@@ -197,7 +204,7 @@ fn find_python() -> Option<Vec<String>> {
         .iter()
         .map(|argv| argv.iter().map(|part| part.to_string()).collect::<Vec<_>>())
         .find(|argv| {
-            command(argv)
+            command(argv, path)
                 .args(["-c", "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -209,7 +216,7 @@ fn find_python() -> Option<Vec<String>> {
 
 fn run_launch(app: &AppHandle, python: &[String]) -> Result<Value, String> {
     let bundle = app.path().resolve("daemon", BaseDirectory::Resource).map_err(|e| e.to_string())?;
-    let output = command(python)
+    let output = command(python, child_path(app).as_deref())
         .args(["-B", "-m", "gsd_daemon", "launch", "--port", &port(app).to_string()])
         .env("PYTHONPATH", &bundle)
         .current_dir(&bundle)
@@ -227,7 +234,7 @@ fn start_daemon(app: &AppHandle, argv: &[String]) -> Result<Child, String> {
     fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
     let log = OpenOptions::new().create(true).append(true).open(logs.join("app-daemon.log")).map_err(|e| e.to_string())?;
     let err = log.try_clone().map_err(|e| e.to_string())?;
-    let mut child = command(argv).stdout(log).stderr(err).spawn().map_err(|e| e.to_string())?;
+    let mut child = command(argv, child_path(app).as_deref()).stdout(log).stderr(err).spawn().map_err(|e| e.to_string())?;
     // The daemon binds its port before its first scan; wait for it or for its exit.
     loop {
         if let Ok(Some(status)) = child.try_wait() {
@@ -275,12 +282,15 @@ fn boot(app: &AppHandle) -> ShellState {
 /// One launch check. The caller holds the boot lock.
 fn run_boot(app: &AppHandle) -> ShellState {
     publish(app, |view| view.phase = "checking");
-    refresh_path();
+    let path = fresh_path();
     let python = {
         let state = app.state::<AppState>();
         let mut shell = state.0.lock().unwrap();
+        if path.is_some() {
+            shell.path = path;
+        }
         if shell.python.is_none() {
-            shell.python = find_python();
+            shell.python = find_python(shell.path.as_deref());
         }
         shell.python.clone()
     };
@@ -606,7 +616,7 @@ fn main() {
                 autostart: false,
                 owned: false,
             };
-            app.manage(AppState(Mutex::new(Shell { python: None, child: None, view, popover_hidden: None }), Mutex::new(())));
+            app.manage(AppState(Mutex::new(Shell { python: None, path: None, child: None, view, popover_hidden: None }), Mutex::new(())));
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle().clone();
@@ -675,6 +685,9 @@ fn main() {
         .expect("error while building the OpenGSD Path app");
     app.run(|app, event| match event {
         RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
+        // Opening the app again from Finder or Spotlight starts no second process.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => show_window(app, None),
         RunEvent::Exit => stop_owned(app),
         _ => {}
     });
@@ -738,6 +751,15 @@ mod tests {
         assert!(opens_window_after_boot(true, "blocked"));
         assert!(!opens_window_after_boot(true, "ready"));
         assert!(!opens_window_after_boot(false, "blocked")); // the window is already open
+    }
+
+    #[test]
+    fn a_child_process_gets_the_refreshed_path() {
+        let path_of = |command: Command| {
+            command.get_envs().find(|(name, _)| *name == "PATH").map(|(_, value)| value.map(|v| v.to_owned()))
+        };
+        assert_eq!(path_of(command(&["python3".into()], Some("/opt/bin:/usr/bin"))), Some(Some("/opt/bin:/usr/bin".into())));
+        assert_eq!(path_of(command(&["python3".into()], None)), None); // it inherits this process's PATH
     }
 
     #[test]

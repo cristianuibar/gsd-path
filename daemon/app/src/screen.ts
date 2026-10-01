@@ -21,12 +21,6 @@ export function pickScreen(shell: Shell, seen: Seen): Screen {
   return shell.python_missing ? "python" : "problem";
 }
 
-/** The program name in a command line. Windows puts a path with a space in quotes. */
-export function programName(command: string | null | undefined): string | null {
-  const program = command?.match(/^"([^"]+)"|^(\S+)/);
-  return (program?.[1] ?? program?.[2])?.split(/[\\/]/).pop() || null;
-}
-
 /** The port is held by an older GSD Path daemon that could not be stopped, not by another program. */
 export const heldByDaemon = (problem: Problem) => problem.detail?.owner === "daemon";
 
