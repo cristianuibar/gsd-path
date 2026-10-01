@@ -193,11 +193,24 @@ def _run_git(
     *arguments: str,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    command = _common.git_command(repo, *arguments)
     result = subprocess.run(
-        ["git", "-C", str(repo), *arguments],
+        command,
         capture_output=True,
         encoding="utf-8", errors="replace",
     )
+    if (
+        check
+        and result.returncode != 0
+        and arguments
+        and arguments[0] == "commit"
+        and _common.git_index_lock_retryable(result.stderr)
+    ):
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            encoding="utf-8", errors="replace",
+        )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise PipelineStateError(f"git {' '.join(arguments)} failed: {detail}")
@@ -1720,9 +1733,10 @@ def transition_state(
             )
             if reason:
                 raise PipelineStateError(reason)
-        if state.phase in {"research", "decide"} and (
+        leaving_define = (state.phase, after.phase, after.status) == ("define", "define", "done")
+        if leaving_define or (state.phase in {"research", "decide"} and (
             after.phase != state.phase or after.status == "done"
-        ):
+        )):
             if __package__:
                 from . import check_handoffs
             else:
@@ -1731,6 +1745,8 @@ def transition_state(
                 except ImportError:  # pragma: no cover - package imports used by tests
                     from scripts import check_handoffs
             validator = {
+                # Approved intent carries its spec-reach probe tables complete.
+                "define": check_handoffs.validate_intent_probes,
                 "research": check_handoffs.validate_research_artifacts,
                 "decide": check_handoffs.validate_decide_artifacts,
             }[state.phase]

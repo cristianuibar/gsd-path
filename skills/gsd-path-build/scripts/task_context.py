@@ -9,15 +9,17 @@ from pathlib import Path
 
 try:
     from scripts import check_handoffs as contracts
+    from scripts import _common
 except ImportError:
     import check_handoffs as contracts
+    import _common
 
 
 def render(repo: Path, task: Path) -> str:
     intent_path = repo.resolve() / '.project/intent/INTENT.md'
     task = task.resolve()
-    intent = intent_path.read_bytes().decode('utf-8')
-    task_text = task.read_bytes().decode('utf-8')
+    intent = _common.read_user_text(intent_path)
+    task_text = _common.read_user_text(task)
     owned = contracts._owned_criteria(task_text, task.stem)
     criteria = contracts._success_criteria(intent)
     unknown = set(owned) - set(criteria)
@@ -40,7 +42,14 @@ def render(repo: Path, task: Path) -> str:
         if simple:
             before, after = intent[:section.start('body')], intent[section.end('body'):]
             # Corrections and task interfaces can explicitly refer to another SC.
-            required = set(owned) | set(re.findall(r'\bSC\d+\b', before + after + task_text))
+            # The spec-probe tables name every SC by design, so they select nothing.
+            scanned = re.sub(r'(?ms)^## (?:Edge coverage|Prohibitions)[ \t]*\n.*?(?=^## |\Z)', '',
+                             before + after)
+            required = set(owned) | set(re.findall(r'\bSC\d+\b', scanned + task_text))
+            # An owned criterion's edge or prohibition ruled into another SC needs that SC's text.
+            for rows in (contracts.edge_coverage(intent, criteria), contracts.prohibitions(intent, criteria)):
+                required |= {row['target'] for row in (rows or {}).values()
+                             if row['target'] and row['criterion'] in owned}
             selected = ''.join(chunk for item, chunk in zip(items, chunks) if f'SC{item[1]}' in required)
             projected = before + '\n' + (selected or '- No criteria assigned.\n\n') + after
             mode = 'owned-criteria'
