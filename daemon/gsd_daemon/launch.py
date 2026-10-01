@@ -124,8 +124,14 @@ def retire_legacy(installer: Installer) -> List[str]:
     check_login_item = installer.venv_dir.exists()
     found = legacy_registrations(installer, check_login_item)
     if found:
-        installer.uninstall()
+        failure = None
+        try:
+            installer.uninstall()
+        except (subprocess.CalledProcessError, OSError) as error:
+            failure = error
         found = legacy_registrations(installer, check_login_item)
+        if failure is not None and not found:
+            raise failure
     if not found:
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(__version__ + "\n", encoding="utf-8")
@@ -250,7 +256,7 @@ def requirements(installer: Installer) -> List[dict]:
         rows.append(_requirement("git", True, "ready", found.group(0).strip() if found else None))
     if installer.platform not in ("darwin", "win32"):
         # Debian and Ubuntu ship venv apart from Python; without it the daemon venv cannot be made.
-        venv = (installer.venv_python.exists() or
+        venv = (installer.venv_pip.exists() or
                 runner.run([sys.executable, "-c", "import ensurepip"], check=False).returncode == 0)
         rows.append(_requirement("python-venv", True, "ready" if venv else "missing"))
     if runner.which("gh") is None:

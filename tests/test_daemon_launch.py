@@ -106,6 +106,7 @@ class LaunchCase(unittest.TestCase):
         if fake_venv:
             installer.venv_python.parent.mkdir(parents=True)
             installer.venv_python.write_text("")
+            installer.venv_pip.write_text("")
         return installer
 
     def spawn(self, argv, port):
@@ -317,6 +318,14 @@ class RequirementTests(LaunchCase):
         self.assertIn("sudo apt install python3-venv", result["problems"][0]["fix"])
         self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
+    def test_venv_left_without_pip_still_gets_the_venv_module_check(self):
+        # A failed `python -m venv` leaves the interpreter but no pip.
+        installer = self.installer(ScriptRunner(self.respond(venv=1)), platform="linux")
+        installer.venv_pip.unlink()
+        result = launch(free_port(), installer)
+        self.assertEqual(result["action"], "setup")
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("python-venv", True)])
+
     def test_existing_venv_skips_the_venv_module_check(self):
         runner = ScriptRunner(self.respond(venv=1))
         result = launch(free_port(), self.installer(runner, platform="linux"))
@@ -387,7 +396,7 @@ class LegacyAutostartTests(LaunchCase):
         self.assertTrue(runner.ran("bootout"), "uninstall did not run")
         self.assertEqual(runner.ran("get the name"), [])
 
-    def test_linux_without_systemctl_still_returns_a_result(self):
+    def test_failed_uninstall_on_linux_without_systemctl_does_not_block(self):
         def respond(cmd):
             if cmd[0] == "systemctl":
                 raise FileNotFoundError(2, "No such file or directory", "systemctl")
@@ -396,9 +405,19 @@ class LegacyAutostartTests(LaunchCase):
         installer.unit_path.parent.mkdir(parents=True)
         installer.unit_path.write_text("[Unit]\n")
         result = launch(free_port(), installer)
+        self.assertEqual(result["action"], "start")
+        self.assertFalse(result["autostart_ok"])
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("autostart", False)])
+        self.assertIn(str(installer.unit_path), result["problems"][0]["fix"])
+        self.assertFalse((installer.gsd_home / RETIRED_MARKER).exists())
+
+    def test_error_with_no_registration_to_name_is_a_blocking_launch_problem(self):
+        installer = self.installer(ScriptRunner(installed(__version__)), platform="win32", retired=False)
+        # The marker directory cannot be made: a file is in its place.
+        (installer.gsd_home / RETIRED_MARKER).parent.write_text("")
+        result = launch(free_port(), installer)
         self.assertEqual((result["action"], result["serve_argv"]), ("setup", None))
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("launch", True)])
-        self.assertIn("systemctl", result["problems"][0]["message"])
 
     def test_windows_startup_shortcut_is_removed(self):
         runner = ScriptRunner(installed(__version__))
