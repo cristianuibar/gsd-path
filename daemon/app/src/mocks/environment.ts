@@ -7,7 +7,7 @@ type Body = { root: string; file: string; name?: string; dry_run?: boolean; chan
 const GIT: Record<string, string> = { ".env": "tracked", ".env.local": "ignored", ".env.development": "tracked", ".env.production": "untracked" };
 const START: Record<string, [string, string][]> = {
   ".env": [["APP_ENV", "development"], ["LOG_LEVEL", "info"], ["OPTIONAL_FLAG", ""]],
-  ".env.local": [["TYPESAFE_API_KEY", "tsk_mock_8f3a91c2d7"], ["DATABASE_URL", "postgres://app:pw@localhost:5432/app"]],
+  ".env.local": [["TYPESAFE_API_KEY", "mock-api-key"], ["DATABASE_URL", "postgres://app:pw@localhost:5432/app"]],
   ".env.development": [["LOG_LEVEL", "debug"]],
 };
 // One set of files per project root; a file that is not in the map does not exist.
