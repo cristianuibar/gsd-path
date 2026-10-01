@@ -215,9 +215,11 @@ def ensure_venv(installer: Installer) -> str:
             shutil.copy2(source / name, copy / name)
         installer.repo_root = Path(work)
         try:
-            installer.install(no_tray=True, no_autostart=True)
+            code = installer.install(no_tray=True, no_autostart=True)
         finally:
             installer.repo_root = source.parent
+    if code != 0:
+        raise OSError(f"`gsd_daemon install` failed with exit code {code}.")
     return __version__
 
 
@@ -235,42 +237,53 @@ def _requirement(name: str, required: bool, state: str, detail: Optional[str] = 
     return {"id": name, "required": required, "state": state, "detail": detail}
 
 
-def _tool_version(installer: Installer, tool: str) -> Optional[str]:
-    """`<tool> --version` without the leading words: '2.39.5 (Apple Git-154)'."""
-    done = installer.runner.run([tool, "--version"], check=False)
-    found = re.search(r"\d.*", (done.stdout or "").splitlines()[0]) if done.stdout else None
-    return found.group(0).strip() if found else None
-
-
 def requirements(installer: Installer) -> List[dict]:
     """What the app's Requirements step shows. Facts only; the app owns the wording."""
     runner = installer.runner
     rows = [_requirement("python", True, "ready", ".".join(str(part) for part in sys.version_info[:3]))]
-    if runner.which("git") is None:
+    git = runner.run(["git", "--version"], check=False) if runner.which("git") else None
+    if git is None or git.returncode != 0:
         rows.append(_requirement("git", True, "missing"))
     else:
-        rows.append(_requirement("git", True, "ready", _tool_version(installer, "git")))
+        # '2.39.5 (Apple Git-154)': the first line without the leading words.
+        found = re.search(r"\d.*", (git.stdout or "").partition("\n")[0])
+        rows.append(_requirement("git", True, "ready", found.group(0).strip() if found else None))
     if installer.platform not in ("darwin", "win32"):
         # Debian and Ubuntu ship venv apart from Python; without it the daemon venv cannot be made.
-        venv = runner.run([sys.executable, "-c", "import ensurepip"], check=False).returncode == 0
+        venv = (installer.venv_python.exists() or
+                runner.run([sys.executable, "-c", "import ensurepip"], check=False).returncode == 0)
         rows.append(_requirement("python-venv", True, "ready" if venv else "missing"))
     if runner.which("gh") is None:
         rows.append(_requirement("gh", False, "missing"))
     else:
-        version = (_tool_version(installer, "gh") or "").split(" ")[0] or None
-        signed_in = runner.run(["gh", "auth", "status"], check=False).returncode == 0
-        rows.append(_requirement("gh", False, "ready" if signed_in else "signed-out", version))
+        signed_in = runner.run(["gh", "auth", "token"], check=False).returncode == 0
+        rows.append(_requirement("gh", False, "ready" if signed_in else "signed-out"))
     return rows
 
 
 def launch(port: int, installer: Installer) -> dict:
     result = {"action": "setup", "port": port, "url": f"http://127.0.0.1:{port}/",
               "version": None, "serve_argv": None, "autostart_ok": True, "problems": [],
-              "requirements": requirements(installer)}
-    problems = result["problems"]
+              "requirements": []}
+    try:
+        _check(port, installer, result)
+    except (subprocess.CalledProcessError, OSError) as error:
+        result["problems"].append(_problem(
+            "launch", f"The launch check failed: {error}", "Correct this error, then choose Retry."))
+    return result
 
-    if installer.runner.which("git") is None:
+
+def _check(port: int, installer: Installer, result: dict) -> None:
+    problems = result["problems"]
+    result["requirements"] = requirements(installer)
+    missing = [row["id"] for row in result["requirements"] if row["required"] and row["state"] == "missing"]
+
+    if "git" in missing:
         problems.append(_problem("git", "Git is not installed.", git_fix(installer.platform)))
+    if "python-venv" in missing:
+        problems.append(_problem(
+            "python-venv", "The Python venv module is not installed.",
+            "Run `sudo apt install python3-venv` (`python3 -m venv` needs it), then choose Retry."))
 
     remaining = retire_legacy(installer)
     if remaining:
@@ -286,7 +299,7 @@ def launch(port: int, installer: Installer) -> dict:
             "port", f"Another program is using port {port}.",
             f"Quit the program that uses port {port}, then choose Retry."))
     if any(problem["blocking"] for problem in problems):
-        return result
+        return
 
     try:
         version = ensure_venv(installer)
@@ -296,7 +309,7 @@ def launch(port: int, installer: Installer) -> dict:
             "install", f"The daemon could not be installed into {installer.venv_dir}.",
             "Check your network connection (pip downloads the daemon's dependencies), "
             f"then choose Retry. {' '.join(detail)}".strip()))
-        return result
+        return
     result["version"] = version
 
     if holder["state"] == "daemon":
@@ -304,15 +317,14 @@ def launch(port: int, installer: Installer) -> dict:
         if running is not None and running >= _parse_version(version):
             result["action"] = "reuse"
             result["version"] = holder["version"]
-            return result
+            return
         stuck = stop_daemon(port, holder.get("pid"), installer)
         if stuck is not None:
             who = "An older GSD Path daemon" if stuck != -1 else "A program"
             problems.append(_problem(
                 "port", f"{who} is using port {port} and could not be stopped.",
                 "Stop it (Activity Monitor, Task Manager, or `kill`), then choose Retry."))
-            return result
+            return
 
     result["action"] = "start"
     result["serve_argv"] = [str(installer.venv_python), "-m", "gsd_daemon", "serve", "--port", str(port)]
-    return result

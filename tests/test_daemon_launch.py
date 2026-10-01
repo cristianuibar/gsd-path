@@ -238,6 +238,12 @@ class VenvTests(LaunchCase):
         self.assertEqual([p["kind"] for p in result["problems"]], ["install"])
         self.assertIn("network is down", result["problems"][0]["fix"])
 
+    def test_install_that_returns_an_error_code_is_a_blocking_problem(self):
+        runner = ScriptRunner(installed(None))
+        result = launch(free_port(), self.installer(runner, platform="freebsd"))
+        self.assertEqual((result["action"], result["serve_argv"]), ("setup", None))
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("install", True)])
+
 
 class PrerequisiteTests(LaunchCase):
     def test_missing_git_blocks(self):
@@ -256,17 +262,16 @@ class RequirementTests(LaunchCase):
             self.shared = self.installer(runner)
         self.shared.runner, self.shared.platform = runner, platform
         result = launch(free_port(), self.shared)
+        self.assertNotIn("gho_secret", json.dumps(result))
         return {row["id"]: row for row in result["requirements"]}
 
-    def respond(self, gh_auth=0, venv=0):
+    def respond(self, gh_auth=0, venv=0, git=0):
         def respond(cmd):
             line = " ".join(cmd)
             if cmd[1:] == ["--version"] and Path(cmd[0]).name == "git":
-                return 0, "git version 2.39.5 (Apple Git-154)\n"
-            if cmd[1:] == ["--version"] and Path(cmd[0]).name == "gh":
-                return 0, "gh version 2.60.1 (2024-10-25)\nhttps://github.com/cli/cli\n"
-            if cmd[1:3] == ["auth", "status"]:
-                return gh_auth, ""
+                return git, "git version 2.39.5 (Apple Git-154)\n"
+            if cmd[1:3] == ["auth", "token"]:
+                return gh_auth, "gho_secret\n"
             if "ensurepip" in line:
                 return venv, ""
             return installed(__version__)(cmd)
@@ -284,26 +289,47 @@ class RequirementTests(LaunchCase):
         rows = self.rows(ScriptRunner(self.respond(), which={}))
         self.assertEqual((rows["git"]["state"], rows["git"]["required"]), ("missing", True))
 
+    def test_git_that_cannot_run_is_missing_and_blocks(self):
+        # macOS without the Command Line Tools: /usr/bin/git exists but exits non-zero.
+        result = launch(free_port(), self.installer(ScriptRunner(self.respond(git=1)), platform="darwin"))
+        git = [row for row in result["requirements"] if row["id"] == "git"]
+        self.assertEqual(git, [{"id": "git", "required": True, "state": "missing", "detail": None}])
+        self.assertEqual(result["action"], "setup")
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("git", True)])
+        self.assertIn("xcode-select --install", result["problems"][0]["fix"])
+
     def test_github_cli_states(self):
         which = {"git": "/usr/bin/git", "gh": "/usr/bin/gh"}
         rows = self.rows(ScriptRunner(self.respond(), which=which))
-        self.assertEqual(rows["gh"], {"id": "gh", "required": False, "state": "ready", "detail": "2.60.1"})
+        self.assertEqual(rows["gh"], {"id": "gh", "required": False, "state": "ready", "detail": None})
         rows = self.rows(ScriptRunner(self.respond(gh_auth=1), which=which))
         self.assertEqual((rows["gh"]["state"], rows["gh"]["required"]), ("signed-out", False))
         rows = self.rows(ScriptRunner(self.respond()))
         self.assertEqual((rows["gh"]["state"], rows["gh"]["detail"]), ("missing", None))
 
-    def test_optional_rows_never_block(self):
-        result = launch(free_port(), self.installer(ScriptRunner(self.respond(venv=1)), platform="linux"))
+    def test_missing_venv_module_blocks_before_the_install(self):
+        runner = ScriptRunner(self.respond(venv=1))
+        result = launch(free_port(), self.installer(runner, platform="linux", fake_venv=False))
+        rows = {row["id"]: row for row in result["requirements"]}
+        self.assertEqual((rows["python-venv"]["state"], rows["python-venv"]["required"]), ("missing", True))
+        self.assertEqual(result["action"], "setup")
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("python-venv", True)])
+        self.assertIn("sudo apt install python3-venv", result["problems"][0]["fix"])
+        self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
+
+    def test_existing_venv_skips_the_venv_module_check(self):
+        runner = ScriptRunner(self.respond(venv=1))
+        result = launch(free_port(), self.installer(runner, platform="linux"))
+        rows = {row["id"]: row for row in result["requirements"]}
+        self.assertEqual(rows["python-venv"]["state"], "ready")
         self.assertEqual(result["action"], "start")
         self.assertEqual(result["problems"], [])
+        self.assertEqual(runner.ran("ensurepip"), [])
 
     def test_venv_module_row_is_linux_only(self):
         self.assertNotIn("python-venv", self.rows(ScriptRunner(self.respond())))
         rows = self.rows(ScriptRunner(self.respond()), platform="linux")
         self.assertEqual((rows["python-venv"]["state"], rows["python-venv"]["required"]), ("ready", True))
-        rows = self.rows(ScriptRunner(self.respond(venv=1)), platform="linux")
-        self.assertEqual(rows["python-venv"]["state"], "missing")
 
 
 class LegacyAutostartTests(LaunchCase):
@@ -360,6 +386,19 @@ class LegacyAutostartTests(LaunchCase):
         launch_module.retire_legacy(installer)
         self.assertTrue(runner.ran("bootout"), "uninstall did not run")
         self.assertEqual(runner.ran("get the name"), [])
+
+    def test_linux_without_systemctl_still_returns_a_result(self):
+        def respond(cmd):
+            if cmd[0] == "systemctl":
+                raise FileNotFoundError(2, "No such file or directory", "systemctl")
+            return installed(__version__)(cmd)
+        installer = self.installer(ScriptRunner(respond), platform="linux", retired=False)
+        installer.unit_path.parent.mkdir(parents=True)
+        installer.unit_path.write_text("[Unit]\n")
+        result = launch(free_port(), installer)
+        self.assertEqual((result["action"], result["serve_argv"]), ("setup", None))
+        self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("launch", True)])
+        self.assertIn("systemctl", result["problems"][0]["message"])
 
     def test_windows_startup_shortcut_is_removed(self):
         runner = ScriptRunner(installed(__version__))
