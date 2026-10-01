@@ -40,8 +40,11 @@ RETIRED_MARKER = Path("app") / "legacy-autostart-retired"
 DAEMON_COMMAND = re.compile(r"(?:^|\s)-m\s+gsd_daemon(?:\s|$)|(?:^|[\s/\\])gsd-path-daemon(?:\.exe)?(?:\s|$)")
 
 
-def _problem(kind: str, message: str, fix: str, blocking: bool = True) -> dict:
-    return {"kind": kind, "message": message, "fix": fix, "blocking": blocking}
+def _problem(kind: str, message: str, fix: str, blocking: bool = True, detail: Optional[dict] = None) -> dict:
+    problem = {"kind": kind, "message": message, "fix": fix, "blocking": blocking}
+    if detail is not None:
+        problem["detail"] = detail
+    return problem
 
 
 def probe_port(port: int) -> dict:
@@ -113,10 +116,11 @@ def manual_fix(name: str, installer: Installer) -> str:
     return fixes[name]
 
 
-def retire_legacy(installer: Installer) -> List[str]:
+def retire_legacy(installer: Installer, seen: Optional[List[str]] = None) -> List[str]:
     """Remove old autostart with the existing uninstall; return what remains.
 
     The uninstall exit status is not trusted: every entry is checked again.
+    `seen` receives every entry found before the removal.
     """
     marker = installer.gsd_home / RETIRED_MARKER
     if marker.exists():
@@ -124,6 +128,8 @@ def retire_legacy(installer: Installer) -> List[str]:
     # Only a machine that ran `gsd_daemon install` can have the old login item.
     check_login_item = installer.venv_dir.exists()
     found = legacy_registrations(installer, check_login_item)
+    if seen is not None:
+        seen.extend(found)
     if found:
         failure = None
         try:
@@ -196,6 +202,13 @@ def stop_daemon(port: int, reported_pid: Optional[int], installer: Installer) ->
 
 
 # -- venv ----------------------------------------------------------------------
+
+def port_owner(port: int, installer: Installer, pid: Optional[int] = None) -> dict:
+    """Who holds the port, for the app's "port in use" screen. Best effort."""
+    if pid is None or pid < 0:
+        pid = listener_pid(port, installer)
+    return {"pid": pid, "command": process_command(pid, installer) or None if pid else None}
+
 
 def installed_version(installer: Installer) -> Optional[str]:
     if not installer.venv_python.exists():
@@ -274,7 +287,7 @@ def requirements(installer: Installer) -> List[dict]:
 def launch(port: int, installer: Installer) -> dict:
     result = {"action": "setup", "port": port, "url": f"http://127.0.0.1:{port}/",
               "version": None, "serve_argv": None, "autostart_ok": True, "problems": [],
-              "requirements": []}
+              "requirements": [], "legacy": [], "replaced": None}
     try:
         _check(port, installer, result)
     except (subprocess.CalledProcessError, OSError) as error:
@@ -295,7 +308,11 @@ def _check(port: int, installer: Installer, result: dict) -> None:
             "python-venv", "The Python venv module is not installed.",
             "Run `sudo apt install python3-venv` (`python3 -m venv` needs it), then choose Retry."))
 
-    remaining = retire_legacy(installer)
+    seen: List[str] = []
+    remaining = retire_legacy(installer, seen)
+    # What the app's "Moving to the new app" screen lists: every old entry and whether it is gone.
+    result["legacy"] = [{"name": name, "removed": name not in remaining, "fix": manual_fix(name, installer)}
+                        for name in seen + [name for name in remaining if name not in seen]]
     if remaining:
         result["autostart_ok"] = False
         for name in remaining:
@@ -307,7 +324,8 @@ def _check(port: int, installer: Installer, result: dict) -> None:
     if holder["state"] == "other":
         problems.append(_problem(
             "port", f"Another program is using port {port}.",
-            f"Quit the program that uses port {port}, then choose Retry."))
+            f"Quit the program that uses port {port}, then choose Retry.",
+            detail=port_owner(port, installer)))
     if any(problem["blocking"] for problem in problems):
         return
 
@@ -333,8 +351,11 @@ def _check(port: int, installer: Installer, result: dict) -> None:
             who = "An older GSD Path daemon" if stuck != -1 else "A program"
             problems.append(_problem(
                 "port", f"{who} is using port {port} and could not be stopped.",
-                "Stop it (Activity Monitor, Task Manager, or `kill`), then choose Retry."))
+                "Stop it (Activity Monitor, Task Manager, or `kill`), then choose Retry.",
+                detail=port_owner(port, installer, stuck)))
             return
+        result["replaced"] = holder.get("version") or "unknown"
 
     result["action"] = "start"
-    result["serve_argv"] = [str(installer.venv_python), "-m", "gsd_daemon", "serve", "--port", str(port)]
+    result["serve_argv"] = [str(installer.venv_python), "-m", "gsd_daemon", "serve", "--port", str(port),
+                            "--require-token"]

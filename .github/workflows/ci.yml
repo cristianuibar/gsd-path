@@ -107,3 +107,19 @@ jobs:
         run: python3 -m pip install ./daemon
       - name: Daemon package tests
         run: npm run test:daemon
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend type check and build
+        run: npm run build
