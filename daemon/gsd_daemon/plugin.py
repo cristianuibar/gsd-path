@@ -410,15 +410,17 @@ class PluginManager:
         index = release_source.fetch_index(self.fetch)
         cache = self._read_cache()
         selected = cache.get("selected") if select is False else select
-        if selected is not None and selected not in index["versions"]:
+        stable = [v for v in index["versions"] if _parse_version(v) is not None]
+        if selected is not None and selected not in stable:
             if select is not False:
-                raise ValueError(f"release {selected} is not published")
-            selected = None  # a chosen release that was unpublished: follow latest again
+                raise ValueError(f"release {selected} is not a published release")
+            raise release_source.ReleaseError(
+                f"the chosen release {selected} is no longer published; "
+                "choose another release or follow the latest release")
         version = selected or index["latest"]
         if version is None:
             raise release_source.ReleaseError("the npm registry lists no latest release")
         release_source.install_release(self.releases_dir, version, index["versions"][version], self.fetch)
-        stable = [v for v in index["versions"] if _parse_version(v) is not None]
         self._write_cache(index["latest"], selected=selected,
                           versions=sorted(stable, key=_parse_version, reverse=True))
         return index["latest"]

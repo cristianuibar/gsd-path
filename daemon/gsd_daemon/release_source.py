@@ -59,7 +59,7 @@ def verify(data: bytes, integrity: Optional[str]) -> None:
     prefix = "sha512-"
     if not isinstance(integrity, str) or not integrity.startswith(prefix):
         raise ReleaseError("the release has no sha512 integrity value; it was not installed")
-    expected = integrity[len(prefix):].split("?")[0]
+    expected = integrity[len(prefix):]
     actual = base64.b64encode(hashlib.sha512(data).digest()).decode("ascii")
     if not hmac.compare_digest(actual, expected):
         raise ReleaseError("the downloaded release does not match its sha512; it was not installed")
@@ -105,6 +105,8 @@ def install_release(releases_dir: Path, version: str, entry: dict, fetch: Fetch)
         _unpack(data, work / "package")
         os.replace(work / "package", dest)
     except (tarfile.TarError, OSError) as error:
+        if dest.exists():
+            return dest
         raise ReleaseError(f"release {version} could not be unpacked: {error}") from error
     finally:
         shutil.rmtree(work, ignore_errors=True)

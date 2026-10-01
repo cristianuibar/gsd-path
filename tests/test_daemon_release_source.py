@@ -4,6 +4,7 @@ import hashlib
 import http.client
 import io
 import json
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -121,6 +122,19 @@ class UnpackTests(Case):
                                            lambda url: calls.append(url) or b"")
         self.assertEqual(calls, [])
 
+    def test_a_release_unpacked_by_another_process_meanwhile_is_used(self):
+        data = tarball("1.4.0")
+        dest = self.root / "releases" / "1.4.0"
+
+        def fetch(url):  # the other process finishes while this one downloads
+            (dest / "scripts").mkdir(parents=True)
+            (dest / "scripts" / "install.py").write_text("print('other')\n", encoding="utf-8")
+            return data
+
+        entry = {"tarball": "https://x/y-1.4.0.tgz", "integrity": integrity(data)}
+        self.assertEqual(release_source.install_release(self.root / "releases", "1.4.0", entry, fetch), dest)
+        self.assertEqual([path.name for path in (self.root / "releases").iterdir()], ["1.4.0"])
+
 
 class ManagerTests(Case):
     def test_install_runs_the_installer_of_the_latest_verified_release(self):
@@ -185,6 +199,30 @@ class ManagerTests(Case):
         with self.assertRaises(ValueError):
             manager.select_release("9.9.9")
         self.assertIsNone(manager.releases()["selected"])
+
+    def test_a_prerelease_cannot_be_chosen(self):
+        manager = self.manager(Registry(["1.4.0", "2.0.0-beta.1"], latest="1.4.0"))
+        with self.assertRaises(ValueError):
+            manager.select_release("2.0.0-beta.1")
+        self.assertIsNone(manager.releases()["selected"])
+        self.assertFalse((self.root / "home" / "releases" / "2.0.0-beta.1").exists())
+
+    def test_a_chosen_release_that_was_unpublished_fails_and_stays_chosen(self):
+        registry = Registry(["1.3.2", "1.4.0"], latest="1.4.0")
+        manager = self.manager(registry)
+        manager.select_release("1.3.2")
+        del registry.index["versions"]["1.3.2"]
+        result = manager.refresh_source(ttl_hours=0)
+        self.assertFalse(result["refreshed"])
+        self.assertIn("1.3.2", result["error"])
+        self.assertIn("follow the latest release", result["error"])
+        self.assertEqual(manager.releases()["selected"], "1.3.2")
+        self.assertFalse((self.root / "home" / "releases" / "1.4.0").exists())
+        shutil.rmtree(self.root / "home" / "releases" / "1.3.2")
+        result = manager.install_global(["claude"])
+        self.assertFalse(result["ok"])
+        self.assertIn("1.3.2", result["error"])
+        self.assertEqual(self.runs, [])
 
     def test_plugin_repo_keeps_the_git_clone_source(self):
         registry = Registry(["1.4.0"], latest="1.4.0")
