@@ -25,6 +25,7 @@ from gsd_daemon.serve import serve
 from gsd_daemon.watcher import Watcher
 
 UNIX_ONLY = unittest.skipIf(sys.platform == "win32", "uses ps, lsof, and POSIX signals")
+NEEDS_UID = unittest.skipUnless(hasattr(os, "getuid"), "launchctl domains need a POSIX uid")
 
 # A process that answers /status like a GSD Path daemon but is not one.
 IMPOSTOR = r"""
@@ -194,7 +195,7 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, self.installer(runner, fake_venv=False))
         self.assertEqual(result["action"], "setup")
         self.assertEqual([p["kind"] for p in result["problems"]], ["port"])
-        self.assertEqual(runner.ran("pip"), [])
+        self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
     def test_free_port_starts_daemon(self):
         runner = ScriptRunner(installed(__version__))
@@ -379,6 +380,7 @@ class LegacyAutostartTests(LaunchCase):
             return installed(__version__)(cmd)
         return ScriptRunner(respond)
 
+    @NEEDS_UID
     def test_uninstall_is_rechecked_and_remaining_entry_is_reported(self):
         runner = self.darwin(still_loaded=True)
         installer = self.installer(runner, platform="darwin", retired=False)
@@ -393,6 +395,7 @@ class LegacyAutostartTests(LaunchCase):
                          [("autostart", False)])
         self.assertFalse((installer.gsd_home / RETIRED_MARKER).exists())
 
+    @NEEDS_UID
     def test_verified_cleanup_writes_marker_and_later_launch_skips_checks(self):
         runner = self.darwin(still_loaded=False, login_items="Finder, GSDPathTray")
         installer = self.installer(runner, platform="darwin", retired=False)
@@ -413,6 +416,7 @@ class LegacyAutostartTests(LaunchCase):
         self.assertTrue(third["autostart_ok"])
         self.assertEqual(skipped.ran("launchctl"), [])
 
+    @NEEDS_UID
     def test_login_item_is_not_checked_without_a_previous_install(self):
         runner = self.darwin(still_loaded=False)
         installer = self.installer(runner, platform="darwin", retired=False, fake_venv=False)
