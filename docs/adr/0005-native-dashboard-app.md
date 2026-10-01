@@ -43,9 +43,13 @@ the plugin and the app, and see project stats.
   like `/api/path-config`. A daemon started with `--require-token` also
   requires a token header on every write. The token is in a file only the
   user can read; the Rust side adds it, so it never enters the web view. A
-  browser page can then read from that daemon but not write. The app never
-  writes pipeline state. It can edit a project's `.env` files on request:
-  values are masked, shown as a diff before save, and never logged. Multi-repo
+  browser page can then read from that daemon but not write: the dashboard
+  opened in a browser is read-only, its write actions are refused, and the
+  page tells the user to use the app. A daemon started without the flag
+  behaves as before. The app never writes pipeline state. It can edit a
+  project's `.env` files on request: values are masked, shown as a diff
+  before save, and never logged. Every env route (list, reveal, save) is a
+  POST that needs the token, so no GET returns env content. Multi-repo
   actions are member hook install and marker repair; joining a member stays
   in the router.
 - **Updates.** The app updates through the Tauri updater from `latest.json`

@@ -54,7 +54,7 @@ All pages sit under a 64px header (logo, nav: Projects, Skills, Stats, Settings,
 ## State Management
 Per-screen UI state: setup step, host and repo selections, install phase, board filter, expanded coordinator, current project id, environment file, revealed secrets, Jev flag and target file, stats scope, settings tab and config scope, tray state and open row, update-dialog visibility, first-launch failure flag.
 Data needed from the daemon: projects (with `parent`/member relation from `.project/MEMBERS.md`), phases, milestones, tasks, usage, setup status (runtime version, hooks, marker, origin), update availability, host detection and skills versions per folder, env file contents (secrets masked server-side where possible), monitor status and port.
-Env contract (confirmed, owner ruling 2026-10-01): Path edits env files; only `GSD_PATH_*` keys are read back; secrets are written and masked, never logged or put in reports.
+Env contract (confirmed, owner ruling 2026-10-01): Path edits env files; the Path pipeline itself reads only `GSD_PATH_*` keys. The editor can show and reveal any key to the user, through a daemon route that is a POST and needs the app token. Secrets are written and masked, never logged or put in reports.
 
 ## Design Tokens
 Light / dark:
