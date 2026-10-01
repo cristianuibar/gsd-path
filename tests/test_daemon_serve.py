@@ -1,4 +1,6 @@
 import http.client
+import io
+from email.message import Message
 from html.parser import HTMLParser
 import json
 import os
@@ -17,7 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
 from gsd_daemon.config import Config
-from gsd_daemon.serve import serve
+from gsd_daemon.serve import _Handler, serve
 from gsd_daemon.watcher import Watcher
 
 STATE = """---
@@ -333,6 +335,32 @@ class ParentsEndpointTests(unittest.TestCase):
         self.assertEqual(status, 400)
         status, payload = self.post({"action": "add"})
         self.assertEqual(status, 400)
+
+
+class PostBodyTests(unittest.TestCase):
+    def test_refusal_consumes_socket_body_before_reply(self):
+        body = b'{"confirm": true}'
+        for headers, expected in (({"Origin": "https://evil.example"}, 403),
+                                  ({"Content-Type": "text/plain"}, 415)):
+            with self.subTest(headers=headers):
+                handler = object.__new__(_Handler)
+                handler.path = "/api/plugin/update"
+                handler.server = mock.Mock(server_address=("127.0.0.1", 8080))
+                handler.headers = Message()
+                for key, value in {"Host": "127.0.0.1:8080", "Content-Length": str(len(body)),
+                                   "Content-Type": "application/json", **headers}.items():
+                    handler.headers[key] = value
+                socket_body = handler.rfile = io.BytesIO(body)
+                replies = []
+
+                def reply(code, content_type, payload):
+                    self.assertEqual(socket_body.tell(), len(body))
+                    replies.append((code, json.loads(payload)))
+
+                handler._respond = reply
+                handler.do_POST()
+                self.assertEqual(replies[0][0], expected)
+                self.assertIn("error", replies[0][1])
 
 
 class PostOriginTests(unittest.TestCase):

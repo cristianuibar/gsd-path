@@ -1117,7 +1117,7 @@ class DetectProjectTests(unittest.TestCase):
                     self.classify(repo)
 
     @unittest.skipUnless(os.name == "nt", "Windows pinned-handle evidence reads required")
-    def test_windows_markdown_parent_replacement_stays_anchored(self) -> None:
+    def test_windows_markdown_parent_replacement_is_refused_while_pinned(self) -> None:
         import _winapi
 
         def make_junction(target: Path, link: Path) -> None:
@@ -1138,21 +1138,27 @@ class DetectProjectTests(unittest.TestCase):
             )
             win = detect_project.get_windows_handles()
             original = win.open_relative
-            replaced = False
+            attempted = False
 
             def replacing_open_relative(parent_fd, name, *args, **kwargs):
-                nonlocal replaced
-                if name == readme.name and not replaced:
-                    docs.rename(moved)
-                    make_junction(external, docs)
-                    replaced = True
+                nonlocal attempted
+                if name == readme.name and not attempted:
+                    attempted = True
+                    with self.assertRaises(PermissionError) as refused:
+                        docs.rename(moved)
+                    self.assertEqual(refused.exception.winerror, 32)
                 return original(parent_fd, name, *args, **kwargs)
 
             with mock.patch.object(win, "open_relative", side_effect=replacing_open_relative):
                 payload = self.classify(repo)
-            self.assertTrue(replaced)
+            self.assertTrue(attempted)
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
+            # Classification releases its pins; a later scan sees the junction
+            # and excludes its external evidence.
+            docs.rename(moved)
+            make_junction(external, docs)
+            self.assertEqual(self.classify(repo)["verdict"], "greenfield")
 
     @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
