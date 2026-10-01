@@ -1353,6 +1353,29 @@ class DetectProjectTests(unittest.TestCase):
             self.assertEqual(payload["signals"], [])
 
     @requires_symlink
+    def test_symlinked_worktree_skill_marker_does_not_verify_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            bundle = repo / "tools" / "gsd-path-helper"
+            marker = workspace / "SKILL.md"
+            bundle.mkdir(parents=True)
+            marker.write_bytes("# Skill\n".encode("utf-8"))
+            (bundle / "helper.py").write_bytes("print(1)\n".encode("utf-8"))
+            (bundle / "SKILL.md").write_bytes("# Skill\n".encode("utf-8"))
+            managed = self.classify(repo)
+            self.assertEqual(managed["verdict"], "greenfield")
+            self.assertEqual(managed["signals"], [])
+            (bundle / "SKILL.md").unlink()
+            (bundle / "SKILL.md").symlink_to(marker)
+            linked = self.classify(repo)
+            self.assertEqual(linked["verdict"], "brownfield")
+            self.assertIn(
+                "tools/gsd-path-helper/helper.py",
+                [signal["path"] for signal in linked["signals"]],
+            )
+
+    @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
     def test_nonregular_staged_skill_marker_does_not_verify_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

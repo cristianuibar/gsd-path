@@ -337,7 +337,7 @@ def is_managed_pipeline_directory(relative: str, root: Path) -> bool:
     return is_verified_skill_bundle(relative, root)
 
 
-def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
+def is_verified_skill_bundle_at(relative: str, directory_fd: int, root: Path) -> bool:
     parts = PurePosixPath(relative).parts
     if not parts:
         return False
@@ -384,7 +384,8 @@ def is_verified_skill_bundle_at(relative: str, directory_fd: int) -> bool:
     finally:
         if skill_fd is not None:
             os.close(skill_fd)
-    return not is_link_like_status(status) and stat.S_ISREG(status.st_mode)
+    skill = root.joinpath(*parts) / "SKILL.md"
+    return not is_link_like(skill, status) and stat.S_ISREG(status.st_mode)
 
 
 def is_fixed_managed_pipeline_artifact(relative: str) -> bool:
@@ -913,7 +914,7 @@ def iter_from_dir_fd(
                     raise DetectError(
                         f"filesystem evidence changed while traversing: {relative}"
                     )
-                if is_verified_skill_bundle_at(relative, child):
+                if is_verified_skill_bundle_at(relative, child, root):
                     continue
                 yield from iter_from_dir_fd(child, relative, root)
             finally:
@@ -1832,7 +1833,7 @@ def iter_from_windows_dir_fd(
                 continue
             if stat.S_ISDIR(status.st_mode):
                 try:
-                    if is_verified_skill_bundle_at(relative, child_fd):
+                    if is_verified_skill_bundle_at(relative, child_fd, root):
                         continue
                     yield from iter_from_windows_dir_fd(
                         child_fd, relative, root, win
