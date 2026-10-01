@@ -74,6 +74,11 @@ class ScriptRunner:
     def ran(self, word):
         return [cmd for cmd in self.calls if any(word in part for part in cmd)]
 
+    def pip_runs(self):
+        """Commands that run pip. Not `ran("pip")`: a random temp folder name can hold "pip"."""
+        return [cmd for cmd in self.calls
+                if Path(cmd[0]).name.startswith("pip") or cmd[1:3] == ["-m", "pip"]]
+
 
 def installed(version):
     """Respond as a venv whose installed daemon is `version`."""
@@ -158,7 +163,7 @@ class RunningDaemonTests(LaunchCase):
         result = launch(port, self.installer(runner))
         self.assertEqual(result["action"], "reuse")
         self.assertEqual(result["problems"], [])
-        self.assertEqual(runner.ran("pip"), [])
+        self.assertEqual(runner.pip_runs(), [])
 
     def test_newer_running_daemon_is_reused_over_older_bundle(self):
         runner = ScriptRunner(installed("0.0.9"))
@@ -211,7 +216,7 @@ class VenvTests(LaunchCase):
     def test_newer_installed_daemon_is_never_downgraded(self):
         runner = ScriptRunner(installed("99.0.0"))
         self.assertEqual(ensure_venv(self.installer(runner)), "99.0.0")
-        self.assertEqual(runner.ran("pip"), [])
+        self.assertEqual(runner.pip_runs(), [])
         self.assertEqual([cmd for cmd in runner.calls if cmd[1:3] == ["-m", "venv"]], [])
 
     def test_older_installed_daemon_is_upgraded_from_a_copy_of_the_bundle(self):
@@ -277,7 +282,7 @@ class PrerequisiteTests(LaunchCase):
         result = launch(free_port(), self.installer(runner))
         self.assertEqual(result["action"], "setup")
         self.assertEqual([(p["kind"], p["blocking"]) for p in result["problems"]], [("git", True)])
-        self.assertEqual(runner.ran("pip"), [])
+        self.assertEqual(runner.pip_runs(), [])
 
 
 class RequirementTests(LaunchCase):

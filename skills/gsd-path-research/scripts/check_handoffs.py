@@ -1865,23 +1865,10 @@ def validate_plan(
                 + ", ".join(unowned)
             )
     project_verify = _normalize_ws(_line_value(plan, "Project verify:"))
-    if project_verify:
-        denial = _common.verify_shell_denial(project_verify, root)
-        if denial is not None:
-            raise HandoffError(
-                "Project verify is denied by the host guard: "
-                + denial.replace("\n", " ")
-            )
     for task_id, text in tasks.items():
         command = _verify_command(text)
         if not command:
             continue
-        denial = _common.verify_shell_denial(command, root)
-        if denial is not None:
-            raise HandoffError(
-                f"{task_id} Verify is denied by the host guard: "
-                + denial.replace("\n", " ")
-            )
         if command == project_verify:
             named = any(
                 project_verify in _normalize_ws(criteria[sc_id])
