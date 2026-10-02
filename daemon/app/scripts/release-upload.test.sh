@@ -60,11 +60,11 @@ run "$dir" x86_64-pc-windows-msvc "windows-x86_64=msi"
 dir="$(tree nosig aarch64-apple-darwin "dmg/a.dmg" "macos/OpenGSD Path.app.tar.gz")"
 run "$dir" aarch64-apple-darwin "darwin-aarch64=app.tar.gz"
 [ "$status" -ne 0 ] && echo "$output" | grep -q "expected one signed .app.tar.gz update file"; check "missing signature: the script fails and says so" $?
-! has "$dir/gh.log" "updater-"; check "missing signature: no update file is uploaded" $?
+[ ! -e "$dir/gh.log" ]; check "missing signature: nothing is uploaded" $?
 
 dir="$(tree two x86_64-pc-windows-msvc "msi/a.msi" "msi/a.msi.sig" "msi/b.msi" "msi/b.msi.sig")"
 run "$dir" x86_64-pc-windows-msvc "windows-x86_64=msi"
 [ "$status" -ne 0 ] && echo "$output" | grep -q "expected one signed .msi update file"; check "two update files: the script fails and says so" $?
-! has "$dir/gh.log" "updater-"; check "two update files: no update file is uploaded" $?
+[ ! -e "$dir/gh.log" ]; check "two update files: nothing is uploaded" $?
 
 exit "$failed"
