@@ -193,6 +193,11 @@ publication paths keep the verified package version unchanged through
 - `README.md` — the `<!-- release-docs -->` block with the latest npm version
   and recent highlights
 
+The script drafts the new `CHANGELOG.md` entry from commit subjects. Before the
+release, a maintainer rewrites that entry for readers: say what changed for a
+user, and remove slice codes, release bookkeeping lines, and test-only lines,
+as the `CHANGELOG.md` header states.
+
 Preview locally before tagging:
 
 ```bash
