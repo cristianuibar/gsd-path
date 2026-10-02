@@ -132,3 +132,17 @@ jobs:
       - name: Shell tests
         run: cargo test
         working-directory: daemon/app/src-tauri
+
+  # The App release workflow runs only on an app-v* tag, so its upload script is
+  # proved here, on the same runner systems and shells it uses.
+  app-release-scripts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release upload script
+        shell: bash
+        run: bash daemon/app/scripts/release-upload.test.sh
