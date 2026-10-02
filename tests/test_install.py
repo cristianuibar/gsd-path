@@ -531,6 +531,12 @@ class InstallerTests(unittest.TestCase):
                     stamp = installed / "VERSION"
                     self.assertEqual(version, stamp.read_text(encoding="utf-8").strip())
 
+                    source_alias_guide = self.source / "skills" / "path" / "guide.md"
+                    installed_alias_guide = installed / "guide.md"
+                    same_version_content = f"alias refresh for {version}\n"
+                    source_alias_guide.write_text(
+                        same_version_content, encoding="utf-8"
+                    )
                     source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
                     source_skill.write_text(
                         f"---\nname: gsd-path\ndescription: updated {version}\n---\nupdated\n",
@@ -553,8 +559,14 @@ class InstallerTests(unittest.TestCase):
                         "description: updated",
                         (canonical / "SKILL.md").read_text(encoding="utf-8"),
                     )
+                    self.assertEqual(
+                        same_version_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
+                    )
 
                     release = version.split("-", 1)[0].split("+", 1)[0]
+                    release_content = f"release refresh from {version} to {release}\n"
+                    source_alias_guide.write_text(release_content, encoding="utf-8")
                     (self.source / "package.json").write_text(
                         json.dumps({"version": release}) + "\n", encoding="utf-8"
                     )
@@ -578,6 +590,10 @@ class InstallerTests(unittest.TestCase):
                     self.assertIn(
                         "description: release",
                         (canonical / "SKILL.md").read_text(encoding="utf-8"),
+                    )
+                    self.assertEqual(
+                        release_content,
+                        installed_alias_guide.read_text(encoding="utf-8"),
                     )
         finally:
             os.chdir(previous)
