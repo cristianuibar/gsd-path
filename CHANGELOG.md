@@ -20,7 +20,9 @@ test-only changes are not listed; the Git history has them.
   (`--member-of`), a Path-owned checkout for its tasks, and a bound branch at
   build start. Landings in two repositories are journaled so an interrupted
   one can be finished. Members integrate by direct merge or pull request, and
-  a member landing can be undone.
+  a member landing can be undone. A member accepts a push only with an
+  authorization for that ref, and refuses symlinked lock, marker, and task
+  copy paths.
 - **Native Windows support.** The installer, hooks, state locking, dispatch,
   Verify commands, and the project runtime run on Windows with Git for
   Windows (Git Bash). A Windows job in CI now blocks a merge.
@@ -40,8 +42,6 @@ test-only changes are not listed; the Git history has them.
   that are not JSON.
 - The dashboard and the tray show the project folder beside the worktree and
   wrap long paths.
-- The list of project runtime files has one source for the Python and Node
-  installers.
 
 ### Fixed
 - An ignored `.DS_Store` inside `.project` no longer blocks setup, landings, or
@@ -54,27 +54,22 @@ test-only changes are not listed; the Git history has them.
 - A build checkpoint commits a verify ledger that old ignore rules hid (#158).
 - The decide phase can run the research handoff check.
 - The installer names a working path when `--project` finds an existing
-  contract, and warns about legacy Codex skill backups.
+  contract.
 - The update notice says that local edits to skills are not carried forward
   (#151).
-- Nested projects and bare-backed worktrees keep the right identity and paths,
-  and dashboard search finds a project by repository name.
 
 ### Security
 - Guard bypasses through Git Bash paths and directory junctions on Windows are
   closed.
-- A member repository accepts a push only with an authorization for that ref,
-  and member hooks need the coordinator's managed guard.
-- Symlinked member lock, marker, and task copy paths are refused.
 
 ## [1.3.1] - 2026-09-22
+
+### Changed
+- Clearer guidance for the legacy runtime migration and its backup.
 
 ### Fixed
 - The legacy runtime migration keeps older runtime folders that Git does not
   track, and the installer help describes this case.
-
-### Changed
-- Clearer guidance for the legacy runtime migration and its backup.
 
 ## [1.3.0] - 2026-09-21
 
@@ -82,10 +77,9 @@ test-only changes are not listed; the Git history has them.
 - An upgrade moves a legacy in-repository runtime out of the project and
   leaves a backup to review (`--runtime-migrate`).
 
-### Fixed
-- Host recovery keeps review cycles that are already closed.
-- Release evidence refuses verification worktrees and branches that were not
-  retired.
+### Changed
+- On Cursor and Copilot, only the reviewer corrects a review, and only while
+  its review cycle is open. A closed review cycle is not rewritten.
 
 ## [1.2.0] - 2026-09-20
 
@@ -115,9 +109,6 @@ test-only changes are not listed; the Git history has them.
 - The dashboard shows project runtime updates and their results.
 - After verified integration, ordinary branches can take product work again
   while archived milestones stay protected.
-- A pinned runtime is used for routing and guard checks.
-- A review cycle recovers after a partial review completion.
-- Relative links in the history viewer keep the selected commit.
 
 ## [1.1.0] - 2026-09-18
 
