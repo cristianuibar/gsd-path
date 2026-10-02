@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -41,6 +42,16 @@ ANCHORED_STATE_CREATE_AVAILABLE = (
     and os.link in getattr(os, "supports_follow_symlinks", ())
 )
 PROMOTE_SCRIPT = ROOT / "scripts" / "promote_lookahead.py"
+
+
+@contextmanager
+def disable_anchored_evidence_reads():
+    with mock.patch.object(
+        detect_project, "_POSIX_ANCHORED_EVIDENCE_SUPPORTED", False
+    ), mock.patch.object(
+        detect_project, "WINDOWS_ANCHORED_EVIDENCE_SUPPORTED", False
+    ):
+        yield
 
 
 class DetectProjectTests(unittest.TestCase):
@@ -496,11 +507,7 @@ class DetectProjectTests(unittest.TestCase):
                     follow_symlinks=follow_symlinks,
                 )
 
-            with mock.patch.object(
-                detect_project,
-                "ANCHORED_EVIDENCE_SUPPORTED",
-                False,
-            ):
+            with disable_anchored_evidence_reads():
                 with mock.patch.object(
                     detect_project.os,
                     "stat",
@@ -520,11 +527,7 @@ class DetectProjectTests(unittest.TestCase):
             state.write_bytes(
                 "---\npipeline: gsd-path/v2\n---\n".encode("utf-8"),
             )
-            with mock.patch.object(
-                detect_project,
-                "ANCHORED_EVIDENCE_SUPPORTED",
-                False,
-            ):
+            with disable_anchored_evidence_reads():
                 payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "owned")
             self.assertEqual(payload["pipeline"], "gsd-path/v2")
@@ -834,11 +837,7 @@ class DetectProjectTests(unittest.TestCase):
                 "walk",
                 side_effect=failing_walk,
             ):
-                with mock.patch.object(
-                    detect_project,
-                    "ANCHORED_EVIDENCE_SUPPORTED",
-                    False,
-                ):
+                with disable_anchored_evidence_reads():
                     with self.assertRaisesRegex(
                         detect_project.DetectError,
                         "cannot traverse filesystem evidence",
@@ -863,11 +862,7 @@ class DetectProjectTests(unittest.TestCase):
                 "lstat",
                 side_effect=failing_lstat,
             ):
-                with mock.patch.object(
-                    detect_project,
-                    "ANCHORED_EVIDENCE_SUPPORTED",
-                    False,
-                ):
+                with disable_anchored_evidence_reads():
                     with self.assertRaisesRegex(
                         detect_project.DetectError,
                         "cannot inspect filesystem evidence",
@@ -1121,6 +1116,88 @@ class DetectProjectTests(unittest.TestCase):
                 ):
                     self.classify(repo)
 
+    @unittest.skipUnless(os.name == "nt", "Windows pinned-handle evidence reads required")
+    def test_windows_markdown_parent_replacement_is_refused_while_pinned(self) -> None:
+        import _winapi
+
+        def make_junction(target: Path, link: Path) -> None:
+            _winapi.CreateJunction(str(target), str(link))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            docs = repo / "docs"
+            moved = workspace / "moved-docs"
+            external = workspace / "external-docs"
+            readme = docs / "README.md"
+            docs.mkdir(parents=True)
+            external.mkdir()
+            readme.write_bytes("# Local\n".encode("utf-8"))
+            (external / "README.md").write_bytes(
+                "# External\n\nExisting project.\n".encode("utf-8"),
+            )
+            win = detect_project.get_windows_handles()
+            original = win.open_relative
+            attempted = False
+
+            def replacing_open_relative(parent_fd, name, *args, **kwargs):
+                nonlocal attempted
+                if name == readme.name and not attempted:
+                    attempted = True
+                    with self.assertRaises(PermissionError) as refused:
+                        docs.rename(moved)
+                    self.assertEqual(refused.exception.winerror, 32)
+                return original(parent_fd, name, *args, **kwargs)
+
+            with mock.patch.object(win, "open_relative", side_effect=replacing_open_relative):
+                payload = self.classify(repo)
+            self.assertTrue(attempted)
+            self.assertEqual(payload["verdict"], "greenfield")
+            self.assertEqual(payload["signals"], [])
+            # Classification releases its pins; a later scan sees the junction
+            # and excludes its external evidence.
+            docs.rename(moved)
+            make_junction(external, docs)
+            self.assertEqual(self.classify(repo)["verdict"], "greenfield")
+
+    def test_held_handle_status_without_reparse_tag_is_link_like(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            docs = Path(temporary) / "docs"
+            docs.mkdir()
+            handle_status = os.stat(docs)
+            junction = mock.Mock(
+                st_mode=handle_status.st_mode,
+                st_reparse_tag=0xA0000003,
+            )
+            with mock.patch.object(detect_project.os, "name", "nt"):
+                with mock.patch.object(
+                    detect_project.os, "lstat", return_value=handle_status
+                ):
+                    self.assertFalse(detect_project.is_link_like(docs, handle_status))
+                with mock.patch.object(
+                    detect_project.os, "lstat", return_value=junction
+                ):
+                    self.assertTrue(detect_project.is_link_like(docs, handle_status))
+
+    @unittest.skipUnless(os.name == "nt", "Windows share modes required")
+    def test_windows_walk_classifies_repo_with_exclusively_held_file(self) -> None:
+        import _winapi
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            held = repo / "held.py"
+            held.write_bytes(b"print('held')\n")
+            expected = self.classify(repo)
+            handle = _winapi.CreateFile(
+                str(held), _winapi.GENERIC_READ, 0, 0, _winapi.OPEN_EXISTING, 0, 0
+            )
+            try:
+                with self.assertRaises(PermissionError):
+                    held.read_bytes()
+                self.assertEqual(self.classify(repo), expected)
+            finally:
+                _winapi.CloseHandle(handle)
+
     @requires_symlink
     @unittest.skipIf(os.name == "nt", "directory descriptor semantics required")
     def test_markdown_parent_replacement_stays_anchored(self) -> None:
@@ -1274,6 +1351,42 @@ class DetectProjectTests(unittest.TestCase):
             payload = self.classify(repo)
             self.assertEqual(payload["verdict"], "greenfield")
             self.assertEqual(payload["signals"], [])
+
+    @requires_symlink
+    def test_symlinked_worktree_skill_marker_does_not_verify_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            repo = workspace / "repo"
+            bundle = repo / "tools" / "gsd-path-helper"
+            marker = workspace / "SKILL.md"
+            bundle.mkdir(parents=True)
+            marker.write_bytes("# Skill\n".encode("utf-8"))
+            (bundle / "helper.py").write_bytes("print(1)\n".encode("utf-8"))
+            (bundle / "SKILL.md").write_bytes("# Skill\n".encode("utf-8"))
+            managed = self.classify(repo)
+            self.assertEqual(managed["verdict"], "greenfield")
+            self.assertEqual(managed["signals"], [])
+            (bundle / "SKILL.md").unlink()
+            (bundle / "SKILL.md").symlink_to(marker)
+            linked = self.classify(repo)
+            self.assertEqual(linked["verdict"], "brownfield")
+            self.assertIn(
+                "tools/gsd-path-helper/helper.py",
+                [signal["path"] for signal in linked["signals"]],
+            )
+
+    def test_directory_worktree_skill_marker_does_not_verify_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            bundle = repo / "tools" / "gsd-path-helper"
+            (bundle / "SKILL.md").mkdir(parents=True)
+            (bundle / "helper.py").write_bytes("print(1)\n".encode("utf-8"))
+            payload = self.classify(repo)
+            self.assertEqual(payload["verdict"], "brownfield")
+            self.assertIn(
+                "tools/gsd-path-helper/helper.py",
+                [signal["path"] for signal in payload["signals"]],
+            )
 
     @requires_symlink
     @unittest.skipIf(os.name == "nt", "symlink creation requires POSIX")
