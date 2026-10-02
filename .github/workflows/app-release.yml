@@ -99,44 +99,12 @@ jobs:
         run: >
           npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           --config '{"bundle":{"createUpdaterArtifacts":true}}'
-      - name: Upload the installers
+      - name: Upload the installers and the signed update files
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # find, not a ** glob: the bash on macOS runners is 3.2 and has no globstar.
-          files=()
-          while IFS= read -r file; do files+=("$file"); done < <(
-            find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
-              \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
-          if [[ ${#files[@]} -eq 0 ]]; then
-            echo "the build made no installer" >&2
-            exit 1
-          fi
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-      - name: Upload the signed update files
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # One update file and one signature per platform, under a fixed name that latest.json points to.
-          for update in ${{ matrix.updates }}; do
-            platform="${update%%=*}"
-            ext="${update#*=}"
-            found=()
-            while IFS= read -r file; do found+=("$file"); done < <(
-              find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f -name "*.$ext")
-            if [[ ${#found[@]} -ne 1 || ! -f "${found[0]}.sig" ]]; then
-              echo "expected one signed .$ext update file, found: ${found[*]:-none}" >&2
-              exit 1
-            fi
-            name="updater-$platform.$ext"
-            cp "${found[0]}" "$name"
-            cp "${found[0]}.sig" "$name.sig"
-            gh release upload "$GITHUB_REF_NAME" "$name" "$name.sig" --clobber
-          done
+        # Tested on macOS, Windows, and Linux runners by the `app-release-scripts` job in ci.yml.
+        run: bash scripts/release-upload.sh "${{ matrix.target }}" "${{ matrix.updates }}" "$GITHUB_REF_NAME"
 
   # Runs only when every platform built, so latest.json never names a missing file.
   publish-update:
