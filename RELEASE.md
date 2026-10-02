@@ -8,7 +8,7 @@ documented in [DOCS.md](DOCS.md); this file is for maintainers.
 
 | Workflow | Trigger | Gate | Purpose |
 | --- | --- | --- | --- |
-| [CI](.github/workflows/ci.yml) | Every push to `main` and every pull request | `npm run verify` on Node 18 and 20; `npm run test:daemon`; desktop app frontend and shell tests | Offline disk contract, installer, guards, archive, daemon package, and desktop app |
+| [CI](.github/workflows/ci.yml) | Every push to `main` and every pull request | `npm run verify` on Node 18 and 20; `npm run test:daemon`; desktop app frontend and shell tests; the app release upload script test on macOS, Windows, and Linux | Offline disk contract, installer, guards, archive, daemon package, and desktop app |
 | [Release trust](.github/workflows/release-trust.yml) | Every pull request and push to `main`; manual dispatch | PR/push: trust validator tests; manual: `npm run verify:release` | Test the proof validator during development; validate frozen-candidate receipts on demand |
 | [Dogfood](.github/workflows/dogfood.yml) | Weekly schedule or manual dispatch | Live host smoke | Opt-in live host invocation (requires API secrets) |
 | [Release](.github/workflows/release.yml) | Version tag `v*` or manual dispatch | `npm run verify:release`, update `CHANGELOG.md` + README release section, `npm pack --dry-run`, npm publish with provenance + GitHub Release | Ship a trusted version to npm |
