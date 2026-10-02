@@ -9,7 +9,7 @@ import test from "node:test";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const script = path.join(root, "scripts/update_release_docs.mjs");
 
-function runInTempRepo(args) {
+function runInTempRepo(args, changelog = "# Changelog\n\n") {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "release-docs-"));
   try {
     execFileSync("git", ["init", "-b", "main"], { cwd: tempRoot, stdio: "pipe" });
@@ -26,7 +26,7 @@ function runInTempRepo(args) {
       path.join(tempRoot, "README.md"),
       "# Demo\n\n<!-- release-docs -->\nold\n<!-- /release-docs -->\n"
     );
-    fs.writeFileSync(path.join(tempRoot, "CHANGELOG.md"), "# Changelog\n\n");
+    fs.writeFileSync(path.join(tempRoot, "CHANGELOG.md"), changelog);
 
     execFileSync("git", ["add", "."], { cwd: tempRoot, stdio: "pipe" });
     execFileSync("git", ["commit", "-m", "feat: initial feature"], { cwd: tempRoot, stdio: "pipe" });
@@ -62,6 +62,16 @@ test("update_release_docs writes changelog and README release section", () => {
   assert.match(result.readme, /Recent highlights/);
   assert.match(result.notes, /## \[1\.2\.0\]/);
   assert.match(result.notes, /Published to npm as `@opengsd\/gsd-path@1\.2\.0`/);
+});
+
+test("update_release_docs puts a new entry above the existing entries", () => {
+  const result = runInTempRepo(
+    ["--version", "1.2.0", "--previous-tag", "v1.1.0"],
+    "# Changelog\n\n## [1.1.0] - 2026-09-18\n\n### Added\n\n- older item\n"
+  );
+  const versions = [...result.changelog.matchAll(/^## \[([^\]]+)\]/gm)].map((match) => match[1]);
+  assert.deepEqual(versions, ["1.2.0", "1.1.0"]);
+  assert.match(result.changelog, /older item/);
 });
 
 test("README contains release documentation markers", () => {

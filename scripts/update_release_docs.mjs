@@ -206,7 +206,7 @@ function formatEntry(version, date, sections) {
 }
 
 function upsertChangelog(version, entry) {
-  const headerPattern = /^## \[/;
+  const headerPattern = /^## \[/m;
   let content = fs.existsSync(changelogPath)
     ? fs.readFileSync(changelogPath, "utf8")
     : CHANGELOG_HEADER;
