@@ -1276,6 +1276,9 @@ test("CLI updates owned router aliases with prerelease and build stamps", () => 
     "1.4.0+build.5",
     "1.5.0-rc.1+build.5",
   ];
+  const canonicalContent = path.join(cliSource, "skills", "gsd-path", "references", "runtime-selection.md");
+  const aliasContent = path.join(cliSource, "skills", "path", "references", "runtime-selection.md");
+  const originalContent = fs.readFileSync(canonicalContent, "utf8");
 
   for (const version of versions) {
     const target = path.join(root, `host-${version}`, "skills");
@@ -1284,9 +1287,6 @@ test("CLI updates owned router aliases with prerelease and build stamps", () => 
     const setVersion = (value) => fs.writeFileSync(packageJson, JSON.stringify({ version: value }));
     const run = (...args) => spawnSync(process.execPath, [cli, "--claude", "--claude-root", target,
       "--source-root", cliSource, "--no-color", ...args], { encoding: "utf8", env });
-    const canonicalContent = path.join(cliSource, "skills", "gsd-path", "references", "runtime-selection.md");
-    const aliasContent = path.join(cliSource, "skills", "path", "references", "runtime-selection.md");
-    const originalContent = fs.readFileSync(canonicalContent, "utf8");
     const setContent = (marker) => {
       const content = `${originalContent}\n${marker}\n`;
       for (const skill of fs.readdirSync(path.join(cliSource, "skills"))) {
@@ -1299,20 +1299,28 @@ test("CLI updates owned router aliases with prerelease and build stamps", () => 
     const assertSuccess = (result) => assert.equal(result.status, 0, result.stdout + result.stderr);
 
     setVersion(version);
+    const sameVersionMarker = `same-version update from ${version}`;
+    const numericMarker = `numeric release update from ${version}`;
     setContent(`first install ${version}`);
     assertSuccess(run());
     assert.equal(installedVersion(), version);
 
-    setContent(`same-version update ${version}`);
+    setContent(sameVersionMarker);
     assertSuccess(run("--update"));
     assert.equal(installedVersion(), version);
-    assert.match(fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"), /same-version update/);
+    assert.equal(
+      fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"),
+      `${originalContent}\n${sameVersionMarker}\n`
+    );
 
     setVersion("1.6.0");
-    setContent("numeric release update");
+    setContent(numericMarker);
     assertSuccess(run("--update"));
     assert.equal(installedVersion(), "1.6.0");
-    assert.match(fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"), /numeric release update/);
+    assert.equal(
+      fs.readFileSync(path.join(alias, "references", "runtime-selection.md"), "utf8"),
+      `${originalContent}\n${numericMarker}\n`
+    );
   }
 });
 
