@@ -1162,6 +1162,29 @@ class DispatchDriverTests(unittest.TestCase):
         self.assertEqual(state["outcome"], "blocked")
         self.assertEqual(dispatch_driver.load_state(path)["reason"], dispatch_driver.ORPHANED)
 
+    def test_round_rereads_exit_recorded_during_liveness_check(self) -> None:
+        self.fixture(self.root)
+        current = dispatch_driver.Round(self.root, argparse.Namespace(project_dir=".project", wave=1))
+        path = current.root / "T001" / "attempt-1" / "state.json"
+        state = {"task_id": "T001", "wave": 1, "pid": 999999, "outcome": None,
+                 "finished_at": None, "worktree": str(self.root), "mode": "serial",
+                 "base": self.head(self.root), "task_file": ".project/tasks/T001-demo.md"}
+        dispatch_driver.save_state(path, state)
+        (path.parent / "stdout").write_bytes(b"")
+        (path.parent / "stderr").write_bytes(b"child failed")
+
+        def exited(pid):
+            dispatch_driver.save_state(path.with_name("exit.json"),
+                                       {"finished_at": "now", "exit_code": 7})
+            return False
+
+        with mock.patch.object(dispatch_driver, "process_alive", side_effect=exited):
+            self.assertFalse(current.settle())
+        self.assertEqual(current.receipt["blocked"][0]["reason"], "child exited 7")
+        persisted = dispatch_driver.read_attempt(path)
+        self.assertEqual(persisted["exit_code"], 7)
+        self.assertEqual(current.receipt["blocked"][0]["stderr_tail"], "child failed")
+
     def test_review_invalid_artifact_blocks_before_collection_and_keeps_the_sidecar(self) -> None:
         root = self.root
         self.fixture(root)
