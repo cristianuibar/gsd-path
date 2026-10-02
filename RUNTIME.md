@@ -91,7 +91,7 @@ argument slots defined in the dispatch model policy.
 calls. In `round`, an unfinished earlier wave blocks dispatch before the bookkeeping
 checkpoint. Child completion is recorded in `exit.json`; the parent alone
 writes `state.json`.
-For `review`, `panel`, and `skeptics`, when the child process is gone and `finished_at` is
+For `round`, `review`, `panel`, and `skeptics`, when the child process is gone and `finished_at` is
 unset, the driver rereads that attempt's state and exit receipt before
 collecting the result or blocking with
 `child wrapper exited without recording a result`.
