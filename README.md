@@ -40,37 +40,31 @@ proof and each host's guard tier.
 | [WORKFLOW.md](WORKFLOW.md) | Phase-by-phase agent SOP |
 | [HOOKS.md](HOOKS.md) | Optional archive/git guard hooks |
 | [Jev screening](skills/gsd-path/references/jev-review.md) | Optional evidence screening; disabled by default, no SDK required |
-| [daemon/README.md](daemon/README.md) | Dashboard, menu-bar app, and monitoring setup |
-| [CHANGELOG.md](CHANGELOG.md) | Published release notes |
+| [daemon/app/README.md](daemon/app/README.md) | Desktop app: develop, release, and updates |
+| [daemon/README.md](daemon/README.md) | Monitor daemon: routes, configuration, and manual setup |
+| [CHANGELOG.md](CHANGELOG.md) | npm package release notes |
+| [daemon/app/CHANGELOG.md](daemon/app/CHANGELOG.md) | Desktop app release notes |
 | [RELEASE.md](RELEASE.md) | Maintainer CI and npm release cycle |
 | [GUIDE.md](GUIDE.md) | Pointer to the guides above |
 
-## What's new — September 19, 2026
+## What's new — October 2, 2026
 
 These changes are merged into the source checkout; npm installs use the latest
 published release.
 
-- **Dashboard settings and history:** edit Path settings, browse project files
-  and Git versions, and load full recorded evidence. See the
-  [dashboard guide](daemon/README.md#project-history-and-files).
-- **Model and effort policy:** set user, project, host, and task choices through
-  one resolver. Recorded assignments stay pinned; unsupported explicit choices
-  stop the affected dispatch. See the
-  [model policy](skills/gsd-path/references/model-policy.md).
-- **External worktrees and pinned runtimes:** new parallel task, verification,
-  and integration worktrees live outside project checkouts. Projects pin runtime
-  versions by content digest, with explicit upgrade, restore, and legacy migration
-  commands. See
-  [worktree locations](DOCS.md#worktree-locations) and
-  [runtime versions](DOCS.md#project-runtime-versions).
-- **Clearer project updates:** the dashboard shows project runtime versions and
-  update results. After verified integration, ordinary branches can resume
-  product work while archived milestones remain protected. See
-  [update guidance](UPDATE.md#update-the-project-runtime-and-guard-hooks).
-- **Optional Jev screening:** reviewers can request advisory checks of selected
-  criteria and evidence. It is disabled by default and never replaces recorded
-  verification or review gates. See
-  [Jev screening](skills/gsd-path/references/jev-review.md).
+- **Desktop app (pre-release):** one app for macOS, Windows, and Linux shows
+  your projects, manages skills in each coding agent, and updates itself. See
+  [Desktop app](#desktop-app).
+- **Skills from the published release:** the monitor installs skills from the
+  npm release, checks the download against the registry's sha512, and refuses
+  one that does not match. A release picker lets you stay on an older version.
+- **Safer monitor writes:** a monitor started by the app accepts changes only
+  with the app's local token, so another web page cannot change your setup.
+- **Environment editor:** edit a project's `.env` files with values masked and
+  a diff before each save.
+- **Usage charts:** tokens and cost per day, time per phase, tasks per wave,
+  and verify history. Missing data shows as missing, never as zero.
+- **Muse Code** is a supported host.
 
 ## Install from npm
 
@@ -157,65 +151,51 @@ project settings. Dashboard users can open **Settings → Path settings** for th
 same shipping, model/effort, and future review-panel controls. See
 [Path settings](skills/gsd-path/references/config.md) for precedence and locks.
 
-## Dashboard and menu-bar toolbar
+## Desktop app
 
-The optional **OpenGSD Path monitor** shows your projects without opening each
-project's `.project/` files. It watches the folders you choose and reads project
-state without advancing phase gates. Explicit Path settings saves use the
-validated configuration helper; background monitoring remains read-only.
-The monitor is a separate install from the npm skills package.
+The **OpenGSD Path app** shows your projects without opening each project's
+`.project/` files, and manages the Path setup on your computer. It is a
+pre-release for testers.
 
-### Dashboard
+**Get it:** download the installer for your system from the newest `app-v`
+entry on the [releases page](https://github.com/open-gsd/gsd-path/releases):
+`.dmg` (macOS, Apple Silicon or Intel), `.msi` (Windows), `.deb` or AppImage
+(Linux). The app needs Python 3.9+ and Git; its first screen checks for both
+and shows the fix when one is missing.
 
-The project board shows blocked, active, and shipped work, with milestone and
-phase progress, task counts, last activity, and available usage data. Use the
-[dashboard controls](daemon/README.md#dashboard) to filter or search projects,
-switch between Board and Milestones, refresh status, and manage settings.
+The builds have no OS code signature yet. On macOS, approve the app once in
+**System Settings → Privacy & Security**. On Windows, SmartScreen shows a
+warning; choose **More info → Run anyway**.
 
-![OpenGSD Path project board showing sample projects, status filters, milestone progress, tasks, and usage](docs/images/dashboard-board.png)
+What the app does:
 
-Click a project to see its milestone roadmap, tasks, success criteria, review
-results, verification history, and activity. Usage includes tokens and turns
-from supported host session logs; cost estimates require model prices in the
-daemon configuration.
+- **Projects:** blocked, active, and shipped work with milestone and phase
+  progress, tasks, last activity, and usage. A project page shows its
+  roadmap, tasks, success criteria, reviews, verification history, files at
+  any Git version, and full recorded evidence.
+- **Skills:** which coding agents have Path skills, at which version, with
+  preview, install, update, and uninstall. Every write shows a preview or a
+  plan first.
+- **Project setup:** runtime version, guard hooks, health check, and, for a
+  multi-repo coordinator, member hooks and marker repair.
+- **Settings:** updates, Path settings (shipping mode, models, review panel),
+  watched folders, model prices, launch at login, and appearance.
+- **Stats** and the per-project **Environment** editor.
+- **Tray:** a compact project list, items that need attention, and controls
+  to start, restart, and quit.
 
-![Project dashboard showing the history viewer link, milestone progress, expandable evidence, and usage with sample data](docs/images/dashboard-project.png)
+The app only watches and sets up. It never advances a phase; approvals and
+rulings stay in your agent. It updates itself: it checks a signed update file,
+asks before it installs, and refuses an update whose signature does not match.
 
-*Dashboard screenshots captured on September 19, 2026, using the repository's
-sample projects; the current project folder layout may differ.*
+Background monitoring is read-only. The app starts a local monitor (the
+daemon) and stops it on quit. See the [app guide](daemon/app/README.md) and the
+[daemon guide](daemon/README.md).
 
-Open **History & files** to browse project files and archived milestones,
-preview Markdown, or read a file at a selected Git commit. Relative document
-links keep that selected version. **Records & sources → Load full records**
-loads recorded usage, verification, activity, and indexed host turns on demand,
-with coverage details that make missing or invalid data visible.
+### Manual monitor (without the app)
 
-Open **Settings → Path settings** to change user defaults or project overrides
-for shipping mode, model and effort choices, and future review panels. Each
-setting shows its source and any lock reason; changes are saved explicitly.
-
-The **Plugin** settings page shows each watched project's runtime version and
-provides an explicit **Update** action with progress and failure details.
-Updating global skills does not update a project's pinned runtime.
-
-### macOS menu bar
-
-Click the OpenGSD Path menu-bar icon for a compact project list with phase
-meters and task progress. Click a project to open its dashboard page. The
-bottom toolbar opens the dashboard, plugin settings, and watched folders;
-it also provides rescan, appearance, and quit controls. The daemon row shows
-its running state and provides restart and stop controls. Option-click the
-menu-bar icon to open the dashboard directly.
-
-<img src="docs/images/macos-menu-bar.png" alt="OpenGSD Path native macOS panel with sample projects and its bottom toolbar" width="400">
-
-*The native panel screenshot uses sample project data and was captured in its
-preview window; the current folder layout may differ.*
-
-### Install the monitor
-
-The monitor requires Python 3.9+. From a source checkout, preview the setup,
-then install (macOS/Linux shell):
+From a source checkout you can still run the monitor and its browser
+dashboard without the app. It requires Python 3.9+:
 
 ```bash
 git clone https://github.com/open-gsd/gsd-path.git
@@ -224,33 +204,20 @@ PYTHONPATH=daemon python3 -m gsd_daemon install --dry-run
 PYTHONPATH=daemon python3 -m gsd_daemon install
 ```
 
-On Windows, after cloning and entering `gsd-path`, use PowerShell:
+On Windows, use PowerShell in the `gsd-path` folder. The last command starts
+the monitor for this session; it starts by itself at later logins:
 
 ```powershell
 $env:PYTHONPATH = "daemon"
 python -m gsd_daemon install --dry-run
 python -m gsd_daemon install
-```
-
-On Windows, launch the installed shortcut for this session before opening the
-dashboard. It starts automatically at future logins:
-
-```powershell
 Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gsd-path-daemon.lnk"
 ```
 
-Open **http://127.0.0.1:8765**, then use **Settings → Watched folders** to add
-your project folders. The installer creates an isolated Python environment and
-configures autostart. On macOS it also builds and installs the native menu-bar
-app; this requires macOS 12+ and Xcode Command Line Tools (`swiftc`). On
-macOS, use `--no-tray` for the dashboard only. Linux autostart runs the
-dashboard; launch the optional tray separately with
-`~/.gsd-path/venv/bin/gsd-path-daemon tray`. Windows uses a tray-and-dashboard
-Startup shortcut; see the [daemon guide](daemon/README.md) for platform details.
-
-See the [daemon guide](daemon/README.md) for configuration, usage pricing,
-manual startup, and platform setup, or the [macOS guide](daemon/macos/README.md)
-for native menu-bar details.
+Then open **http://127.0.0.1:8765**. The first launch of the desktop app
+removes this older autostart entry so only one monitor runs. See the
+[daemon guide](daemon/README.md) for platform details, configuration, and
+usage pricing.
 
 ## Skills
 
