@@ -204,9 +204,18 @@ PYTHONPATH=daemon python3 -m gsd_daemon install --dry-run
 PYTHONPATH=daemon python3 -m gsd_daemon install
 ```
 
-Then open **http://127.0.0.1:8765**. On Windows, set `$env:PYTHONPATH = "daemon"`
-and use `python`. The first launch of the desktop app removes this older
-autostart entry so only one monitor runs. See the
+On Windows, use PowerShell in the `gsd-path` folder. The last command starts
+the monitor for this session; it starts by itself at later logins:
+
+```powershell
+$env:PYTHONPATH = "daemon"
+python -m gsd_daemon install --dry-run
+python -m gsd_daemon install
+Start-Process "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\gsd-path-daemon.lnk"
+```
+
+Then open **http://127.0.0.1:8765**. The first launch of the desktop app
+removes this older autostart entry so only one monitor runs. See the
 [daemon guide](daemon/README.md) for platform details, configuration, and
 usage pricing.
 
