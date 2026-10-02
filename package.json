@@ -85,6 +85,7 @@
   "scripts": {
     "install:ci": "npm ci",
     "check:prereqs": "node scripts/dev/check-prereqs.mjs",
+    "check:locks": "node scripts/dev/py.mjs scripts/check_lock_usage.py",
     "test": "node tests/run-node-tests.mjs",
     "test:smoke": "npm test",
     "test:integration": "npm run test:python",

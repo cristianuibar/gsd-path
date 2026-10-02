@@ -134,6 +134,8 @@ def main(argv=None) -> int:
     commands.add_parser("dump", help="full aggregated status JSON")
     serve_parser = commands.add_parser("serve", help="localhost status HTTP server")
     serve_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    serve_parser.add_argument("--require-token", action="store_true",
+                              help="refuse POST requests without the token in ~/.gsd-path/app/api-token")
     tray_parser = commands.add_parser("tray", help="run the system tray app (requires the tray extra)")
     tray_parser.add_argument("--serve", action="store_true",
                              help="also run the dashboard HTTP server in a background thread")
@@ -146,6 +148,9 @@ def main(argv=None) -> int:
                                 help="install only; do not register autostart")
     install_parser.add_argument("--dry-run", action="store_true",
                                 help="print every action without executing it")
+    launch_parser = commands.add_parser(
+        "launch", help="native app check: retire old autostart, prepare the venv, pick reuse or start (JSON)")
+    launch_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     uninstall_parser = commands.add_parser("uninstall", help="remove autostart registration")
     uninstall_parser.add_argument("--dry-run", action="store_true",
                                   help="print every action without executing it")
@@ -199,7 +204,7 @@ def main(argv=None) -> int:
         return 0
     if args.command == "serve":
         from . import serve as serve_module
-        serve_module.run(Watcher(config), port=args.port)
+        serve_module.run(Watcher(config), port=args.port, require_token=args.require_token)
         return 0
     if args.command == "tray":
         try:
@@ -219,6 +224,11 @@ def main(argv=None) -> int:
         from .installer import Installer
         installer = Installer(dry_run=args.dry_run)
         return installer.uninstall()
+    if args.command == "launch":
+        from .installer import Installer
+        from .launch import launch
+        print(json.dumps(launch(args.port, Installer(port=args.port, out=lambda _line: None)), indent=2, sort_keys=True))
+        return 0
     if args.command == "plugin":
         return _cmd_plugin(args)
     parser.error("unknown command")

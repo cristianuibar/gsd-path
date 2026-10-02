@@ -96,6 +96,7 @@ gsd-path-daemon scan            # {"projects": [{root, project, milestone, phase
 gsd-path-daemon dump            # full aggregated status JSON (schema gsd-path-daemon/status/v1)
 gsd-path-daemon serve --port 8765   # localhost dashboard: GET / (HTML), GET /status (JSON)
 gsd-path-daemon tray            # system tray app
+gsd-path-daemon launch [--port 8765]  # native app only: launch check as one JSON object (changes the venv and old autostart)
 gsd-path-daemon tray --serve [--port 8765]  # tray + dashboard server in one process
 gsd-path-daemon install [--no-tray] [--no-autostart] [--dry-run]  # venv + autostart
 gsd-path-daemon uninstall [--dry-run]                             # remove autostart
@@ -111,8 +112,8 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
 
 - `GET /health` — `{"ok": true}` liveness probe.
 - `GET /status` — aggregated status JSON (the `dump` schema below, plus
-  `daemon` with current `parents` and `poll_seconds`, and compact `plugin`
-  status). Also consumed by the native macOS app.
+  `daemon` with current `parents` and `poll_seconds`, the daemon `version` and
+  `pid`, and compact `plugin` status). Also consumed by the native macOS app.
 - `GET /activity` — recent events from `history.jsonl`, newest first.
 - `GET /` — a self-contained dashboard (inline CSS/JS, no build step) that
   polls `/status` every 5 seconds.
@@ -123,11 +124,61 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   request scans skip host session logs, share a lock with background scans,
   and record changes when history is enabled.
 
+- `GET /api/config` — the settings in `daemon.json`: `parents`, `excludes`,
+  `max_depth`, `poll_seconds`, `notify`, `history`, `session_dirs`, `prices`.
+  A write keeps other keys in the file (for example `plugin_repo`).
+- `POST /api/config` — a JSON object with any of those keys. Every value is
+  checked first; one bad value or an unknown key returns 400 and changes
+  nothing. Prices must be finite numbers. Valid changes are saved, then
+  apply to the running daemon and start a project scan; a failed save returns
+  500 and changes nothing. The request does not read host session logs: it
+  starts the next background poll at once, and that poll reads them with the
+  new folders, prices, and poll interval. Usage from
+  a removed session folder no longer counts. The
+  answer is the full settings object.
+- `GET /api/stats` — chart data for all projects, or for one with
+  `?root=<watched project>`: `days` (tokens, turns, and cost per day from host
+  session logs; a model without a price adds tokens but no cost and is listed
+  in `unpriced`), `phases` (seconds per phase from recorded phase changes),
+  `waves` (tasks per wave; one project only), and `verify` (verify runs,
+  oldest first). A chart with no data is `null` with a reason in `missing`;
+  it is never zero.
+- `GET /api/hosts` — `{hosts: [{id, name, found, path, skills_root}]}`: each
+  supported coding agent and whether its command is on this computer.
+- `POST /api/project/op` — `{root, op, dry_run?, member?, hosts?}` for a watched
+  project. `op` is `hooks-init`, `hooks-refresh`, `hooks-refresh-full`,
+  `runtime-restore`, `doctor`, `members`, `member-hooks`, or `member-repair`.
+  Each runs one helper from the plugin source (`install.py` or `members.py`)
+  and returns its output; the daemon adds no rule of its own. `hooks-init`
+  passes `hosts` (host ids) to the installer, which needs at least one. A second
+  operation while one runs returns 409.
+- `POST /api/env/list`, `/api/env/reveal`, `/api/env/save` — read and change
+  one of a watched project's `.env`, `.env.local`, `.env.development`,
+  `.env.production`. `list` returns names only; `reveal` returns one value;
+  `save` takes `changes` and `dry_run` and returns the diff by name. These
+  routes exist only on a daemon started with `--require-token`; another
+  daemon answers 403. No GET route returns env content, and no value is
+  written to a log or to the diagnostics report.
+- `GET /api/diagnostics` — a support report: daemon and Python versions,
+  platform, settings, project count, plugin state, and the last lines of each
+  file in `~/.gsd-path/logs`. It never holds the write token, and credentials inside
+  URLs in the log lines are masked.
+
 Every `POST` must be same-origin: `Host` is `127.0.0.1:<port>` or
 `localhost:<port>`, `Origin` is absent or `http://<Host>`, and
 `Sec-Fetch-Site` is not `cross-site`; otherwise it returns 403. Every `POST`
 except `/api/refresh` must also send `Content-Type: application/json`, or it
-returns 415. This blocks other web pages and DNS rebinding.
+returns 415. This blocks other web pages and DNS rebinding. `GET /api/config`,
+`GET /api/stats`, `GET /api/hosts`, `GET /api/diagnostics`, and
+`GET /api/project-files` apply the same same-origin check and return 403
+otherwise.
+
+`serve --require-token` adds one more check. The daemon creates
+`~/.gsd-path/app/api-token` (readable by the user only) if it is missing, and
+every `POST` must then send its content in the `X-GSD-Path-Token` header, or
+it returns 403. The native app starts its daemon this way, so only the app
+can change local state; the dashboard in a browser is then read-only. Without
+the flag, nothing changes.
 
 The native dashboard window fills the display's usable area on first open
 (later sizes are kept) and the green button can take it into macOS full screen.
@@ -217,7 +268,8 @@ project's shipping mode, future review-panel preference, and model/effort choice
 Sources and lock reasons are shown. Save changes individually; Reset removes that
 scope's override. Watched folders and appearance retain their existing controls.
 
-User defaults require the daemon's plugin source checkout; project settings need
+User defaults require the daemon's plugin source (see
+[Plugin lifecycle](#plugin-lifecycle)) to be present; project settings need
 an updated selected runtime. Missing support shows an update message. Settings
 never fetch, install, or upgrade automatically.
 
@@ -233,19 +285,29 @@ The daemon manages the gsd-path **skill plugin** itself (this is separate
 from `install`/`uninstall`, which manage the daemon): install, update, and
 uninstall, both globally (per-host skill roots) and per-project.
 
-**Source.** The skills are also available through
-[`@opengsd/gsd-path` on npm](https://www.npmjs.com/package/@opengsd/gsd-path).
-The daemon's plugin manager uses a git clone, which it keeps at `~/.gsd-path/src`
-(`https://github.com/open-gsd/gsd-path.git`, override with the `plugin_repo`
-key in `daemon.json`) and runs its `scripts/install.py` for every
-install/update. Background source refresh does `git fetch origin main` +
-`git pull --ff-only` at most once per 24h, cached in
-`~/.gsd-path/update-check.json` (last-fetch timestamp + last-known latest
-version from the clone's `package.json`). Background refresh failures retain
-the cached state. Explicit global updates and project updates from a clean source
-checkout bypass this cache period and stop if source refresh fails. When the
-source checkout has local changes, project Update uses that local build without
-fetching or merging and displays a source notice. It never discards those edits.
+**Source.** The plugin manager installs from the published
+[`@opengsd/gsd-path` npm release](https://www.npmjs.com/package/@opengsd/gsd-path).
+It reads the registry for the release list and the `latest` tag, downloads the
+release tarball, and checks it against the registry's sha512 (`dist.integrity`).
+A tarball that does not match is refused and nothing is installed. A verified
+release is unpacked to `~/.gsd-path/releases/<version>`, and its
+`scripts/install.py` runs for every install/update. The manager follows
+`latest` unless a release is chosen (`POST /api/plugin/release`). Background
+refresh reads the registry at most once per 24h, cached in
+`~/.gsd-path/update-check.json` (last-fetch timestamp, latest version, release
+list, chosen release). Refresh failures retain the cached state, and an
+unpacked release keeps working offline. Explicit global and project updates
+bypass the cache period and stop if the refresh fails.
+
+**Git source.** Set `plugin_repo` in `daemon.json` to use a git clone of that
+repository at `~/.gsd-path/src` in place of npm releases, for a fork or a
+checkout under development. Refresh is then `git fetch origin main` +
+`git pull --ff-only`, and the latest version comes from the clone's
+`package.json`. When the clone has local changes, project Update uses that
+local build without fetching or merging and displays a source notice. It never
+discards those edits. A clone left by an earlier daemon version is not used
+unless `plugin_repo` is set.
+
 Project updates invoke `--runtime-upgrade`, or `--runtime-migrate` for legacy
 runtime directories; see
 [project runtime versions](../DOCS.md#project-runtime-versions) for version
@@ -253,9 +315,8 @@ selection and legacy migration, and [Dashboard feedback](../UPDATE.md#update-the
 for the displayed controls and results. Every installer operation (argv, exit code,
 output tail) is appended to `~/.gsd-path/logs/plugin.log`.
 
-**Repository access.** The default `open-gsd/gsd-path` repository is public.
-If you configure a private `plugin_repo`, cloning needs credentials on the
-machine. `ensure_source` tries HTTPS first, then SSH on failure. Use
+**Repository access.** If you configure a private `plugin_repo`, cloning
+needs credentials on the machine. `ensure_source` tries HTTPS first, then SSH on failure. Use
 `gh auth login` or an SSH key for access to a private source.
 
 **CLI:**
@@ -268,8 +329,8 @@ gsd-path-daemon plugin update [--global | --project PATH] [--dry-run]
 gsd-path-daemon plugin uninstall (--global [--host H ...] | --project PATH) [--dry-run] [--yes]
 ```
 
-`plugin status` and the update check work offline from runtime declarations, legacy VERSION stamps, and
-the cache — they never clone. Uninstall without `--yes` prints the removal
+`plugin status` and the `/status` update state work offline from runtime declarations, legacy VERSION stamps, and
+the cache — they never read the registry or clone. Uninstall without `--yes` prints the removal
 plan and stops; `--yes` is required to apply anything.
 
 **API** (all POST bodies are JSON; operations run in a worker thread under
@@ -278,7 +339,7 @@ one global op-lock — a second concurrent operation gets
 
 - `GET /status` — now includes a top-level `plugin` key
   (`{latest, update_available, hosts}`) built cheaply from VERSION probes
-  and the cache only — no git fetch.
+  and the cache only — no registry read, no git fetch.
 - `GET /api/plugin/status` — full detection: global hosts plus
   `projects: [...]` for every watched root. Each project's `runtime_version`
   comes from its runtime declaration, falling back to legacy
@@ -286,6 +347,15 @@ one global op-lock — a second concurrent operation gets
 - `POST /api/plugin/install` — `{scope: "global"|"project", hosts?, root?,
   local_hosts?, hooks?, dry_run?}` → `{ok, argv, stdout_tail, error}`.
 - `POST /api/plugin/update` — `{scope, root?, dry_run?}`.
+- `POST /api/plugin/check` — reads the registry now →
+  `{ok, error, latest, update_available, installed}`. `latest` is the registry
+  `latest`; `update_available` compares the installed versions with the
+  release in use (the chosen release, or `latest` when none is chosen).
+- `POST /api/plugin/release` — `{version}` chooses a published release;
+  `{version: null}` follows `latest` again →
+  `{source, latest, selected, versions}`. `source` is `"npm"` or `"git"`.
+  With the git source the route answers 400 and reads nothing.
+  `GET /api/plugin/status` carries the same object as `releases`.
 - `POST /api/plugin/uninstall` — `{scope, hosts?, root?, dry_run?}` returns
   the plan; `{..., confirm: true}` applies it. Neither `dry_run` nor
   `confirm` → 400.
@@ -324,7 +394,7 @@ installer.
 
 Top level: `schema` (`gsd-path-daemon/status/v1`), `generated_at`,
 `projects`, and `plugin` (`{latest, update_available, hosts}` — cheap
-VERSION-stamp probes plus the update-check cache, never a git fetch; see
+VERSION-stamp probes plus the update-check cache, never a source refresh; see
 "Plugin lifecycle"). Each project object carries (keys are stable and additive):
 
 - Identity/state: `root` (discovered project path), `project` (project state name),

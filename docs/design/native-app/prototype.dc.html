@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{--bg:#fbfcfd;--chrome:#eef0f3;--card:#fff;--text:#1a1d22;--dim:#595e64;--faint:#71757a;--line:#e1e3e6;--hover:#f0f4f7;--seg:#e0e3e6;--done:#51565c;--accent:#0062cc;--accent-fill:#007aff;--accent-fg:#fff;--accent-soft:#e5f1ff;--danger:#c9302d;--danger-soft:#ffe7e4;--wait:#8d5e00;--wait-soft:#fdf1dc;--ok:#34c759;--ok-ink:#1f7a3a;--ok-soft:#e3f5e8;--shadow:0 1px 2px rgb(26 29 34/.08),0 0 0 1px rgb(26 29 34/.06);--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;color-scheme:light}
+:root[data-theme="dark"]{--bg:#101214;--chrome:#171a1d;--card:#141619;--text:#e9ebee;--dim:#a7abb1;--faint:#82878c;--line:#292c2f;--hover:#1d1f23;--seg:#2b2e32;--done:#a0a5ab;--accent:#4da3ff;--accent-fill:#0a84ff;--accent-soft:#0f2640;--danger:#ef675c;--danger-soft:#47211d;--wait:#e4ac59;--wait-soft:#3a2a12;--ok:#30d158;--ok-ink:#5ad17e;--ok-soft:#13301c;--shadow:0 1px 2px rgb(0 0 0/.4),0 0 0 1px rgb(255 255 255/.06);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{white-space:nowrap;flex:none}
+a{color:var(--accent)}a:hover{color:var(--accent-fill)}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:14px/1.5 var(--ui)">
+
+<div style="position:sticky;top:0;z-index:30;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 12px;background:#1a1d22;color:#e9ebee;font-size:12px">
+  <span style="opacity:.65;margin-right:4px">Prototype</span>
+  <sc-for list="{{ jumps }}" as="j" hint-placeholder-count="8"><button onClick="{{ j.go }}" style="{{ j.style }}">{{ j.label }}</button></sc-for>
+</div>
+
+<sc-if value="{{ is.notTray }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;height:38px;padding:0 14px;background:var(--chrome);border-bottom:1px solid var(--line);position:relative;font-size:12.5px;color:var(--dim)">
+  <sc-if value="{{ is.mac }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px"><i style="width:12px;height:12px;border-radius:50%;background:#ff5f57;display:block"></i><i style="width:12px;height:12px;border-radius:50%;background:#febc2e;display:block"></i><i style="width:12px;height:12px;border-radius:50%;background:#28c840;display:block"></i></div><div style="position:absolute;left:0;right:0;text-align:center;pointer-events:none">OpenGSD Path</div></sc-if>
+  <sc-if value="{{ is.win }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;color:var(--text)"><svg viewBox="0 0 18 18" fill="none" style="width:14px;height:14px"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>OpenGSD Path</div><div style="margin-left:auto;display:flex;gap:22px;font-size:13px;padding-right:6px;color:var(--text)"><span>&#8212;</span><span>&#9633;</span><span>&#10005;</span></div></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ is.chrome }}" hint-placeholder-val="{{ true }}">
+<header style="display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 28px;background:var(--card);border-bottom:1px solid var(--line)">
+  <div style="display:flex;gap:8px;align-items:center;font-size:13.5px;font-weight:650;white-space:nowrap"><svg viewBox="0 0 18 18" fill="none" style="width:18px;height:18px"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>OpenGSD Path</div>
+  <nav style="display:flex;gap:4px;margin-left:18px;flex-wrap:wrap">
+    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4"><button onClick="{{ n.go }}" style="{{ n.style }}">{{ n.label }}<sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}"><span style="margin-left:6px;background:var(--accent-fill);color:#fff;border-radius:9px;font-size:11px;font-weight:600;padding:0 6px">{{ n.badge }}</span></sc-if></button></sc-for>
+  </nav>
+  <span style="margin-left:auto"></span>
+  <button onClick="{{ doRefresh }}" style="min-height:40px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer" style-hover="border-color:var(--faint)">Refresh</button>
+  <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);white-space:nowrap"><i style="width:7px;height:7px;border-radius:50%;background:var(--ok);display:block"></i>Updated 04:00:21</span>
+</header>
+</sc-if>
+
+<!-- ============ ONBOARDING ============ -->
+<sc-if value="{{ is.onboard }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);min-height:0">
+  <aside style="background:var(--chrome);border-right:1px solid var(--line);padding:32px 22px;display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:650;margin-bottom:22px"><svg viewBox="0 0 18 18" fill="none" style="width:20px;height:20px"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>OpenGSD Path</div>
+    <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6"><button onClick="{{ s.go }}" style="{{ s.style }}"><span style="{{ s.dot }}">{{ s.mark }}</span>{{ s.label }}</button></sc-for>
+    <div style="margin-top:auto;font-size:12px;color:var(--faint);line-height:1.5">Nothing is installed or written until you click it. Every step can be redone from Settings.</div>
+  </aside>
+  <div style="display:flex;flex-direction:column;min-width:0">
+    <div style="flex:1;padding:44px 48px 24px;max-width:860px;width:100%">
+
+      <sc-if value="{{ st.s0 }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 1 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">What this computer needs</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">Path runs on Python and Git. The app checks for both and offers a fix when one is missing.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <sc-for list="{{ reqs }}" as="r" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)">
+            <div style="min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><i style="{{ r.dot }}"></i><b style="font-weight:600">{{ r.name }}</b><span style="{{ r.pill }}">{{ r.pillText }}</span></div>
+            <div style="font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:4px;overflow-wrap:anywhere">{{ r.detail }}</div>
+            <div style="font-size:12.5px;color:var(--faint);margin-top:2px;max-width:62ch">{{ r.hint }}</div></div>
+            <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button onClick="{{ r.fix }}" style="min-height:36px;padding:0 14px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer;white-space:nowrap">{{ r.act }}</button></sc-if>
+          </div></sc-for>
+        </div>
+        <sc-if value="{{ is.win }}" hint-placeholder-val="{{ false }}"><p style="font-size:12.5px;color:var(--faint);margin-top:12px;max-width:70ch">The app window also needs the WebView2 runtime. The installer adds it when missing, so there is nothing to do here.</p></sc-if>
+        <sc-if value="{{ reqBlocked }}" hint-placeholder-val="{{ false }}"><p style="font-size:12.5px;color:var(--danger);margin-top:12px">Install the required items to continue.</p></sc-if>
+      </sc-if>
+
+      <sc-if value="{{ st.s1 }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 2 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Your coding agents</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">Found {{ detectedCount }} of 11 supported agents. Path skills go into each agent you select. Path does not install the agents themselves.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">
+          <sc-for list="{{ hostCards }}" as="h" hint-placeholder-count="11"><button onClick="{{ h.toggle }}" style="{{ h.style }}"><span style="{{ h.box }}">{{ h.mark }}</span><span style="text-align:left;flex:1;min-width:0"><span style="display:block;font-weight:600">{{ h.label }}</span><span style="display:block;font-size:12px;color:var(--faint)">{{ h.note }}</span><sc-if value="{{ h.missing }}" hint-placeholder-val="{{ false }}"><span style="display:block;font-size:12px;color:var(--accent)">Install page &#8599;</span></sc-if></span></button></sc-for>
+        </div>
+        <p style="font-size:12.5px;color:var(--faint);margin-top:16px">Agents that are not found can still be selected. Each agent's skills folder can be changed later in Skills.</p>
+      </sc-if>
+
+      <sc-if value="{{ st.s2 }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 3 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Install Path skills</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">Skills go into the global skills folder of each selected agent, from a signed npm release.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px;display:grid;gap:16px">
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><label style="display:grid;gap:4px;font-size:12px;color:var(--faint)">Release<select style="min-height:36px;min-width:230px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>Latest · 1.4.0</option><option>1.3.2</option><option>1.3.1</option></select></label><span style="font-size:12.5px;color:var(--dim);margin-top:16px">sha512 checked before anything is written</span></div>
+          <div style="display:grid;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+            <sc-for list="{{ installTargets }}" as="t" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px"><b style="font-weight:600">{{ t.label }}</b><span style="font-family:var(--mono);font-size:12px;color:var(--dim);overflow-wrap:anywhere;text-align:right">{{ t.path }}</span></div></sc-for>
+          </div>
+          <sc-if value="{{ is.instPlan }}" hint-placeholder-val="{{ false }}"><div style="font-family:var(--mono);font-size:12px;line-height:1.7;background:var(--chrome);border-radius:8px;padding:12px 14px;color:var(--dim)">dry run, nothing written<br>would write 14 files to each folder above<br>would stamp VERSION 1.4.0</div></sc-if>
+          <sc-if value="{{ is.instRun }}" hint-placeholder-val="{{ false }}"><div><div style="height:4px;border-radius:2px;background:var(--seg);overflow:hidden"><i style="display:block;height:100%;width:60%;background:var(--accent-fill)"></i></div><div style="font-size:12.5px;color:var(--dim);margin-top:6px">Installing into {{ hostCount }} agents…</div></div></sc-if>
+          <sc-if value="{{ is.instDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;color:var(--ok-ink);font-weight:600"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:block"></i>Installed 1.4.0 in {{ hostCount }} agents. Health check passed.</div></sc-if>
+          <sc-if value="{{ is.instIdle }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button onClick="{{ doInstall }}" style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Install in {{ hostCount }} agents</button><button onClick="{{ doPreview }}" style="min-height:36px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Preview first</button></div></sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ st.s3 }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 4 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Folders to watch</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">The app looks for Git repositories under these folders and shows the ones that use Path on the board.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px"><span>~/work</span><button style="min-height:32px;padding:0 12px;background:var(--card);border:1px solid var(--danger);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Stop watching</button></div>
+          <div style="padding:12px 0"><button style="min-height:36px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Add folder…</button></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px">
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px"><div style="font-size:26px;font-weight:650;font-variant-numeric:tabular-nums">4</div><div style="color:var(--dim);font-size:12.5px">projects already using Path</div></div>
+          <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px"><div style="font-size:26px;font-weight:650;font-variant-numeric:tabular-nums">7</div><div style="color:var(--dim);font-size:12.5px">Git repositories without Path</div></div>
+        </div>
+        <p style="font-size:12.5px;color:var(--faint);margin-top:14px">Excluded folders and scan depth are in Settings → Monitoring.</p>
+      </sc-if>
+
+      <sc-if value="{{ st.s4 }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 5 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Add a project</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">Pick repositories to set up with Path. You can skip this and add projects later from the board.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <sc-for list="{{ repoRows }}" as="r" hint-placeholder-count="4"><button onClick="{{ r.toggle }}" style="{{ r.style }}"><span style="{{ r.box }}">{{ r.mark }}</span><span style="flex:1;text-align:left"><span style="display:block;font-weight:600">{{ r.name }}</span><span style="display:block;font-family:var(--mono);font-size:11.5px;color:var(--faint)">{{ r.path }}</span></span><span style="font-size:12px;color:var(--faint)">{{ r.note }}</span></button></sc-for>
+        </div>
+        <div style="margin-top:14px;background:var(--accent-soft);border-radius:8px;padding:12px 16px;font-size:12.5px"><b style="font-weight:600">platform/ holds 3 repositories</b> <span style="color:var(--dim)">(api, web, worker) that look like one product. Set them up here, then link them as members in your agent with /path and members add.</span></div><div style="margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px">
+          <div style="display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Guard hooks</b><div style="font-size:12.5px;color:var(--dim)">Git and agent hooks that block edits to archived work and unapproved ship commits.</div></div><div onClick="{{ tg.hooks.on }}" style="{{ tg.hooks.track }}"><i style="{{ tg.hooks.knob }}"></i></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Install skills inside the project</b><div style="font-size:12.5px;color:var(--dim)">Per-agent skill folders in the repo, instead of the global ones.</div></div><div onClick="{{ tg.local.on }}" style="{{ tg.local.track }}"><i style="{{ tg.local.knob }}"></i></div></div>
+          <div style="padding:12px 0;font-size:12.5px;color:var(--dim)">If the repo has an AGENTS.md, Path adds one marked block and keeps your text. A health check runs when setup finishes.</div>
+        </div>
+        <sc-if value="{{ is.repoDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;color:var(--ok-ink);font-weight:600;margin-top:14px"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:block"></i>{{ repoCount }} set up. Health check passed, 6 of 6.</div></sc-if>
+        <sc-if value="{{ is.repoIdle }}" hint-placeholder-val="{{ true }}"><button onClick="{{ doSetup }}" style="margin-top:14px;min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Set up {{ repoCount }}</button></sc-if>
+      </sc-if>
+
+      <sc-if value="{{ st.s5 }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:12px;color:var(--faint);margin-bottom:6px">Step 6 of 6</div>
+        <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Start in your agent</h1>
+        <p style="margin:8px 0 26px;color:var(--dim);max-width:60ch">Path runs inside your coding agent. Open the project there and type the command below. Approvals and rulings stay in the agent.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:22px;display:grid;gap:18px">
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><label style="display:grid;gap:4px;font-size:12px;color:var(--faint)">Project<select style="min-height:36px;min-width:200px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>billing-service</option></select></label><label style="display:grid;gap:4px;font-size:12px;color:var(--faint)">Agent<select style="min-height:36px;min-width:160px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>Codex</option><option>Claude Code</option><option>Cursor</option><option>Zed</option></select></label><button style="margin-top:16px;min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Open in agent</button></div>
+          <div style="display:flex;align-items:center;gap:12px;background:var(--chrome);border-radius:8px;padding:12px 14px"><span style="font-family:var(--mono);font-size:15px;flex:1">/path</span><button style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy</button></div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 48px;border-top:1px solid var(--line);background:var(--card)">
+      <sc-if value="{{ is.canBack }}" hint-placeholder-val="{{ false }}"><button onClick="{{ back }}" style="min-height:36px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Back</button></sc-if>
+      <span style="margin-left:auto"></span>
+      <sc-if value="{{ is.canSkip }}" hint-placeholder-val="{{ false }}"><button onClick="{{ next }}" style="min-height:36px;padding:0 14px;background:none;border:0;color:var(--dim);font-size:12.5px;cursor:pointer">Skip for now</button></sc-if>
+      <button onClick="{{ next }}" style="{{ nextStyle }}">{{ nextLabel }}</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ PROJECTS ============ -->
+<sc-if value="{{ is.projects }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1450px;width:100%;margin:0 auto;padding:32px 36px 60px">
+  <sc-if value="{{ updPending }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--accent-soft);border-radius:8px;padding:10px 16px;margin-bottom:24px;font-size:13px"><b style="font-weight:600;white-space:nowrap">{{ updPending }} updates available</b><span style="color:var(--dim);flex:1;min-width:200px">{{ updText }}</span><button onClick="{{ goUpdates }}" style="margin-left:auto;min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Review updates</button></div></sc-if>
+  <div style="display:flex;gap:20px;align-items:flex-end;margin-bottom:26px;flex-wrap:wrap">
+    <div><h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Projects</h1><p style="margin:8px 0 0;color:var(--dim)">What shipped. Where things stand. What’s ahead.</p></div>
+    <span style="margin-left:auto"></span>
+    <button onClick="{{ goAddProject }}" style="min-height:40px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Add project</button>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;padding-bottom:16px;flex-wrap:wrap">
+    <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}<span style="margin-left:4px;color:var(--faint);font-weight:400">{{ f.n }}</span></button></sc-for>
+    <label style="margin-left:auto;display:flex;align-items:center;gap:6px;height:40px;width:220px;padding:0 8px;border-radius:7px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);color:var(--faint)"><svg viewBox="0 0 16 16" fill="none" style="width:16px;height:16px"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input placeholder="Find a project…" style="border:0;outline:0;background:transparent;width:100%;min-width:0;font-size:13px"></label>
+  </div>
+  <div style="overflow-x:auto"><div style="min-width:780px">
+    <div style="display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(150px,1.1fr) minmax(110px,1fr) 44px 92px 132px;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase"><span>Project</span><span>Current milestone</span><span>Status</span><span style="text-align:right">Tasks</span><span style="text-align:right">Usage</span><span>Setup</span></div>
+    <sc-for list="{{ rows }}" as="p" hint-placeholder-count="6"><div onClick="{{ p.open }}" style="{{ p.rowStyle }}" style-hover="background:var(--hover)">
+      <div><div style="{{ p.nameStyle }}"><sc-if value="{{ p.coord }}" hint-placeholder-val="{{ false }}"><button onClick="{{ p.toggle }}" aria-label="Show or hide member repositories" style="border:0;background:none;color:var(--dim);cursor:pointer;padding:0;width:16px;font-size:12px">{{ p.chev }}</button></sc-if><i style="{{ p.dot }}"></i>{{ p.name }}<sc-if value="{{ p.coord }}" hint-placeholder-val="{{ false }}"><span style="white-space:nowrap;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--chrome);color:var(--faint)">{{ p.kids }}</span></sc-if></div><div style="{{ p.pathStyle }}">{{ p.path }}</div></div>
+      <div><div style="font-size:13px;margin-bottom:6px"><span style="font:12px var(--mono);color:var(--dim)">{{ p.ms }}</span> {{ p.slug }}</div><div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)"><span style="display:inline-flex;gap:2px"><sc-for list="{{ p.cells }}" as="c" hint-placeholder-count="8"><i style="{{ c }}"></i></sc-for></span>{{ p.phase }}</div></div>
+      <div><span style="{{ p.stStyle }}">{{ p.stl }}</span><div style="font-size:12px;color:var(--dim);margin-top:7px">{{ p.note }}</div><div style="font-size:11px;color:var(--dim);margin-top:6px">{{ p.ago }}</div></div>
+      <div style="text-align:right;font-variant-numeric:tabular-nums">{{ p.tasks }}</div>
+      <div style="text-align:right;font-variant-numeric:tabular-nums">{{ p.cost }}<div style="font-size:11px;color:var(--dim);margin-top:6px">{{ p.turns }}</div></div>
+      <div><span style="{{ p.setupStyle }}">{{ p.setup }}</span></div>
+    </div></sc-for>
+  </div></div>
+  <div style="display:flex;justify-content:space-between;gap:14px;padding-top:16px;color:var(--dim);font-size:12px"><span>{{ footerText }}</span><span>Usage reflects matched host sessions</span></div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;margin-top:36px">
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline"><b style="font-size:12.5px;font-weight:650">Git repositories without Path</b><span style="font-size:12px;color:var(--faint)">7 found in watched folders</span></div>
+      <sc-for list="{{ unmanaged }}" as="u" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0"><div style="font-weight:600">{{ u.name }}</div><div style="font:11px var(--mono);color:var(--faint)">{{ u.path }}</div></div><button onClick="{{ goAddProject }}" style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Set up</button></div></sc-for>
+      <div style="padding:10px 16px;font-size:12px;color:var(--faint)">4 more · <a href="#">Show all</a></div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline"><b style="font-size:12.5px;font-weight:650">Workspace detected</b><span style="font-size:12px;color:var(--faint)">~/work/platform</span></div>
+      <div style="padding:14px 16px;display:grid;gap:12px">
+        <div style="color:var(--dim);font-size:13px">This folder holds 3 repositories that look like one product, but no coordinator links them. They show as separate projects once set up.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font:12px var(--mono);background:var(--chrome);border-radius:5px;padding:2px 8px">platform-api</span><span style="font:12px var(--mono);background:var(--chrome);border-radius:5px;padding:2px 8px">platform-web</span><span style="font:12px var(--mono);background:var(--chrome);border-radius:5px;padding:2px 8px">platform-worker</span></div>
+        <div style="font-size:12.5px;color:var(--faint)">Linking happens in your agent: open <span style="font-family:var(--mono)">~/work/platform</span>, type <span style="font-family:var(--mono)">/path</span>, then <span style="font-family:var(--mono)">members add</span> for each repository.</div>
+        <div style="display:flex;gap:8px"><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Open in Codex &#8599;</button><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy /path</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<!-- ============ PROJECT ============ -->
+<sc-if value="{{ is.project }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1450px;width:100%;margin:0 auto;padding:24px 36px 60px">
+  <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim)">
+    <button onClick="{{ go.projects }}" style="border:0;background:none;color:var(--dim);cursor:pointer;padding:4px 0;font-size:13px">&#8249; Projects</button>
+    <sc-if value="{{ hasParent }}" hint-placeholder-val="{{ false }}"><span>/</span><button onClick="{{ openParent }}" style="border:0;background:none;color:var(--dim);cursor:pointer;padding:4px 0;font-size:13px">{{ parentName }}</button></sc-if>
+  </div>
+  <sc-if value="{{ hasParent }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--chrome);border-radius:8px;padding:10px 16px;margin-top:10px;font-size:13px"><b style="font-weight:600;white-space:nowrap">Member of {{ parentName }}</b><span style="color:var(--dim);flex:1;min-width:240px">Shipping mode ({{ cur.integ }}) and the guard come from the coordinator. Joining and leaving happen in your agent.</span><button onClick="{{ openParent }}" style="margin-left:auto;min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Open coordinator</button></div></sc-if>
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:12px"><h1 style="margin:0;font-size:28px;letter-spacing:-.025em;font-weight:650;display:flex;align-items:center;gap:10px"><i style="{{ curDot }}"></i>{{ cur.name }}</h1><span style="font:12px var(--mono);color:var(--faint);white-space:nowrap">Project folder: {{ cur.path }}</span><a href="#" style="margin-left:auto;font-size:12.5px">History &amp; files &#8599;</a></div>
+  <dl style="display:flex;flex-wrap:wrap;margin:14px 0 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">
+    <sc-for list="{{ facts }}" as="f" hint-placeholder-count="8"><div style="padding:7px 14px;border-right:1px solid var(--line)"><dt style="font-size:11px;color:var(--faint)">{{ f.k }}</dt><dd style="margin:0;font-weight:600;font-variant-numeric:tabular-nums">{{ f.v }}</dd></div></sc-for>
+  </dl>
+  <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(340px,1fr);gap:40px;margin-top:10px">
+    <section style="min-width:0">
+      <h2 style="font-size:12.5px;font-weight:650;margin:20px 0 8px">Phase <span style="color:var(--faint);font-weight:400">{{ curPhase }}</span></h2>
+      <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px">
+        <sc-for list="{{ phases }}" as="ph" hint-placeholder-count="8"><div style="{{ ph.style }}"><i style="{{ ph.bar }}"></i>{{ ph.label }}<small style="display:block;font:10.5px var(--mono)">{{ ph.date }}</small></div></sc-for>
+      </div>
+      <sc-if value="{{ nb.show }}" hint-placeholder-val="{{ true }}"><div style="{{ nb.style }}">
+        <div><b>{{ nb.title }}</b> · {{ nb.line }}</div>
+        <div style="color:var(--dim)">{{ nb.goal }}</div>
+        <sc-if value="{{ nb.hasTasks }}" hint-placeholder-val="{{ true }}"><div style="height:4px;border-radius:2px;background:var(--seg);overflow:hidden;margin:8px 0 2px"><i style="{{ nb.bar }}"></i></div></sc-if>
+        <div style="color:var(--dim);margin-top:4px">{{ nb.count }}</div>
+        <sc-if value="{{ nb.hasWaves }}" hint-placeholder-val="{{ true }}"><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:2px 14px;color:var(--dim)"><span style="color:var(--done)">&#10003; wave 1 parsers</span><span style="color:var(--accent);font-weight:600">&#9679; wave 2 watcher</span><span style="color:var(--faint)">&#9675; wave 3 tray</span></div></sc-if>
+        <sc-if value="{{ nb.blocked }}" hint-placeholder-val="{{ false }}"><div style="margin-top:6px;color:var(--danger);font-weight:600">Ship is blocked: the final review has not passed.</div></sc-if>
+      </div></sc-if>
+      <h2 style="font-size:12.5px;font-weight:650;margin:26px 0 8px">Milestones</h2>
+      <div style="border-top:1px solid var(--line)">
+        <sc-for list="{{ milestones }}" as="m" hint-placeholder-count="3"><div style="{{ m.style }}"><span style="font:12px var(--mono)">{{ m.n }}</span><div><div>{{ m.slug }}</div><div style="font-size:12px;color:var(--dim)">{{ m.goal }}</div></div><span>{{ m.status }}</span><span style="text-align:right;font-variant-numeric:tabular-nums">{{ m.usage }}</span></div></sc-for>
+      </div>
+    </section>
+    <section style="min-width:0;display:grid;gap:18px;align-content:start">
+      <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;margin-top:20px">
+        <div style="padding:12px 16px;font-size:12.5px;font-weight:650">Setup in this project</div>
+        <sc-for list="{{ setupRows }}" as="r" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)">
+          <div style="min-width:0"><div style="font-size:11px;color:var(--faint)">{{ r.label }}</div><div style="font-weight:600;overflow-wrap:anywhere">{{ r.value }}</div><div style="font-size:12px;color:var(--dim)">{{ r.sub }}</div></div>
+          <sc-if value="{{ r.act }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.go }}" style="{{ r.actStyle }}">{{ r.act }}</button></sc-if>
+          <sc-if value="{{ r.okPill }}" hint-placeholder-val="{{ false }}"><span style="white-space:nowrap;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--ok-soft);color:var(--ok-ink)">Up to date</span></sc-if>
+        </div></sc-for>
+      </div>
+      <sc-if value="{{ isCoord }}" hint-placeholder-val="{{ true }}"><div style="background:var(--card);border:1px solid var(--line);border-radius:8px">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:baseline"><b style="font-size:12.5px;font-weight:650">Member repositories</b><span style="font-size:12px;color:var(--faint)">coordinator · .project/MEMBERS.md</span></div>
+        <sc-for list="{{ members }}" as="m" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)">
+          <div><button onClick="{{ m.open }}" style="border:0;background:none;padding:0;cursor:pointer;font-weight:600;color:var(--accent);font-size:14px">{{ m.name }}</button><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><span style="{{ m.markerStyle }}">{{ m.marker }}</span><span style="{{ m.hooksStyle }}">{{ m.hooks }}</span><span style="{{ m.originStyle }}">{{ m.origin }}</span></div><sc-if value="{{ m.fix }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--danger);margin-top:5px;font-family:var(--mono)">{{ m.fix }}</div></sc-if></div>
+          <sc-if value="{{ m.act }}" hint-placeholder-val="{{ false }}"><button onClick="{{ m.go }}" style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">{{ m.act }}</button></sc-if>
+        </div></sc-for>
+        <div style="padding:10px 16px;font-size:12px;color:var(--faint)">Joining a repository happens in your agent: <span style="font-family:var(--mono)">/path</span> then <span style="font-family:var(--mono)">members add</span>.</div>
+      </div></sc-if>
+      <div>
+        <h2 style="font-size:12.5px;font-weight:650;margin:2px 0 8px">Usage</h2>
+        <dl style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)">
+          <sc-for list="{{ usage }}" as="u" hint-placeholder-count="4"><div style="padding:6px 10px;border-right:1px solid var(--line)"><dt style="font-size:11px;color:var(--faint)">{{ u.k }}</dt><dd style="margin:0;font-weight:600;font-variant-numeric:tabular-nums">{{ u.v }}</dd></div></sc-for>
+        </dl>
+        <button onClick="{{ go.stats }}" style="margin-top:8px;border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font-size:12.5px">See charts &#8250;</button>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:12px">
+        <button onClick="{{ toggleRemove }}" style="border:0;background:none;color:var(--dim);cursor:pointer;padding:0;font-size:12.5px">Remove Path from this project</button>
+        <sc-if value="{{ removeOpen }}" hint-placeholder-val="{{ false }}"><div style="margin-top:10px;background:var(--danger-soft);border-radius:8px;padding:12px 14px;font-size:12.5px"><div style="font-weight:600;margin-bottom:4px">Plan</div><div style="color:var(--dim)">Removes the AGENTS.md block, the runtime and the guard hooks. Files you edited are kept. Nothing under <span style="font-family:var(--mono)">.project/</span> is touched.</div><div style="display:flex;gap:8px;margin-top:10px"><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--danger);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Remove</button><button onClick="{{ toggleRemove }}" style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Cancel</button></div></div></sc-if>
+      </div>
+    </section>
+  </div>
+</main>
+</sc-if>
+
+<!-- ============ SKILLS ============ -->
+<sc-if value="{{ is.skills }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1150px;width:100%;margin:0 auto;padding:32px 36px 60px">
+  <div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;margin-bottom:24px"><div><h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Skills</h1><p style="margin:8px 0 0;color:var(--dim)">Path skills in each coding agent's global skills folder.</p></div><span style="margin-left:auto"></span>
+    <label style="display:grid;gap:4px;font-size:12px;color:var(--faint)">Release<select style="min-height:36px;min-width:190px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>Latest · 1.4.0</option><option>1.3.2</option></select></label>
+    <button style="min-height:36px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Check for updates</button>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+    <div style="display:grid;grid-template-columns:minmax(120px,.8fr) minmax(0,1.6fr) 80px 150px auto;gap:14px;padding:10px 16px;background:var(--chrome);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase"><span>Agent</span><span>Skills folder</span><span>Version</span><span>Status</span><span></span></div>
+    <sc-for list="{{ skillRows }}" as="h" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(120px,.8fr) minmax(0,1.6fr) 80px 150px auto;gap:14px;padding:14px 16px;border-top:1px solid var(--line);align-items:center">
+      <b style="font-weight:600">{{ h.label }}</b><span style="font:12px var(--mono);color:var(--dim);overflow-wrap:anywhere">{{ h.path }}</span><span style="font-variant-numeric:tabular-nums">{{ h.version }}</span><span><span style="{{ h.pill }}">{{ h.status }}</span></span>
+      <span style="display:flex;gap:6px;justify-content:flex-end"><sc-if value="{{ h.canPrimary }}" hint-placeholder-val="{{ false }}"><button onClick="{{ h.primary }}" style="min-height:32px;padding:0 14px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">{{ h.primaryLabel }}</button></sc-if><sc-if value="{{ h.canPreview }}" hint-placeholder-val="{{ false }}"><button onClick="{{ doPlan }}" style="min-height:32px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Preview</button></sc-if><sc-if value="{{ h.canRemove }}" hint-placeholder-val="{{ false }}"><button style="min-height:32px;padding:0 12px;background:var(--card);border:1px solid var(--line);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Uninstall</button></sc-if></span>
+    </div></sc-for>
+  </div>
+  <sc-if value="{{ planOpen }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px;font-family:var(--mono);font-size:12px;line-height:1.7;background:var(--chrome);border-radius:8px;padding:12px 14px;color:var(--dim)">dry run, nothing written<br>would replace ~/.claude/skills/gsd-path (1.3.2 → 1.4.0), 14 files changed<br>would keep your VERSION-less custom folders untouched</div></sc-if>
+  <p style="font-size:12.5px;color:var(--faint);margin-top:16px;max-width:70ch">Codex and Zed share <span style="font-family:var(--mono)">~/.agents/skills</span>, so installing for one covers both. 7 more agents are not detected on this computer: Grok, OpenCode, Copilot CLI, Qwen Code, Antigravity, Kiro and Kimi Code. <a href="#">Install anyway</a> · <a href="#">Change a skills folder</a></p>
+</main>
+</sc-if>
+
+<!-- ============ STATS ============ -->
+<sc-if value="{{ is.stats }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1300px;width:100%;margin:0 auto;padding:32px 36px 60px">
+  <div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;margin-bottom:24px"><div><h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Stats</h1><p style="margin:8px 0 0;color:var(--dim)">Last 14 days. Missing data stays blank; it is never shown as zero.</p></div><span style="margin-left:auto"></span>
+    <div style="display:flex;padding:2px;border-radius:7px;background:var(--seg)"><sc-for list="{{ scopes }}" as="s" hint-placeholder-count="3"><button onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button></sc-for></div></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">
+
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:12.5px;font-weight:650;white-space:nowrap">Tokens per day</b><span style="font-size:12px;color:var(--faint);white-space:nowrap">{{ sc.tokensTotal }}</span></div>
+      <sc-if value="{{ sc.tokens }}" hint-placeholder-val="{{ true }}"><div style="font:11px var(--mono);color:var(--faint);margin-top:10px">peak 4.2M · Sep 29</div><div style="display:flex;align-items:flex-end;gap:5px;height:140px;margin-top:4px;border-bottom:1px solid var(--line)"><sc-for list="{{ bars1 }}" as="b" hint-placeholder-count="14"><i style="{{ b }}"></i></sc-for></div><div style="display:flex;justify-content:space-between;font:11px var(--mono);color:var(--faint);margin-top:6px"><span>Sep 17</span><span>Sep 30</span></div></sc-if>
+      <sc-if value="{{ sc.tokensMissing }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px;height:140px;border-radius:6px;background:repeating-linear-gradient(135deg,var(--chrome) 0 6px,transparent 6px 12px);display:grid;place-items:center;text-align:center;padding:0 24px;color:var(--dim);font-size:12.5px">No matched sessions for this project. Usage appears once Codex or Claude Code runs here.</div></sc-if></div>
+
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:12.5px;font-weight:650;white-space:nowrap">Cost per day</b><span style="font-size:12px;color:var(--faint);white-space:nowrap">{{ sc.costTotal }}</span></div>
+      <sc-if value="{{ sc.tokens }}" hint-placeholder-val="{{ true }}"><div style="font:11px var(--mono);color:var(--faint);margin-top:10px">peak $3.80 · Sep 29</div><div style="display:flex;align-items:flex-end;gap:5px;height:140px;margin-top:4px;border-bottom:1px solid var(--line)"><sc-for list="{{ bars2 }}" as="b" hint-placeholder-count="14"><i style="{{ b }}"></i></sc-for></div><div style="display:flex;justify-content:space-between;font:11px var(--mono);color:var(--faint);margin-top:6px"><span>Sep 17</span><span>Sep 30</span></div><div style="font-size:12px;color:var(--faint);margin-top:8px">claude-sonnet-5 has no price, so its tokens are counted and its cost is left out. <a href="#">Add a price</a></div></sc-if>
+      <sc-if value="{{ sc.tokensMissing }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px;height:140px;border-radius:6px;background:repeating-linear-gradient(135deg,var(--chrome) 0 6px,transparent 6px 12px);display:grid;place-items:center;text-align:center;padding:0 24px;color:var(--dim);font-size:12.5px">No cost without matched sessions.</div></sc-if></div>
+
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px"><b style="font-size:12.5px;font-weight:650">Time per phase</b>
+      <div style="display:grid;gap:9px;margin-top:14px"><sc-for list="{{ phaseTime }}" as="p" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:70px minmax(0,1fr) 48px;gap:10px;align-items:center;font-size:12.5px"><span style="color:var(--dim)">{{ p.label }}</span><span style="height:8px;border-radius:2px;background:var(--seg);display:block;overflow:hidden"><i style="{{ p.bar }}"></i></span><span style="text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)">{{ p.v }}</span></div></sc-for></div></div>
+
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px"><b style="font-size:12.5px;font-weight:650">Tasks per wave</b>
+      <sc-if value="{{ sc.tasks }}" hint-placeholder-val="{{ true }}"><div style="display:grid;gap:12px;margin-top:14px"><sc-for list="{{ waves }}" as="w" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:110px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px"><span style="color:var(--dim)">{{ w.label }}</span><span style="display:flex;gap:3px"><sc-for list="{{ w.cells }}" as="c" hint-placeholder-count="4"><i style="{{ c }}"></i></sc-for></span><span style="text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)">{{ w.v }}</span></div></sc-for></div></sc-if>
+      <sc-if value="{{ sc.tasksMissing }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px;height:110px;border-radius:6px;background:repeating-linear-gradient(135deg,var(--chrome) 0 6px,transparent 6px 12px);display:grid;place-items:center;color:var(--dim);font-size:12.5px">No tasks yet.</div></sc-if></div>
+
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px;grid-column:1/-1"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:12.5px;font-weight:650;white-space:nowrap">Verify history</b><span style="font-size:12px;color:var(--faint);white-space:nowrap">{{ sc.verifyTotal }}</span></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:14px"><sc-for list="{{ verify }}" as="v" hint-placeholder-count="30"><i style="{{ v }}"></i></sc-for></div><div style="display:flex;gap:16px;align-items:center;font-size:12px;color:var(--faint);margin-top:10px"><span>Oldest first</span><span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--accent-fill);display:block"></i>pass</span><span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--danger);display:block"></i>fail</span></div></div>
+  </div>
+</main>
+</sc-if>
+
+<!-- ============ SETTINGS ============ -->
+<sc-if value="{{ is.settings }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:1150px;width:100%;margin:0 auto;padding:32px 36px 60px">
+  <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Settings</h1>
+  <div style="display:grid;grid-template-columns:190px minmax(0,1fr);gap:40px;margin-top:26px">
+    <nav style="display:flex;flex-direction:column;gap:4px"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></nav>
+    <section style="min-width:0">
+
+      <sc-if value="{{ tab.updates }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><h2 style="margin:0;font-size:20px;font-weight:600">Updates</h2><span style="margin-left:auto"></span><button onClick="{{ updateAll }}" style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Update all</button></div>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+          <sc-for list="{{ updRows }}" as="u" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)"><div><b style="font-weight:600">{{ u.name }}</b><div style="font-size:12px;color:var(--dim)">{{ u.sub }}</div></div><span style="font:12.5px var(--mono);color:var(--dim)">{{ u.ver }}</span><sc-if value="{{ u.pending }}" hint-placeholder-val="{{ true }}"><button onClick="{{ u.go }}" style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">{{ u.act }}</button></sc-if><sc-if value="{{ u.finished }}" hint-placeholder-val="{{ false }}"><span style="white-space:nowrap;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--ok-soft);color:var(--ok-ink)">Up to date</span></sc-if></div></sc-for>
+        </div>
+        <p style="font-size:12.5px;color:var(--faint);margin-top:12px;max-width:66ch">The app, the skills and each project runtime update separately. The app asks before it installs or restarts.</p>
+      </sc-if>
+
+      <sc-if value="{{ tab.path }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 16px;font-size:20px;font-weight:600">Path settings</h2>
+        <div style="display:flex;padding:2px;border-radius:7px;background:var(--seg);width:max-content;margin-bottom:18px"><sc-for list="{{ cfgScopes }}" as="s" hint-placeholder-count="2"><button onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button></sc-for></div>
+        <div style="display:grid;gap:0;border-top:1px solid var(--line)">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)"><div><b style="font-weight:600">Shipping mode</b><div style="font-size:12.5px;color:var(--dim)">How finished milestones reach main. {{ cfgNote }}</div></div><select style="min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>Pull request</option><option>Direct merge</option></select></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:16px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)"><div><b style="font-weight:600">Review panel</b><div style="font-size:12.5px;color:var(--dim)">Extra reviewers from other model families.</div></div><select style="min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>Detected</option><option>Off</option></select></div>
+          <div style="padding:16px 0;border-bottom:1px solid var(--line)"><b style="font-weight:600">Models and effort</b><div style="font-size:12.5px;color:var(--dim);margin-bottom:10px">Per role. Recorded assignments stay pinned.</div>
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr) 130px;gap:8px 12px;align-items:center;font-size:12.5px"><span style="font-size:11px;color:var(--faint);text-transform:uppercase">Role</span><span style="font-size:11px;color:var(--faint);text-transform:uppercase">Model</span><span style="font-size:11px;color:var(--faint);text-transform:uppercase">Effort</span>
+              <sc-for list="{{ roles }}" as="r" hint-placeholder-count="4"><span style="font-family:var(--mono)">{{ r.role }}</span><select style="min-height:34px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>{{ r.model }}</option><option>inherit</option></select><select style="min-height:34px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px"><option>{{ r.effort }}</option><option>inherit</option></select></sc-for></div></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px"><button style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Save</button><button style="min-height:36px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Discard</button></div>
+      </sc-if>
+
+      <sc-if value="{{ tab.monitor }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 16px;font-size:20px;font-weight:600">Monitoring</h2>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 18px">
+          <div style="padding:14px 0;border-bottom:1px solid var(--line)"><b style="font-weight:600">Watched folders</b><div style="display:flex;justify-content:space-between;gap:16px;align-items:center;margin-top:8px;font-family:var(--mono);font-size:12.5px"><span>~/work</span><button style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--danger);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Stop watching</button></div><button style="margin-top:10px;min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Add folder…</button></div>
+          <div style="padding:14px 0;border-bottom:1px solid var(--line)"><b style="font-weight:600">Excluded folders</b><div style="display:flex;justify-content:space-between;gap:16px;align-items:center;margin-top:8px;font-family:var(--mono);font-size:12.5px"><span>~/work/archive</span><button style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Remove</button></div><button style="margin-top:10px;min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Exclude folder…</button></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)"><div><b style="font-weight:600">Scan depth</b><div style="font-size:12.5px;color:var(--dim)">How many folders deep to look for projects.</div></div><input value="6" style="min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px;text-align:right"></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)"><div><b style="font-weight:600">Refresh interval</b><div style="font-size:12.5px;color:var(--dim)">Seconds between reads of project state.</div></div><input value="5" style="min-height:36px;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:0 8px;text-align:right"></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Desktop notifications</b><div style="font-size:12.5px;color:var(--dim)">Phase changes, blocks and pending answers.</div></div><div onClick="{{ tg.notify.on }}" style="{{ tg.notify.track }}"><i style="{{ tg.notify.knob }}"></i></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0"><div style="flex:1"><b style="font-weight:600">Activity history</b><div style="font-size:12.5px;color:var(--dim)">Keep a record of changes in <span style="font-family:var(--mono)">history.jsonl</span>.</div></div><div onClick="{{ tg.history.on }}" style="{{ tg.history.track }}"><i style="{{ tg.history.knob }}"></i></div></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tab.usage }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 6px;font-size:20px;font-weight:600">Usage and prices</h2>
+        <p style="margin:0 0 16px;color:var(--dim);max-width:64ch">Cost is tokens times the price per million tokens. A model without a price shows tokens only.</p>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px">
+          <div style="display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,90px);gap:10px 12px;align-items:center;font-size:12.5px"><span style="font-size:11px;color:var(--faint);text-transform:uppercase">Model</span><span style="font-size:11px;color:var(--faint);text-transform:uppercase;text-align:right">Input</span><span style="font-size:11px;color:var(--faint);text-transform:uppercase;text-align:right">Cached</span><span style="font-size:11px;color:var(--faint);text-transform:uppercase;text-align:right">Output</span>
+            <span style="font-family:var(--mono)">gpt-6-astra</span><span style="text-align:right">1.25</span><span style="text-align:right">0.125</span><span style="text-align:right">10</span>
+            <span style="font-family:var(--mono)">claude-sonnet-5</span><input placeholder="—" style="min-height:32px;border:1px solid var(--wait);border-radius:6px;background:var(--card);padding:0 8px;text-align:right;width:100%"><input placeholder="—" style="min-height:32px;border:1px solid var(--wait);border-radius:6px;background:var(--card);padding:0 8px;text-align:right;width:100%"><input placeholder="—" style="min-height:32px;border:1px solid var(--wait);border-radius:6px;background:var(--card);padding:0 8px;text-align:right;width:100%"></div>
+          <div style="font-size:12px;color:var(--wait);margin-top:10px">claude-sonnet-5 has no price. Its cost is left out of totals.</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-top:14px"><b style="font-weight:600">Session folders</b><div style="font-size:12.5px;color:var(--dim);margin-top:2px">Where agent session logs are read for tokens. Found automatically:</div><div style="font:12px/1.8 var(--mono);color:var(--dim);margin-top:8px">~/.codex/sessions<br>~/.claude/projects</div><button style="margin-top:10px;min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Add folder…</button></div>
+      </sc-if>
+
+      <sc-if value="{{ tab.app }}" hint-placeholder-val="{{ false }}">
+        <h2 style="margin:0 0 16px;font-size:20px;font-weight:600">App</h2>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 18px">
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Launch at login</b><div style="font-size:12.5px;color:var(--dim)">Starts the app and its background monitor when you sign in.</div></div><div onClick="{{ tg.login.on }}" style="{{ tg.login.track }}"><i style="{{ tg.login.knob }}"></i></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Appearance</b><div style="font-size:12.5px;color:var(--dim)">Follows the system by default.</div></div><div style="display:flex;padding:2px;border-radius:7px;background:var(--seg)"><button style="padding:3px 12px;border:0;border-radius:5px;background:var(--card);font-weight:600;font-size:12.5px;box-shadow:var(--shadow);cursor:pointer">System</button><button style="padding:3px 12px;border:0;border-radius:5px;background:none;color:var(--dim);font-size:12.5px;cursor:pointer">Light</button><button style="padding:3px 12px;border:0;border-radius:5px;background:none;color:var(--dim);font-size:12.5px;cursor:pointer">Dark</button></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b style="font-weight:600">Setup</b><div style="font-size:12.5px;color:var(--dim)">Run the first-launch steps again: requirements, agents, skills, folders.</div></div><button onClick="{{ setupAgain }}" style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Run setup again</button></div><div style="display:flex;align-items:center;gap:16px;padding:14px 0"><div style="flex:1"><b style="font-weight:600">Diagnostics</b><div style="font-size:12.5px;color:var(--dim)">Logs and a copyable report for support.</div></div><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Open logs</button><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy report</button></div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-top:14px"><b style="font-weight:600">Remove everything</b><div style="font-size:12.5px;color:var(--dim);margin:2px 0 10px;max-width:64ch">Removes skills, project guards, the background monitor, the login entry and the app's Python environment. Your projects and their <span style="font-family:var(--mono)">.project/</span> folders are kept. A plan is shown first.</div><button style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--danger);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Show removal plan</button></div>
+      </sc-if>
+    </section>
+  </div>
+</main>
+</sc-if>
+
+<!-- ============ ENVIRONMENT ============ -->
+<sc-if value="{{ is.env }}" hint-placeholder-val="{{ false }}">
+<main style="max-width:920px;width:100%;margin:0 auto;padding:24px 36px 60px">
+  <button onClick="{{ go.project }}" style="border:0;background:none;color:var(--dim);cursor:pointer;padding:4px 0;font-size:13px">&#8249; {{ cur.name }}</button>
+  <div style="display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;margin:10px 0 22px"><div><h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Environment</h1><p style="margin:8px 0 0;color:var(--dim);max-width:62ch">Variables stored in this project's env files. Values stay on this computer. They are never shown on the board, in logs or in reports.</p></div></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="display:flex;padding:2px;border-radius:7px;background:var(--seg)"><sc-for list="{{ envTabs }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+    <div style="display:flex;gap:8px;align-items:center"><span style="{{ envPill }}">{{ envPillText }}</span></div>
+  </div>
+  <div style="font-size:12.5px;color:var(--dim);margin-bottom:12px">{{ envNote }}</div>
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+    <div style="display:grid;grid-template-columns:minmax(150px,.9fr) minmax(0,1.4fr) 140px;gap:14px;padding:10px 16px;background:var(--chrome);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase"><span>Name</span><span>Value</span><span></span></div>
+    <sc-for list="{{ envRows }}" as="e" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(150px,.9fr) minmax(0,1.4fr) 140px;gap:14px;padding:11px 16px;border-top:1px solid var(--line);align-items:center"><span style="font:12.5px var(--mono);overflow-wrap:anywhere">{{ e.key }}</span><span style="font:12.5px var(--mono);color:var(--dim);overflow-wrap:anywhere">{{ e.shown }}</span><span style="display:flex;gap:6px;justify-content:flex-end"><sc-if value="{{ e.secret }}" hint-placeholder-val="{{ false }}"><button onClick="{{ e.toggle }}" style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">{{ e.showLabel }}</button></sc-if><button style="min-height:30px;padding:0 12px;background:var(--card);border:1px solid var(--line);color:var(--danger);border-radius:7px;font-size:12.5px;cursor:pointer">Remove</button></span></div></sc-for>
+    <div style="padding:12px 16px;border-top:1px solid var(--line)"><button onClick="{{ addVar }}" style="min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Add variable</button></div>
+  </div>
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 18px;margin-top:16px">
+    <div style="display:flex;align-items:center;gap:16px;padding:14px 0"><div style="flex:1"><b style="font-weight:600">Jev screening</b><div style="font-size:12.5px;color:var(--dim)">Optional advisory screening of evidence. Off by default. Turning it on adds <span style="font-family:var(--mono)">GSD_PATH_JEV=1</span> to the file chosen below. The key, <span style="font-family:var(--mono)">TYPESAFE_API_KEY</span>, belongs in .env.local.</div></div><div onClick="{{ tgJev.on }}" style="{{ tgJev.track }}"><i style="{{ tgJev.knob }}"></i></div></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 0 14px"><span style="font-size:12.5px;color:var(--dim)">Write the flag to</span><div style="display:flex;padding:2px;border-radius:7px;background:var(--seg);flex-wrap:wrap"><sc-for list="{{ jevFiles }}" as="j" hint-placeholder-count="4"><button onClick="{{ j.go }}" style="{{ j.style }}">{{ j.label }}</button></sc-for></div></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:18px"><button style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Save {{ envFile }}</button><button style="min-height:36px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Discard</button><span style="font-size:12.5px;color:var(--faint);margin-left:8px">Saving rewrites only the file shown. A diff is shown first.</span></div>
+</main>
+</sc-if>
+
+<!-- ============ FIRST LAUNCH ============ -->
+<sc-if value="{{ is.first }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;justify-content:center;padding:56px 24px">
+  <div style="width:100%;max-width:660px;display:grid;gap:22px;align-content:start">
+    <div><svg viewBox="0 0 18 18" fill="none" style="width:26px;height:26px"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1 style="margin:14px 0 0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">Moving to the new app</h1>
+      <p style="margin:8px 0 0;color:var(--dim);max-width:60ch">An earlier setup is still registered to start at login. The app removes it first so only one monitor runs.</p></div>
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="padding:14px 18px;font-weight:600;border-bottom:1px solid var(--line)">1 · Old startup entries</div>
+      <sc-for list="{{ flRows }}" as="r" hint-placeholder-count="3"><div style="padding:12px 18px;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:10px"><i style="{{ r.dot }}"></i><div style="flex:1;min-width:0"><b style="font-weight:600">{{ r.name }}</b><div style="font:12px var(--mono);color:var(--dim);overflow-wrap:anywhere">{{ r.detail }}</div></div><span style="{{ r.pill }}">{{ r.status }}</span></div>
+        <sc-if value="{{ r.bad }}" hint-placeholder-val="{{ false }}"><div style="margin:10px 0 0 18px;background:var(--danger-soft);border-radius:8px;padding:10px 12px;font-size:12.5px"><div style="font-weight:600;margin-bottom:4px">Remove it by hand</div><div style="font-family:var(--mono);font-size:12px;overflow-wrap:anywhere">{{ r.fix }}</div></div></sc-if></div></sc-for>
+      <div style="padding:14px 18px;font-weight:600;border-bottom:1px solid var(--line)">2 · Background monitor</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)"><i style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:block"></i><div style="flex:1"><b style="font-weight:600">Version 0.0.9 was running</b><div style="font-size:12.5px;color:var(--dim)">The app bundles 0.1.0, so it stopped the old one and started its own.</div></div><span style="white-space:nowrap;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--ok-soft);color:var(--ok-ink)">Replaced</span></div>
+      <div style="padding:14px 18px;font-weight:600;border-bottom:1px solid var(--line)">3 · Launch at login</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 18px"><div style="flex:1;font-size:13px;color:var(--dim)">{{ flLoginText }}</div><span style="{{ flLoginPill }}">{{ flLoginLabel }}</span></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <sc-if value="{{ flFail }}" hint-placeholder-val="{{ false }}"><button onClick="{{ flRetry }}" style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Check again</button><button onClick="{{ go.projects }}" style="min-height:36px;padding:0 16px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Continue without launch at login</button></sc-if>
+      <sc-if value="{{ flOk }}" hint-placeholder-val="{{ true }}"><button onClick="{{ go.projects }}" style="min-height:36px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Open dashboard</button></sc-if>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint)">Prototype: simulate a failed cleanup<span onClick="{{ flToggle }}" style="{{ flSwitch.track }}"><i style="{{ flSwitch.knob }}"></i></span></span>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ STATES ============ -->
+<sc-if value="{{ is.states }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;padding:28px 36px 60px;max-width:1300px;width:100%;margin:0 auto">
+  <h1 style="margin:0;font-size:28px;line-height:1.25;letter-spacing:-.025em;font-weight:650">When something goes wrong</h1>
+  <p style="margin:8px 0 24px;color:var(--dim);max-width:64ch">Each message names the problem, says what was and was not changed, and gives the exact fix.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px">
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">1 · Python missing at launch (no monitor started)</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px;display:grid;gap:12px;min-height:250px;align-content:start">
+      <b style="font-size:17px;font-weight:650">Python 3.9 or newer is needed</b><span style="color:var(--dim)">OpenGSD Path runs its background monitor on Python. Nothing has been started or changed.</span>
+      <div style="font-family:var(--mono);font-size:12.5px;background:var(--chrome);border-radius:8px;padding:10px 12px">{{ stPyCmd }}</div>
+      <div style="display:flex;gap:8px"><button style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Check again</button><button style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy command</button></div></div></div>
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">2 · Monitor stopped</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-height:250px">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;background:var(--danger-soft)"><i style="width:7px;height:7px;border-radius:50%;background:var(--danger);display:block"></i><span style="flex:1;font-size:13px"><b style="font-weight:600">Offline.</b> Showing the last update from 04:00:21.</span><button style="min-height:30px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Start monitor</button></div>
+      <div style="padding:18px;display:grid;gap:12px;opacity:.55"><div style="height:12px;border-radius:3px;background:var(--seg);width:40%"></div><div style="height:12px;border-radius:3px;background:var(--seg);width:70%"></div><div style="height:12px;border-radius:3px;background:var(--seg);width:55%"></div></div></div></div>
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">3 · Port in use by another program</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px;display:grid;gap:12px;min-height:250px;align-content:start">
+      <b style="font-size:17px;font-weight:650">Port 8765 is already in use</b><span style="color:var(--dim)">A program named <span style="font-family:var(--mono)">node</span> (pid 4412) is listening there. It is not a GSD Path monitor, so the app leaves it running.</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Use port 8766</button><button style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Show details</button></div></div></div>
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">4 · Skills install failed</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px;display:grid;gap:12px;min-height:250px;align-content:start">
+      <div style="display:flex;gap:8px;align-items:center"><b style="font-size:17px;font-weight:650">Claude Code was not updated</b><span style="white-space:nowrap;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--danger-soft);color:var(--danger)">Failed</span></div>
+      <span style="color:var(--dim)">Permission denied writing to <span style="font-family:var(--mono)">~/.claude/skills</span>. Nothing was changed. Codex and Cursor finished.</span>
+      <div style="font-family:var(--mono);font-size:12.5px;background:var(--chrome);border-radius:8px;padding:10px 12px">chmod -R u+w ~/.claude/skills</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy fix</button><button style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Try again</button><button style="min-height:34px;padding:0 6px;background:none;border:0;color:var(--accent);font-size:12.5px;cursor:pointer">Installer output</button></div></div></div>
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">5 · Update ready (asks before installing)</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px;display:grid;gap:12px;min-height:250px;align-content:start">
+      <b style="font-size:17px;font-weight:650">OpenGSD Path 0.1.1 is ready</b><span style="color:var(--dim)">Fixes the Settings save button and adds the environment editor. Running projects are not affected.</span>
+      <div style="display:flex;gap:8px"><button style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Restart and update</button><button style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Later</button></div></div></div>
+
+    <div><div style="font-size:12px;color:var(--faint);margin-bottom:6px">6 · Update refused</div><div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px;display:grid;gap:12px;min-height:250px;align-content:start">
+      <b style="font-size:17px;font-weight:650">Update 0.1.1 was not installed</b><span style="color:var(--dim)">The download's signature did not match, so the app refused it. You are still on 0.1.0 and nothing was changed.</span>
+      <div style="display:flex;gap:8px"><button style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Try again</button><button style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Copy details</button></div></div></div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ modalApp }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px">
+  <div style="background:var(--card);border-radius:12px;box-shadow:0 12px 40px rgb(0 0 0/.3);width:100%;max-width:440px;padding:24px;display:grid;gap:12px">
+    <b style="font-size:17px;font-weight:650">OpenGSD Path 0.1.1 is ready</b>
+    <span style="color:var(--dim)">The app restarts to finish. Running projects and agents are not affected. Fixes the Settings save button and adds the environment editor.</span>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button onClick="{{ closeModal }}" style="min-height:34px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer">Later</button><button onClick="{{ applyApp }}" style="min-height:34px;padding:0 16px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer">Restart and update</button></div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ============ TRAY ============ -->
+<sc-if value="{{ is.tray }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;background:var(--chrome);padding:0 0 60px">
+  <div style="height:28px;background:var(--card);border-bottom:1px solid var(--line);display:flex;justify-content:flex-end;align-items:center;gap:16px;padding:0 16px;font-size:12px;color:var(--dim)"><span style="background:var(--accent-soft);color:var(--accent);border-radius:4px;padding:0 6px;font-weight:600;white-space:nowrap">&#8250;&#8250;&#8250;</span><span style="white-space:nowrap">Tue 4:00</span></div>
+  <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 24px 0;align-items:center;font-size:12px;color:var(--faint)">Prototype<sc-for list="{{ trayStates }}" as="t" hint-placeholder-count="2"><button onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div>
+  <div style="width:380px;max-width:calc(100% - 24px);margin:8px 24px 0 auto;background:var(--card);border-radius:12px;box-shadow:0 8px 28px rgb(26 29 34/.22),var(--shadow);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:14px 16px 10px"><svg viewBox="0 0 18 18" fill="none" style="width:18px;height:18px"><path d="M1.6 4 5.6 9 1.6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 4 11 9 7 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.4 4 16.4 9 12.4 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><b style="font-weight:650;flex:1">OpenGSD Path</b><i style="{{ trayDot }}"></i><span style="font-size:12px;color:var(--dim);white-space:nowrap">{{ trayStatus }}</span></div>
+    <sc-if value="{{ trayStopped }}" hint-placeholder-val="{{ false }}"><div style="margin:0 12px 8px;background:var(--danger-soft);border-radius:8px;padding:9px 12px;display:flex;gap:10px;align-items:center;font-size:12.5px"><span style="flex:1">Monitor stopped. Showing the update from 04:00:21.</span><button style="min-height:28px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;font-size:12px;cursor:pointer">Start</button></div></sc-if>
+    <div style="{{ trayBodyStyle }}">
+      <div style="padding:4px 16px 4px;font-size:11px;font-weight:600;color:var(--danger);text-transform:uppercase">Needs attention · {{ attentionCount }}</div>
+      <sc-for list="{{ attention }}" as="a" hint-placeholder-count="2"><div onClick="{{ a.openDash }}" style="margin:4px 12px;background:var(--danger-soft);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:10px;cursor:pointer"><div style="flex:1;min-width:0"><div style="font-weight:600">{{ a.name }}</div><div style="font-size:12px;color:var(--danger)">{{ a.reason }}</div></div><span style="font-size:12.5px;color:var(--accent);white-space:nowrap">Open &#8250;</span></div></sc-for>
+      <div style="padding:12px 16px 2px;font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase">Projects</div>
+      <sc-for list="{{ trayRows }}" as="p" hint-placeholder-count="6"><div>
+        <div onClick="{{ p.toggle }}" style="{{ p.rowStyle }}" style-hover="background:var(--hover)"><i style="{{ p.dot }}"></i><div style="flex:1;min-width:0"><div style="font-weight:600">{{ p.name }}</div><div style="font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.line }}</div></div><span style="display:inline-flex;gap:2px"><sc-for list="{{ p.cells }}" as="c" hint-placeholder-count="8"><i style="{{ c }}"></i></sc-for></span></div>
+        <sc-if value="{{ p.open }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;padding:2px 16px 10px 36px;flex-wrap:wrap"><button style="min-height:28px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;font-size:12px;cursor:pointer">Open in Codex</button><button onClick="{{ p.openDash }}" style="min-height:28px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;font-size:12px;cursor:pointer">Details</button><button style="min-height:28px;padding:0 12px;background:var(--card);border:1px solid var(--line);border-radius:6px;font-size:12px;cursor:pointer">Copy /path</button></div></sc-if>
+      </div></sc-for>
+    </div>
+    <sc-if value="{{ trayUpdate }}" hint-placeholder-val="{{ true }}"><div style="margin:10px 12px 0;background:var(--accent-soft);border-radius:8px;padding:9px 12px;display:flex;gap:10px;align-items:center;font-size:12.5px"><span style="flex:1"><b style="font-weight:600">App 0.1.1 is ready</b><span style="color:var(--dim)"> · 2 more updates</span></span><button onClick="{{ goUpdates }}" style="min-height:28px;padding:0 12px;background:var(--accent-fill);color:#fff;border:0;border-radius:6px;font-size:12px;cursor:pointer">Review</button></div></sc-if>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px;margin-top:6px;border-top:1px solid var(--line)"><button onClick="{{ go.projects }}" style="min-height:32px;padding:0 16px;background:var(--accent-fill);color:#fff;border:0;border-radius:7px;font-size:12.5px;cursor:pointer">Open dashboard</button><button style="min-height:32px;padding:0 12px;background:none;border:0;border-radius:7px;font-size:12.5px;color:var(--dim);cursor:pointer" style-hover="background:var(--hover)">In browser</button><span style="margin-left:auto"></span><button style="min-height:32px;padding:0 12px;background:none;border:0;border-radius:7px;font-size:12.5px;color:var(--dim);cursor:pointer" style-hover="background:var(--hover)">Restart</button><button style="min-height:32px;padding:0 12px;background:none;border:0;border-radius:7px;font-size:12.5px;color:var(--dim);cursor:pointer" style-hover="background:var(--hover)">Quit</button></div>
+  </div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;os&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;macOS&quot;,&quot;options&quot;:[&quot;macOS&quot;,&quot;Windows&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Platform&quot;}}">
+class Component extends DCLogic {
+  state = {screen:'onboard', step:0, tab:'updates', fixed:{}, hosts:{codex:true,claude:true,cursor:true,zed:true}, inst:0, hooks:true, local:false, repos:{billing:true}, setupDone:false, login:true, notify:true, history:true, filter:'all', scope:'gsd', upd:{}, rt:false, mem:{}, remove:false, cfg:'user', plan:false, proj:'gsd', expand:true, guard:{}, modal:null, trayState:'running', trayOpen:null, firstFail:false, envFile:'.env.local', reveal:{}, envExtra:{}, jev:false, jevFile:'.env'};
+
+  componentDidMount(){ this.applyTheme(); }
+  componentDidUpdate(){ this.applyTheme(); }
+  applyTheme(){ document.documentElement.setAttribute('data-theme', this.props.theme === 'dark' ? 'dark' : 'light'); }
+
+  renderVals() {
+    const S = this.state, win = this.props.os === 'Windows';
+    const set = o => () => this.setState(o);
+    const BTN_SEG_ON = 'padding:3px 12px;border:0;border-radius:5px;background:var(--card);color:var(--text);font-weight:600;font-size:12.5px;cursor:pointer;box-shadow:var(--shadow)';
+    const BTN_SEG_OFF = 'padding:3px 12px;border:0;border-radius:5px;background:none;color:var(--dim);font-size:12.5px;cursor:pointer';
+    const PILL = 'display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;';
+    const pill = k => PILL + ({ok:'background:var(--ok-soft);color:var(--ok-ink)', warn:'background:var(--wait-soft);color:var(--wait)', bad:'background:var(--danger-soft);color:var(--danger)', acc:'background:var(--accent-soft);color:var(--accent)', mute:'background:var(--chrome);color:var(--faint)'})[k];
+    const dot = c => 'width:8px;height:8px;border-radius:50%;display:block;flex:none;background:' + c;
+    const toggle = (on, fn) => ({on:fn, track:'width:36px;height:22px;border-radius:11px;position:relative;cursor:pointer;flex:none;background:' + (on ? 'var(--accent-fill)' : 'var(--seg)'), knob:'position:absolute;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0/.3);left:' + (on ? '16px' : '2px')});
+    const box = on => 'width:18px;height:18px;border-radius:5px;flex:none;display:grid;place-items:center;font-size:12px;font-weight:700;' + (on ? 'background:var(--accent-fill);color:#fff' : 'box-shadow:inset 0 0 0 1.5px var(--faint);color:transparent');
+
+    const screen = S.screen;
+    const go = {projects:set({screen:'projects'}), skills:set({screen:'skills'}), stats:set({screen:'stats'}), settings:set({screen:'settings'}), project:set({screen:'project'})};
+    const jumpList = [['Onboarding','onboard'],['First launch','first'],['Projects','projects'],['Project','project'],['Environment','env'],['Skills','skills'],['Stats','stats'],['Settings','settings'],['Tray','tray'],['Errors','states']];
+    const jumps = jumpList.map(([label,key]) => ({label, go:set({screen:key}), style:'border:0;border-radius:5px;padding:3px 10px;font-size:12px;cursor:pointer;' + (screen === key ? 'background:#e9ebee;color:#1a1d22;font-weight:600' : 'background:#2b2e32;color:#e9ebee')}));
+
+    const updKeys = ['app','skills','rt'];
+    const updPending = updKeys.filter(k => !S.upd[k]).length - (S.rt && !S.upd.rt ? 1 : 0);
+    const navDefs = [['Projects','projects','projects',0],['Skills','skills','skills',S.upd.skills ? 0 : 1],['Stats','stats','stats',0],['Settings','settings','settings',0]];
+    const nav = navDefs.map(([label,key,tgt,badge]) => ({label, badge, go:set({screen:tgt}), style:'border:0;border-radius:7px;padding:8px 12px;min-height:40px;cursor:pointer;font-size:14px;' + ((screen === key || (key==='projects' && (screen==='project' || screen==='env'))) ? 'background:var(--chrome);color:var(--text)' : 'background:none;color:var(--dim)')}));
+
+    // onboarding
+    const stepNames = ['Requirements','Agents','Skills','Watch folders','Add project','Start /path'];
+    const steps = stepNames.map((label,i) => ({label, go:set({step:i}), mark:i < S.step ? '\u2713' : String(i+1),
+      style:'display:flex;align-items:center;gap:12px;padding:9px 10px;border:0;border-radius:7px;cursor:pointer;text-align:left;font-size:13.5px;' + (i === S.step ? 'background:var(--card);box-shadow:var(--shadow);font-weight:600;color:var(--text)' : 'background:none;color:var(--dim)'),
+      dot:'width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:600;flex:none;' + (i < S.step ? 'background:var(--done);color:var(--card)' : i === S.step ? 'background:var(--accent-fill);color:#fff' : 'box-shadow:inset 0 0 0 1.5px var(--faint);color:var(--faint)')}));
+    const st = {}; for (let i = 0; i < 6; i++) st['s' + i] = S.step === i;
+
+    const fx = S.fixed, fixer = id => () => this.setState(s => ({fixed:{...s.fixed, [id]:true}}));
+    const reqDefs = win ? [
+      {id:'py', name:'Python 3.9+', tone:fx.py?'ok':'miss', req:true, detail:fx.py?'Python 3.12.6 installed':'Not found on PATH', hint:'Runs the background monitor, the installer and every pipeline helper.', act:'Install with winget'},
+      {id:'git', name:'Git for Windows', tone:'ok', req:true, detail:'2.46.0 · bash.exe at C:\\Program Files\\Git\\bin', hint:'Hooks and task verify commands run in Git Bash, never WSL.', act:null},
+      {id:'lp', name:'Long paths', tone:fx.lp?'ok':'warn', detail:fx.lp?'Enabled':'LongPathsEnabled is off', hint:'Deep worktree paths need it. Changing it takes administrator rights, so you get the command to run.', act:fx.lp?null:'Copy admin command'},
+      {id:'gh', name:'GitHub CLI', tone:fx.gh?'ok':'miss', detail:fx.gh?'gh 2.58.0, signed in':'Not installed', hint:'Only needed for pull-request shipping and creating repositories.', act:fx.gh?null:'Install with winget'}
+    ] : [
+      {id:'py', name:'Python 3.9+', tone:fx.py?'ok':'warn', req:true, detail:fx.py?'Python 3.12.6 installed':'3.9.6 · from Xcode Command Line Tools', hint:fx.py?'Current release.':'Works, but 3.9 no longer gets security fixes.', act:fx.py?null:'Install newer Python'},
+      {id:'git', name:'Git', tone:'ok', req:true, detail:'2.39.5 (Apple Git)', hint:'Used by every project, worktree and hook.', act:null},
+      {id:'gh', name:'GitHub CLI', tone:fx.gh?'ok':'miss', detail:fx.gh?'gh 2.58.0, signed in':'Not installed', hint:'Only needed for pull-request shipping and creating repositories.', act:fx.gh?null:'Install GitHub CLI'}
+    ];
+    const reqs = reqDefs.map(r => ({...r, dot:dot(r.tone==='ok'?'var(--ok)':r.tone==='warn'?'var(--wait)':r.req?'var(--danger)':'var(--faint)'), pill:pill(r.tone==='ok'?'ok':r.tone==='warn'?'warn':r.req?'bad':'mute'), pillText:r.tone==='ok'?'Ready':r.tone==='warn'?'Recommended fix':r.req?'Required':'Optional', fix:fixer(r.id)}));
+    const reqBlocked = S.step === 0 && reqDefs.some(r => r.req && r.tone === 'miss');
+
+    const HOSTS = [['codex','Codex',1],['claude','Claude Code',1],['cursor','Cursor',1],['zed','Zed',1],['grok','Grok',0],['opencode','OpenCode',0],['copilot','GitHub Copilot CLI',0],['qwen','Qwen Code',0],['antigravity','Antigravity',0],['kiro','Kiro',0],['kimi','Kimi Code',0]];
+    const hostCards = HOSTS.map(([id,label,det]) => { const on = !!S.hosts[id]; return {label, note:det?'Found on this computer':'Not found',missing:!det, mark:on?'\u2713':'', box:box(on), toggle:() => this.setState(s => ({hosts:{...s.hosts, [id]:!s.hosts[id]}})), style:'display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;cursor:pointer;background:var(--card);border:1px solid ' + (on ? 'var(--accent-fill)' : 'var(--line)') + ';' + (det ? '' : 'opacity:.8')}; });
+    const selHosts = HOSTS.filter(h => S.hosts[h[0]]);
+    const ROOTS = {codex:'~/.agents/skills', claude:'~/.claude/skills', cursor:'~/.cursor/skills', zed:'~/.agents/skills', grok:'~/.grok/skills', opencode:'~/.config/opencode/skills', copilot:'~/.copilot/skills', qwen:'~/.qwen/skills', antigravity:'~/.gemini/antigravity-cli/skills', kiro:'~/.kiro/skills', kimi:'~/.kimi-code/skills'};
+    const groups = {}; selHosts.forEach(h => { (groups[ROOTS[h[0]]] = groups[ROOTS[h[0]]] || []).push(h[1]); });
+    const installTargets = Object.keys(groups).map(p => ({label:groups[p].join(' and '), path:p + '/gsd-path'}));
+
+    const instMap = ['instIdle','instPlan','instRun','instDone'];
+    const instKey = S.inst === 1 ? 'instIdle' : instMap[S.inst];
+    const REPOS = [['billing','billing-service','~/work/billing-service','Node · 312 commits'],['marketing','marketing-site','~/work/marketing-site','Astro · 88 commits'],['infra','infra','~/work/infra','Terraform · 204 commits'],['mobile','mobile-app','~/work/mobile-app','Swift · 541 commits']];
+    const repoRows = REPOS.map(([id,name,path,note]) => { const on = !!S.repos[id]; return {name, path, note, mark:on?'\u2713':'', box:box(on), toggle:() => this.setState(s => ({repos:{...s.repos, [id]:!s.repos[id]}})), style:'display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;border:0;border-bottom:1px solid var(--line);background:' + (on ? 'var(--accent-soft)' : 'var(--card)') + ';cursor:pointer'}; });
+    const repoCount = Object.values(S.repos).filter(Boolean).length;
+    const repoWord = repoCount + (repoCount === 1 ? ' project' : ' projects');
+
+    const tg = {hooks:toggle(S.hooks, () => this.setState(s => ({hooks:!s.hooks}))), local:toggle(S.local, () => this.setState(s => ({local:!s.local}))), login:toggle(S.login, () => this.setState(s => ({login:!s.login}))), notify:toggle(S.notify, () => this.setState(s => ({notify:!s.notify}))), history:toggle(S.history, () => this.setState(s => ({history:!s.history})))};
+
+    const last = S.step === 5;
+    const nextLabel = last ? 'Open dashboard' : 'Continue';
+    const next = last ? set({screen:'projects'}) : () => { if (!reqBlocked) this.setState(s => ({step:s.step + 1})); };
+    const nextStyle = 'min-height:36px;padding:0 20px;border-radius:7px;font-size:12.5px;border:1px solid var(--accent-fill);background:var(--accent-fill);color:#fff;cursor:pointer;' + (reqBlocked ? 'opacity:.4;cursor:not-allowed' : '');
+
+    // projects board
+    const PH = ['inspect','define','research','decide','roadmap','plan','build','ship'];
+    const cellsFor = (idx, blocked) => PH.map((_, k) => 'width:9px;height:9px;border-radius:2px;display:block;' + (k < idx || idx >= 8 ? 'background:var(--done)' : k === idx ? 'background:' + (blocked ? 'var(--danger)' : 'var(--accent-fill)') : 'background:var(--seg)'));
+    const dash = '\u2014';
+    const PROJ = {
+      gsd:{id:'gsd', name:'GSD Path', path:'~/work/gsd-path', health:'var(--wait)', healthText:'amber \u00b7 no activity for 2d', kind:'active', stl:'In build', note:'no activity for 2d', ago:'2d ago', idx:6, ms:'M004', slug:'daemon', goal:'Native tray and dashboard for the daemon.', done:6, total:9, cost:'$26.10', turns:'90 turns', tokens:'9.0M', cache:'36%', branch:'gsd-path/M004', head:'0e9a3b1 \u00b7 dirty', integ:'direct', coordinator:true, guards:true, rtVer:S.rt ? '1.4.0' : '1.3.2', waves:true},
+      daemon:{id:'daemon', name:'gsd-path-daemon', path:'~/work/gsd-path-daemon', health:'var(--ok)', healthText:'green', kind:'active', stl:'In build', note:'', ago:'1h ago', idx:6, ms:'M004', slug:'daemon', goal:'Watcher and status endpoint.', done:4, total:6, cost:'$11.40', turns:'38 turns', tokens:'4.1M', cache:'41%', branch:'gsd-path/M004', head:'a41f0c2', integ:'pull-request', parent:'gsd', guards:true, rtVer:'1.4.0', waves:true},
+      app:{id:'app', name:'gsd-path-app', path:'~/work/gsd-path-app', health:S.mem.app ? 'var(--ok)' : 'var(--wait)', healthText:S.mem.app ? 'green' : 'amber \u00b7 stale coordinator marker', kind:'active', stl:'In plan', note:S.mem.app ? '' : 'stale marker', ago:'3h ago', idx:5, ms:'M004', slug:'app shell', goal:'Tauri shell around the dashboard.', done:null, total:null, cost:'$2.10', turns:'9 turns', tokens:'0.6M', cache:'28%', branch:'gsd-path/M004', head:'7c20d19', integ:'pull-request', parent:'gsd', guards:true, rtVer:'1.4.0'},
+      docs:{id:'docs', name:'gsd-path-docs', path:'~/work/gsd-path-docs', health:'var(--ok)', healthText:'green', kind:'shipped', stl:'Shipped', note:'', ago:'6d ago', idx:8, ms:'M003', slug:'docs', goal:'Install and operate guides.', done:null, total:null, cost:'$1.20', turns:'7 turns', tokens:'0.3M', cache:'33%', branch:'main', head:'91be44a', integ:'pull-request', parent:'gsd', guards:true, rtVer:'1.4.0'},
+      atlas:{id:'atlas', name:'Atlas API', path:'~/work/atlas', health:'var(--danger)', healthText:'red \u00b7 ship blocked', kind:'blocked', stl:'Blocked', note:'ship blocked', ago:'3h ago', idx:7, ms:'M002', slug:'api-v2', goal:'Second version of the public API.', done:null, total:null, cost:dash, turns:'No matched sessions', tokens:dash, cache:dash, branch:'gsd-path/M002', head:'c5d8e21', integ:'pull-request', guards:!!S.guard.atlas, rtVer:'1.4.0'},
+      field:{id:'field', name:'Field Notes', path:'~/work/notes', health:'var(--ok)', healthText:'green', kind:'active', stl:'In research', note:'', ago:'1h ago', idx:2, ms:'M001', slug:'bootstrap', goal:'Capture and search field notes.', done:null, total:null, cost:dash, turns:'No matched sessions', tokens:dash, cache:dash, branch:'gsd-path/M001', head:'3be90a4', integ:'direct', guards:true, rtVer:'1.4.0'},
+      done:{id:'done', name:'Done Thing', path:'~/work/done', health:'var(--ok)', healthText:'green', kind:'shipped', stl:'Shipped', note:'', ago:'28d ago', idx:8, ms:'M003', slug:'graph', goal:'Dependency graph view.', done:null, total:null, cost:dash, turns:'No matched sessions', tokens:dash, cache:dash, branch:'main', head:'e07a5c1', integ:'direct', guards:true, rtVer:'1.4.0'}
+    };
+    const phaseOf = p => p.kind === 'shipped' ? 'shipped' : PH[Math.min(p.idx, 7)];
+    const stStyle = k => 'font-size:12.5px;' + (k === 'blocked' ? 'color:var(--danger);font-weight:600' : k === 'active' ? 'color:var(--accent);font-weight:600' : 'color:var(--dim)');
+    const setupOf = p => p.id === 'gsd' ? (S.rt ? 'ok' : 'update') : p.id === 'atlas' ? (S.guard.atlas ? 'ok' : 'noguard') : p.id === 'daemon' ? (S.mem.daemon ? 'ok' : 'nohooks') : p.id === 'app' ? (S.mem.app ? 'ok' : 'repair') : 'ok';
+    const setupMap = {ok:['Up to date', pill('ok')], update:['Runtime update', pill('acc')], noguard:['No guards', pill('warn')], nohooks:['No member hooks', pill('warn')], repair:['Stale marker', pill('bad')]};
+    const COLS = 'minmax(150px,1.4fr) minmax(150px,1.1fr) minmax(110px,1fr) 44px 92px 132px';
+    const mkRow = (p, child) => ({
+      name:p.name, path:p.path, coord:!!p.coordinator, chev:S.expand ? '\u25be' : '\u25b8', kids:'3 repos',
+      dot:'width:7px;height:7px;border-radius:50%;display:block;flex:none;background:' + p.health, cells:cellsFor(p.idx, p.kind === 'blocked'),
+      ms:p.ms, slug:p.slug, phase:phaseOf(p), stl:p.stl, stStyle:stStyle(p.kind), note:p.note, ago:p.ago, tasks:p.total ? p.done + '/' + p.total : dash, cost:p.cost, turns:p.turns,
+      setup:setupMap[setupOf(p)][0], setupStyle:setupMap[setupOf(p)][1],
+      open:() => this.setState({screen:'project', proj:p.id}),
+      toggle:e => { e.stopPropagation(); this.setState(s => ({expand:!s.expand})); },
+      rowStyle:'display:grid;grid-template-columns:' + COLS + ';gap:16px;padding:' + (child ? '12px 8px' : '18px 0') + ';border-bottom:1px solid var(--line);cursor:pointer;' + (child ? 'background:var(--chrome)' : ''),
+      nameStyle:'display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;padding-left:' + (child ? 24 : 0) + 'px',
+      pathStyle:'font:11px var(--mono);color:var(--faint);margin-top:5px;padding-left:' + (child ? 24 : 0) + 'px'
+    });
+    const topIds = ['atlas','field','gsd','done'];
+    const topAll = topIds.map(i => PROJ[i]);
+    const top = topAll.filter(p => S.filter === 'all' || p.kind === S.filter);
+    const rows = [];
+    top.forEach(p => { rows.push(mkRow(p, false)); if (p.coordinator && S.expand) ['daemon','app','docs'].forEach(k => rows.push(mkRow(PROJ[k], true))); });
+    const footerText = top.length + ' of 4 projects \u00b7 3 member repositories';
+    const filters = [['all','All'],['active','In progress'],['blocked','Blocked'],['shipped','Shipped']].map(([k,label]) => ({label, n:k === 'all' ? topAll.length : topAll.filter(p => p.kind === k).length, go:set({filter:k}), style:'border:0;border-radius:7px;min-height:40px;padding:0 12px;font-size:12.5px;cursor:pointer;' + (S.filter === k ? 'background:var(--accent-soft);color:var(--accent)' : 'background:none;color:var(--dim)')}));
+    const unmanaged = [['billing-service','~/work/billing-service'],['marketing-site','~/work/marketing-site'],['infra','~/work/infra']].map(([name,path]) => ({name, path}));
+
+    // project page
+    const cur = PROJ[S.proj] || PROJ.gsd;
+    const parentP = cur.parent ? PROJ[cur.parent] : null;
+    const isGsd = cur.id === 'gsd';
+    const facts = [['State',cur.stl],['Health',cur.healthText],['Milestone',cur.ms],['Branch',cur.branch],['Head',cur.head],['Integration',cur.integ],['Cost',cur.cost],['Turns',cur.turns.indexOf('turns') > -1 ? cur.turns.replace(' turns','') : dash]].map(([k,v]) => ({k,v}));
+    const dates = ['','09-09','09-09','','09-09','09-09','09-10',''];
+    const phases = PH.map((label,k) => ({label, date:(isGsd && dates[k]) || '\u00a0', style:'font-size:11.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;' + (k < cur.idx || cur.idx >= 8 ? 'color:var(--dim)' : k === cur.idx ? 'color:' + (cur.kind === 'blocked' ? 'var(--danger)' : 'var(--accent)') + ';font-weight:650' : 'color:var(--faint)'), bar:'display:block;height:6px;border-radius:2px;margin-bottom:4px;background:' + (k < cur.idx || cur.idx >= 8 ? 'var(--done)' : k === cur.idx ? (cur.kind === 'blocked' ? 'var(--danger)' : 'var(--accent-fill)') : 'var(--seg)')}));
+    const nb = {show:cur.kind !== 'shipped', title:cur.ms + ' ' + cur.slug, line:[phaseOf(cur), cur.waves ? 'wave 2' : null].filter(Boolean).join(' \u00b7 '), goal:cur.goal, hasTasks:!!cur.total, bar:'display:block;height:100%;background:var(--accent-fill);width:' + (cur.total ? Math.round(100 * cur.done / cur.total) : 0) + '%', count:cur.total ? cur.done + ' of ' + cur.total + ' tasks' : 'no tasks yet', hasWaves:!!cur.waves, blocked:cur.kind === 'blocked', style:'margin-top:10px;padding:10px 12px;border-radius:8px;background:' + (cur.kind === 'blocked' ? 'var(--danger-soft)' : 'var(--accent-soft)')};
+    const MSG = 'display:grid;grid-template-columns:48px minmax(0,1fr) 130px 130px;gap:10px;padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px;';
+    const MS = isGsd ? [['M003','core','Parsers and the status endpoint.','shipped 2026-09-06','$1.50 \u00b7 6 turns',0],['M004','daemon','Native tray and dashboard.','In build','$24.60 \u00b7 84 turns',1],['M005','notify','Desktop notifications.','pending','\u2014',0]] : [[cur.ms, cur.slug, cur.goal, cur.stl, cur.cost === dash ? dash : cur.cost + ' \u00b7 ' + cur.turns, 1]];
+    const milestones = MS.map(([n,slug,goal,status,usageText,now]) => ({n, slug, goal, status, usage:usageText, style:MSG + (now ? 'background:' + (cur.kind === 'blocked' ? 'var(--danger-soft)' : 'var(--accent-soft)') : '')}));
+    const rtPending = isGsd && !S.rt;
+    const PRIM = 'min-height:32px;padding:0 14px;background:var(--accent-fill);color:#fff;border:1px solid var(--accent-fill);border-radius:7px;font-size:12.5px;cursor:pointer';
+    const SECO = 'min-height:32px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:7px;font-size:12.5px;cursor:pointer';
+    const noop = () => {};
+    let guardRow;
+    if (cur.id === 'daemon' && !S.mem.daemon) guardRow = {label:'Guard hooks', value:'Not held to the coordinator guard', sub:'Member hooks run ' + parentP.name + "'s guard before commits and pushes.", act:'Install member hooks', actStyle:PRIM, go:() => this.setState(s => ({mem:{...s.mem, daemon:true}}))};
+    else if (cur.guards) guardRow = {label:'Guard hooks', value:cur.parent ? 'Member hooks \u00b7 run ' + parentP.name + ' guard' : 'Git, Claude Code, Codex', sub:'pre-commit, commit-msg, pre-push', act:'Refresh', actStyle:SECO, go:noop};
+    else guardRow = {label:'Guard hooks', value:'None', sub:'Edits to archived work and unapproved ship commits are not blocked.', act:'Add guards', actStyle:PRIM, go:() => this.setState(s => ({guard:{...s.guard, [cur.id]:true}}))};
+    const guardOk = cur.guards && !(cur.id === 'daemon' && !S.mem.daemon);
+    const setupRows = [
+      {label:'Runtime', value:cur.rtVer, sub:rtPending ? 'Newer runtime available' : 'Guard hooks are kept on update', act:rtPending ? 'Update to 1.4.0' : '', actStyle:PRIM, go:() => this.setState(s => ({rt:true, upd:{...s.upd, rt:true}})), okPill:!rtPending},
+      guardRow,
+      {label:'Skills', value:'Global only', sub:'Agents read the shared install. No project copies.', act:'Install in project\u2026', actStyle:SECO, go:noop},
+      {label:'Health check', value:guardOk ? '6 of 6 passed' : '5 of 6 passed', sub:guardOk ? '2 minutes ago \u00b7 read-only' : 'Guard hooks are missing', act:'Run again', actStyle:SECO, go:noop},
+      {label:'Environment', value:(6 + (win ? 1 : 0) + (S.jev ? 1 : 0)) + ' variables', sub:'4 files \u00b7 2 secrets, masked', act:'Edit\u2026', actStyle:SECO, go:set({screen:'env'})},
+      {label:'Open in agent', value:'Codex', sub:'Then type /path', act:'Open \u2197', actStyle:SECO, go:noop}
+    ];
+    const memDefs = [
+      {id:'daemon', name:'gsd-path-daemon', marker:'Marker ok', markerTone:'ok', hooks:S.mem.daemon ? 'Member hooks installed' : 'No member hooks', hooksTone:S.mem.daemon ? 'ok' : 'warn', origin:'origin/main synced', originTone:'ok', act:S.mem.daemon ? null : 'Install hooks', fix:S.mem.daemon ? '' : 'install.py --project ../gsd-path-daemon --member-of ../gsd-path'},
+      {id:'app', name:'gsd-path-app', marker:S.mem.app ? 'Marker ok' : 'Marker stale', markerTone:S.mem.app ? 'ok' : 'bad', hooks:'Member hooks installed', hooksTone:'ok', origin:'origin/main ahead 2', originTone:'mute', act:S.mem.app ? null : 'Repair', fix:S.mem.app ? '' : 'Coordinator moved to ~/work/gsd-path'},
+      {id:'docs', name:'gsd-path-docs', marker:'Marker ok', markerTone:'ok', hooks:'Member hooks installed', hooksTone:'ok', origin:'origin/main synced', originTone:'ok', act:null, fix:''}
+    ];
+    const members = memDefs.map(m => ({...m, markerStyle:pill(m.markerTone), hooksStyle:pill(m.hooksTone), originStyle:pill(m.originTone), go:() => this.setState(s => ({mem:{...s.mem, [m.id]:true}})), open:() => this.setState({proj:m.id})}));
+    const usage = [['Cost',cur.cost],['Turns',cur.turns.indexOf('turns') > -1 ? cur.turns.replace(' turns','') : dash],['Tokens in',cur.tokens],['Cache hit',cur.cache]].map(([k,v]) => ({k,v}));
+
+    // environment
+    const ENVFILES = ['.env','.env.local','.env.development','.env.production'];
+    const jevRow = f => S.jev && S.jevFile === f ? [['GSD_PATH_JEV','1',0]] : [];
+    const ENVB = {'.env':[['APP_ENV','development',0],['LOG_LEVEL','info',0]].concat(jevRow('.env')), '.env.development':[['LOG_LEVEL','debug',0]].concat(jevRow('.env.development')), '.env.production':[['LOG_LEVEL','warn',0]].concat(jevRow('.env.production')), '.env.local':jevRow('.env.local').concat([['TYPESAFE_API_KEY','tsk_live_8f3a91c2d7',1],['DATABASE_URL','postgres://app:pw@localhost:5432/' + cur.id,1]].concat(win ? [['GSD_PATH_BASH','C:\\Program Files\\Git\\bin\\bash.exe',0]] : []))};
+    const envRows = ENVB[S.envFile].concat(S.envExtra[S.envFile] || []).map(([k,v,sec]) => ({key:k, shown:sec && !S.reveal[k] ? '\u2022'.repeat(12) : v, secret:!!sec, showLabel:S.reveal[k] ? 'Hide' : 'Show', toggle:() => this.setState(s => ({reveal:{...s.reveal, [k]:!s.reveal[k]}}))}));
+    const envTabs = ENVFILES.map(f => ({label:f, go:set({envFile:f}), style:S.envFile === f ? BTN_SEG_ON : BTN_SEG_OFF}));
+    const jevFiles = ENVFILES.map(f => ({label:f, go:set({jevFile:f, envFile:S.jev ? f : S.envFile}), style:S.jevFile === f ? BTN_SEG_ON : BTN_SEG_OFF}));
+    const envTracked = S.envFile.slice(-6) !== '.local';
+    const envPill = pill(envTracked ? 'warn' : 'ok');
+    const envPillText = envTracked ? 'Tracked by Git' : 'Ignored by Git';
+    const envNote = envTracked ? 'Values in ' + S.envFile + ' would be committed. Keep secrets in .env.local.' : S.envFile + ' is listed in .gitignore, so these values stay out of commits.';
+    const tgJev = toggle(S.jev, () => this.setState(s => ({jev:!s.jev, envFile:!s.jev ? s.jevFile : s.envFile})));
+    const addVar = () => this.setState(s => ({envExtra:{...s.envExtra, [s.envFile]:(s.envExtra[s.envFile] || []).concat([['NEW_VARIABLE','',0]])}}));
+
+    // first launch
+    const FL = win ? [['Startup shortcut','gsd-path-daemon.lnk in the Startup folder','Delete %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\gsd-path-daemon.lnk']] : [['LaunchAgent','org.gsd-path.daemon','launchctl bootout gui/$(id -u)/org.gsd-path.daemon'],['Swift tray app login item','GSDPathTray in Login Items','Remove GSDPathTray in System Settings \u2192 General \u2192 Login Items'],['Swift tray app','~/Applications/GSDPathTray.app','Move ~/Applications/GSDPathTray.app to the Trash']];
+    const flRows = FL.map(([name,detail,fix],i) => { const bad = S.firstFail && i === 0; return {name, detail, fix, bad, dot:dot(bad ? 'var(--danger)' : 'var(--ok)'), pill:pill(bad ? 'bad' : 'ok'), status:bad ? 'Still present' : 'Removed'}; });
+    const flSwitch = toggle(S.firstFail, () => {});
+    const stPyCmd = win ? 'winget install Python.Python.3.12' : 'brew install python@3.12';
+
+    // skills
+    const SK = [
+      {label:'Codex', path:ROOTS.codex, version:'1.4.0', k:'ok', status:'Installed', canPrimary:false, canPreview:false, canRemove:true},
+      {label:'Claude Code', path:ROOTS.claude, version:S.upd.skills ? '1.4.0' : '1.3.2', k:S.upd.skills ? 'ok' : 'warn', status:S.upd.skills ? 'Installed' : 'Update available', canPrimary:!S.upd.skills, primaryLabel:'Update to 1.4.0', canPreview:!S.upd.skills, canRemove:S.upd.skills, primary:() => this.setState(s => ({upd:{...s.upd, skills:true}, plan:false}))},
+      {label:'Cursor', path:ROOTS.cursor, version:'1.4.0', k:'ok', status:'Installed', canPrimary:false, canPreview:false, canRemove:true},
+      {label:'Zed', path:ROOTS.zed, version:'\u2014', k:'mute', status:'Not installed', canPrimary:true, primaryLabel:'Install', canPreview:true, canRemove:false, primary:() => {}}
+    ];
+    const skillRows = SK.map(h => ({...h, pill:pill(h.k)}));
+
+    // stats
+    const SC = {
+      all:{tokens:true, tokensTotal:'21.4M tokens', costTotal:'$38.20', tasks:true, verifyTotal:'26 pass \u00b7 4 fail'},
+      gsd:{tokens:true, tokensTotal:'14.0M tokens', costTotal:'$26.10', tasks:true, verifyTotal:'26 pass \u00b7 4 fail'},
+      atlas:{tokens:false, tokensTotal:'', costTotal:'', tasks:false, verifyTotal:'1 pass \u00b7 1 fail'}
+    };
+    const sc0 = SC[S.scope];
+    const sc = {...sc0, tokensMissing:!sc0.tokens, tasksMissing:!sc0.tasks};
+    const barSet = (vals, col) => vals.map(v => 'flex:1;display:block;border-radius:2px 2px 0 0;background:' + col + ';height:' + v + '%');
+    const bars1 = barSet([35,48,22,60,72,40,18,55,80,66,45,90,70,58], 'var(--accent-fill)');
+    const bars2 = barSet([30,44,20,52,64,30,12,50,74,58,38,84,60,46], 'var(--done)');
+    const PT = [['inspect',.5],['define',1.2],['research',3],['decide',.8],['roadmap',1],['plan',2.5],['build',14],['ship',null]];
+    const phaseTime = PT.map(([label,v]) => ({label, v:v == null ? 'not yet' : v + 'h', bar:v == null ? 'display:none' : 'display:block;height:100%;background:var(--done);width:' + Math.round(100 * v / 14) + '%'}));
+    const cellsN = (done, total) => Array.from({length:total}, (_, i) => 'flex:1;height:14px;border-radius:2px;display:block;' + (i < done ? 'background:var(--accent-fill)' : 'box-shadow:inset 0 0 0 1.5px var(--faint)'));
+    const waves = [['wave 1 parsers',3,3],['wave 2 watcher',3,4],['wave 3 tray',0,2]].map(([label,d,t]) => ({label, v:d + '/' + t, cells:cellsN(d, t)}));
+    const verify = 'pppppfpppppppfpppppppppfppppfp'.split('').map(c => 'width:22px;height:22px;border-radius:4px;display:block;background:' + (c === 'p' ? 'var(--accent-fill)' : 'var(--danger)'));
+    const scopes = [['all','All projects'],['gsd','GSD Path'],['atlas','Atlas API']].map(([k,label]) => ({label, go:set({scope:k}), style:S.scope === k ? BTN_SEG_ON : BTN_SEG_OFF}));
+
+    // settings
+    const tabDefs = [['updates','Updates'],['path','Path settings'],['monitor','Monitoring'],['usage','Usage and prices'],['app','App']];
+    const tabs = tabDefs.map(([k,label]) => ({label, go:set({tab:k}), style:'border:0;border-radius:7px;background:' + (S.tab === k ? 'var(--accent-soft)' : 'none') + ';color:' + (S.tab === k ? 'var(--accent)' : 'var(--dim)') + ';min-height:40px;padding:8px 12px;text-align:left;cursor:pointer;font-size:14px'}));
+    const tab = {}; tabDefs.forEach(([k]) => tab[k] = S.tab === k);
+    const mk = (key, name, sub, from, to, act) => { const fin = !!S.upd[key]; return {name, sub, ver:fin ? to : from + ' \u2192 ' + to, act, pending:!fin, finished:fin, go:() => this.setState(s => ({upd:{...s.upd, [key]:true}, rt:key === 'rt' ? true : s.rt}))}; };
+    const updRows = [
+      mk('app','OpenGSD Path app','Restarts the app. Running projects are not affected.','0.1.0','0.1.1','Restart to update'),
+      mk('skills','Skills in Claude Code','Codex and Cursor are current.','1.3.2','1.4.0','Update'),
+      mk('rt','Runtime in GSD Path','Guard hooks are kept.','1.3.2','1.4.0','Update'),
+      {name:'Runtime in Atlas API', sub:'', ver:'1.4.0', act:'', pending:false, finished:true, go:() => {}},
+      {name:'Runtime in Field Notes', sub:'', ver:'1.4.0', act:'', pending:false, finished:true, go:() => {}}
+    ];
+    updRows[0].go = () => this.setState({modal:'app'});
+    const cfgScopes = [['user','User defaults'],['project','GSD Path']].map(([k,label]) => ({label, go:set({cfg:k}), style:S.cfg === k ? BTN_SEG_ON : BTN_SEG_OFF}));
+    const cfgNote = S.cfg === 'user' ? 'Applies to newly initialized projects.' : 'Locked once build starts.';
+    const roles = [['coder','gpt-6-astra','high'],['reviewer','claude-sonnet-5','medium'],['plan','gpt-6-astra','high'],['research','inherit','low']].map(([role,model,effort]) => ({role, model, effort}));
+
+    // tray
+    const trayP = p => ({id:p.id, name:p.name, line:p.ms + ' \u00b7 ' + phaseOf(p) + (p.total ? ' \u00b7 ' + p.done + ' of ' + p.total + ' tasks' : ''), cells:cellsFor(p.idx, p.kind === 'blocked'), dot:'width:7px;height:7px;border-radius:50%;display:block;flex:none;background:' + p.health, open:S.trayOpen === p.id, toggle:() => this.setState(s => ({trayOpen:s.trayOpen === p.id ? null : p.id})), openDash:() => this.setState({screen:'project', proj:p.id}), rowStyle:'display:flex;align-items:center;gap:10px;padding:8px 16px 8px ' + (p.parent ? 38 : 16) + 'px;cursor:pointer;' + (p.kind === 'shipped' ? 'opacity:.7' : '')});
+    const attention = [PROJ.atlas].concat(S.mem.app ? [] : [PROJ.app]).map(p => ({...trayP(p), reason:p.kind === 'blocked' ? 'Ship is blocked' : 'Coordinator marker is stale'}));
+    const trayRows = ['gsd','daemon','app','docs','field','done'].map(i => trayP(PROJ[i]));
+    const trayStopped = S.trayState === 'stopped';
+    const trayStates = [['running','Running'],['stopped','Stopped']].map(([k,label]) => ({label, go:set({trayState:k}), style:'border:0;border-radius:5px;padding:2px 10px;font-size:12px;cursor:pointer;' + (S.trayState === k ? 'background:var(--card);color:var(--text);font-weight:600;box-shadow:var(--shadow)' : 'background:none;color:var(--dim)')}));
+
+    const is = {onboard:screen === 'onboard', first:screen === 'first', states:screen === 'states', env:screen === 'env', projects:screen === 'projects', project:screen === 'project', skills:screen === 'skills', stats:screen === 'stats', settings:screen === 'settings', tray:screen === 'tray', notTray:!['tray','states'].includes(screen), chrome:!['onboard','tray','first','states'].includes(screen), mac:!win, win, canBack:S.step > 0, canSkip:S.step === 3 || S.step === 4,
+      instIdle:instKey === 'instIdle', instPlan:S.inst === 1, instRun:S.inst === 2, instDone:S.inst === 3, repoDone:S.setupDone, repoIdle:!S.setupDone};
+    if (S.inst === 1) is.instIdle = true;
+    go.env = set({screen:'env'});
+
+    return {
+      jumps, nav, is, st, steps, reqs, reqBlocked, hostCards, detectedCount:4, hostCount:selHosts.length, installTargets,
+      doInstall:() => { this.setState({inst:2}); setTimeout(() => this.setState({inst:3}), 1400); },
+      doPreview:set({inst:1}),
+      repoRows, repoCount:repoWord, doSetup:set({setupDone:true}), tg,
+      next, nextLabel, nextStyle, back:() => this.setState(s => ({step:Math.max(0, s.step - 1)})),
+      updText:[!S.upd.app ? 'App 0.1.1' : null, !S.upd.skills ? 'skills for Claude Code' : null, !S.upd.rt ? 'runtime for GSD Path' : null].filter(Boolean).join(', '),
+      updPending, goUpdates:set({screen:'settings', tab:'updates'}), goAddProject:set({screen:'onboard', step:4, setupDone:false}), doRefresh:() => {},
+      filters, rows, footerText, unmanaged, go,
+      cur, curDot:'width:9px;height:9px;border-radius:50%;display:block;background:' + cur.health, curPhase:phaseOf(cur), hasParent:!!parentP, parentName:parentP ? parentP.name : '', openParent:set({proj:'gsd'}), isCoord:!!cur.coordinator,
+      facts, phases, nb, milestones, setupRows, members, usage, removeOpen:S.remove, toggleRemove:() => this.setState(s => ({remove:!s.remove})),
+      envRows, envTabs, jevFiles, jevFile:S.jevFile, envFile:S.envFile, envPill, envPillText, envNote, tgJev, addVar,
+      flRows, flFail:S.firstFail, flOk:!S.firstFail, flSwitch, flToggle:() => this.setState(s => ({firstFail:!s.firstFail})), flRetry:set({firstFail:false}),
+      flLoginText:S.firstFail ? 'Stays off until the old entry above is removed, so two monitors never start.' : 'Turned on. The app starts at login and keeps the monitor running.', flLoginPill:pill(S.firstFail ? 'warn' : 'ok'), flLoginLabel:S.firstFail ? 'Waiting' : 'On',
+      stPyCmd, modalApp:S.modal === 'app', closeModal:set({modal:null}), applyApp:() => this.setState(s => ({modal:null, upd:{...s.upd, app:true}})),
+      skillRows, planOpen:S.plan, doPlan:() => this.setState(s => ({plan:!s.plan})),
+      scopes, sc, bars1, bars2, phaseTime, waves, verify,
+      tabs, tab, updRows, updateAll:() => this.setState({upd:{app:true, skills:true, rt:true}, rt:true}), cfgScopes, cfgNote, roles,
+      attention, attentionCount:attention.length, trayRows, trayStopped, trayStates, trayDot:dot(trayStopped ? 'var(--danger)' : 'var(--ok)'), trayStatus:trayStopped ? 'Stopped' : '4 projects \u00b7 3 members', trayBodyStyle:trayStopped ? 'opacity:.55' : '', trayUpdate:!S.upd.app,
+      setupAgain:set({screen:'onboard', step:0})
+    };
+  }
+}
+</script>
+</body>
+</html>

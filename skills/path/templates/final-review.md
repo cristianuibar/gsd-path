@@ -13,11 +13,20 @@ Reviewed HEAD: <full SHA>
 Overall verdict: <pass | blocked>
 
 <!-- pass only when every criterion is met; blocked when any criterion is
-     not-met or unverifiable. -->
+     not-met or unverifiable.
+     A criterion with a held-out edge (E#) or judgment prohibition (N#) in
+     INTENT.md is met only when Check, Observed, or Reference cites every such
+     id with its evidence; otherwise it is unverifiable with
+     `Finding: insufficient spec evidence: <id> ...`. -->
 
 ## Success criteria
 
-### SC1 — <criterion copied verbatim from INTENT.md>
+<!-- Each `### SCn —` title must match INTENT.md `## Success criteria` as
+     `_success_criteria` stores it: continuation lines join with a single
+     space and keep `- ` sub-bullet markers; comparison uses `_normalize_ws`
+     only. -->
+
+### SC1 — <criterion as stored by the gate>
 
 - **Verdict**: <met | not-met | unverifiable>
 - **Surface**: <exactly the surface name PLAN.md's Surface contract lists this criterion under, with no detail after it; omit the whole field for any other criterion>

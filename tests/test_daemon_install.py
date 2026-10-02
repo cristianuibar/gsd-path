@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 from gsd_daemon import serve as serve_module
 from gsd_daemon import tray as tray_module
 from gsd_daemon.config import Config
+from gsd_daemon import subprocess_platform
 from gsd_daemon.installer import (
     ENV_PLATFORM,
     LAUNCH_AGENT_LABEL,
@@ -146,6 +147,7 @@ class DryRunTests(unittest.TestCase):
             self.assertIn("CreateShortcut", output)
             self.assertIn(WINDOWS_SHORTCUT_NAME, output)
             self.assertIn("tray --serve", output)
+            self.assertIn(subprocess_platform.TOAST_APP_ID, output)
             self.assertNotIn("launchctl", output)
 
     def test_dry_run_linux(self):
@@ -282,14 +284,17 @@ class WindowsInstallTests(unittest.TestCase):
             self.assertEqual(installer.install(), 0)
             commands = runner.commands()
             ps = [cmd for cmd in commands if cmd[0] == "powershell"]
-            self.assertEqual(len(ps), 1)
-            script = ps[0][-1]
-            self.assertIn("WScript.Shell", script)
-            self.assertIn("CreateShortcut", script)
-            self.assertIn(WINDOWS_SHORTCUT_NAME, script)
+            self.assertEqual(len(ps), 2)
+            startup_script = ps[0][-1]
+            self.assertIn("WScript.Shell", startup_script)
+            self.assertIn("CreateShortcut", startup_script)
+            self.assertIn(WINDOWS_SHORTCUT_NAME, startup_script)
             self.assertIn(str(installer.home / ".gsd-path" / "venv" / "Scripts"
-                              / "pythonw.exe"), script)
-            self.assertIn("$s.Arguments = '-m gsd_daemon tray --serve'", script)
+                              / "pythonw.exe"), startup_script)
+            self.assertIn("$s.Arguments = '-m gsd_daemon tray --serve'", startup_script)
+            toast_script = ps[1][-1]
+            self.assertIn(subprocess_platform.TOAST_APP_ID, toast_script)
+            self.assertIn("AppUserModelId", toast_script)
             # venv and pip use Scripts/ on win32
             self.assertIn(str(Path("Scripts") / "pip.exe"), " ".join(commands[1]))
 

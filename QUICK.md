@@ -14,7 +14,7 @@ One router skill drives a gated pipeline: inspect → define → research → de
 plan → build → ship. Every handoff lives in `.project/` so any session can resume from disk.
 
 **Hosts:** Codex, Claude Code, Grok, OpenCode, Copilot CLI, Qwen, Antigravity,
-Cursor, Zed, Kiro, Kimi Code.
+Cursor, Zed, Kiro, Kimi Code, Muse Code.
 
 ---
 

@@ -55,10 +55,22 @@ try:
         fcntl.flock(fd, fcntl.LOCK_EX)
 
 except ImportError:  # Windows does not provide POSIX file locks.
+    import errno
     import msvcrt
+    import time
 
     def lock_exclusive(fd: int) -> None:
-        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+        delay = 0.01
+        while True:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return
+            except OSError as error:
+                if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 0.25)
 
 
 IGNORE_DIRS = {

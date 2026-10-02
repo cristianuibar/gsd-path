@@ -2,7 +2,10 @@
 
 Installs, updates, and uninstalls the gsd-path skill plugin — globally into
 per-host skill roots and per-project — by driving the plugin's own
-``scripts/install.py`` from a daemon-owned git clone at ``~/.gsd-path/src``.
+``scripts/install.py``. The installer comes from a verified npm release under
+``~/.gsd-path/releases/<version>`` (see ``release_source``). When
+``plugin_repo`` is set in ``daemon.json``, it comes from a git clone of that
+repository at ``~/.gsd-path/src`` instead.
 Every external command goes through an injectable runner; every filesystem
 removal goes through injectable hooks, so tests can observe without deleting.
 """
@@ -14,19 +17,21 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from .config import resolve_config_path
+from . import release_source, subprocess_platform
 
 DEFAULT_REPO = "https://github.com/open-gsd/gsd-path.git"
 ENV_HOME = "GSD_DAEMON_HOME"
 
 HOSTS = (
     "codex", "claude", "grok", "opencode", "copilot", "qwen",
-    "antigravity", "cursor", "zed", "kiro", "kimi",
+    "antigravity", "cursor", "zed", "kiro", "kimi", "muse",
 )
 
 LOCAL_ROOTS = {
@@ -41,6 +46,7 @@ LOCAL_ROOTS = {
     "zed": ".agents/skills",
     "kiro": ".kiro/skills",
     "kimi": ".kimi-code/skills",
+    "muse": ".agents/skills",
 }
 
 BACKUP_PREFIX = "disabled-gsd-skills"
@@ -64,10 +70,13 @@ STDOUT_TAIL_LINES = 40
 
 Runner = Callable[..., Tuple[int, str, str]]
 
+# One installer or helper at a time, across every route: two must never write the same files together.
+OP_LOCK = threading.Lock()
+
 
 def _default_runner(argv: Sequence[str], cwd: Optional[str] = None) -> Tuple[int, str, str]:
     try:
-        proc = subprocess.run(
+        proc = subprocess_platform.run(
             [str(part) for part in argv],
             cwd=cwd,
             capture_output=True,
@@ -222,6 +231,7 @@ class PluginManager:
         remove_file: Optional[Callable[[str], None]] = None,
         write_file: Optional[Callable[[str, str], None]] = None,
         repo: Optional[str] = None,
+        fetch: Optional[release_source.Fetch] = None,
     ) -> None:
         self.environ = environ if environ is not None else os.environ
         if home is not None:
@@ -242,13 +252,24 @@ class PluginManager:
             # Windows and would rewrite the owner's line endings.
             lambda path, text: Path(path).write_bytes(text.encode("utf-8"))
         )
-        self.repo = repo or self._config_repo() or DEFAULT_REPO
+        self.fetch = fetch or release_source.default_fetch
+        configured = repo or self._config_repo()
+        # A configured repository (a fork, or a checkout under development) keeps the git source.
+        self.git_source = configured is not None
+        self.repo = configured or DEFAULT_REPO
 
     # -- paths ---------------------------------------------------------------
 
     @property
     def src_dir(self) -> Path:
-        return self.home / "src"
+        if self.git_source:
+            return self.home / "src"
+        cache = self._read_cache()
+        return self.releases_dir / str(cache.get("selected") or cache.get("latest") or "none")
+
+    @property
+    def releases_dir(self) -> Path:
+        return self.home / "releases"
 
     @property
     def cache_path(self) -> Path:
@@ -283,7 +304,7 @@ class PluginManager:
                 return candidate if candidate.is_absolute() else home / candidate
             return home / default
 
-        if host in ("codex", "zed"):
+        if host in ("codex", "zed", "muse"):
             return home / ".agents" / "skills"
         if host == "claude":
             return env_home("CLAUDE_CONFIG_DIR", ".claude") / "skills"
@@ -327,6 +348,10 @@ class PluginManager:
         return f"git@github.com:{match.group(1)}.git"
 
     def ensure_source(self) -> Path:
+        if not self.git_source:
+            if not self.install_py.exists():
+                self._fetch_release()
+            return self.src_dir
         if (self.src_dir / ".git").exists():
             return self.src_dir
         rc, _stdout, stderr = self.git_runner(["git", "clone", self.repo, str(self.src_dir)])
@@ -368,11 +393,13 @@ class PluginManager:
             return {}
         return data if isinstance(data, dict) else {}
 
-    def _write_cache(self, latest: Optional[str]) -> None:
+    def _write_cache(self, latest: Optional[str], **changes) -> None:
         payload = {
+            **{key: value for key, value in self._read_cache().items() if key in ("versions", "selected")},
             "last_fetch": datetime.fromtimestamp(self.clock(), tz=timezone.utc).isoformat(),
             "last_fetch_epoch": self.clock(),
             "latest": latest,
+            **changes,
         }
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,8 +407,46 @@ class PluginManager:
         except OSError:
             pass
 
+    def _fetch_release(self, select: object = False) -> Optional[str]:
+        """Read the registry, record its releases, and unpack the release in use.
+
+        `select` changes the chosen release first: a version, or None to follow latest.
+        """
+        index = release_source.fetch_index(self.fetch)
+        cache = self._read_cache()
+        selected = cache.get("selected") if select is False else select
+        stable = [v for v in index["versions"] if _parse_version(v) is not None]
+        if selected is not None and selected not in stable:
+            if select is not False:
+                raise ValueError(f"release {selected} is not a published release")
+            raise release_source.ReleaseError(
+                f"the chosen release {selected} is no longer published; "
+                "choose another release or follow the latest release")
+        version = selected or index["latest"]
+        if version is None:
+            raise release_source.ReleaseError("the npm registry lists no latest release")
+        release_source.install_release(self.releases_dir, version, index["versions"][version], self.fetch)
+        self._write_cache(index["latest"], selected=selected,
+                          versions=sorted(stable, key=_parse_version, reverse=True))
+        return index["latest"]
+
+    def releases(self) -> dict:
+        """The published releases, newest first, and the chosen one (None follows latest)."""
+        cache = self._read_cache()
+        if self.git_source:
+            return {"source": "git", "latest": cache.get("latest"), "selected": None, "versions": []}
+        return {"source": "npm", "latest": cache.get("latest"), "selected": cache.get("selected"),
+                "versions": list(cache.get("versions") or [])}
+
+    def select_release(self, version: Optional[str]) -> dict:
+        if self.git_source:
+            raise ValueError("a release cannot be chosen: the plugin source is the git repository in plugin_repo")
+        self._fetch_release(select=version)
+        return self.releases()
+
     def refresh_source(self, ttl_hours: float = 24) -> dict:
-        """Fetch + fast-forward the source clone at most once per TTL.
+        """Refresh the plugin source at most once per TTL: read the registry
+        and unpack the release in use, or fetch + fast-forward the git clone.
 
         Offline or any other failure falls back to the cached state and never
         raises.
@@ -393,6 +458,13 @@ class PluginManager:
                 return {"refreshed": False, "latest": cache.get("latest"), "error": None}
         latest = cache.get("latest")
         error = None
+        if not self.git_source:
+            try:
+                latest = self._fetch_release()
+            except Exception as exc:  # offline or a refused release — cached state wins
+                error = str(exc)
+                self._write_cache(latest)
+            return {"refreshed": error is None, "latest": latest, "error": error}
         try:
             self.ensure_source()
             rc, stdout, stderr = self.git_runner(
@@ -496,7 +568,9 @@ class PluginManager:
     def check_update(self, fetch: bool = False) -> dict:
         if fetch:
             self.refresh_source()
-        latest = self._read_cache().get("latest")
+        cache = self._read_cache()
+        latest = cache.get("latest")
+        in_use = self.releases()["selected"] or latest
         installed = {
             host: entry["version"]
             for host, entry in self.detect_global().items()
@@ -506,7 +580,7 @@ class PluginManager:
             "installed": installed,
             "latest": latest,
             "update_available": any(
-                _is_newer(latest, version) for version in installed.values()
+                _is_newer(in_use, version) for version in installed.values()
             ),
         }
 

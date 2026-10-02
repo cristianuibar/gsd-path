@@ -77,6 +77,7 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 | OpenCode | `platforms/opencode/dispatch.md` | Task / v2 subagent | same |
 | Qwen | `platforms/qwen/dispatch.md` | `agent` tool | same |
 | Zed | `platforms/shared-agents/dispatch.md` (Zed installs the shared-agents profile) | `spawn_agent` | same |
+| Muse | `platforms/shared-agents/dispatch.md` (Muse installs the shared-agents profile) | `muse.subagent_spawn` | same |
 | Cursor | `platforms/cursor/dispatch.md` | Task + `gsd-path` subagent | same + installer copies `platforms/cursor/agent.md` |
 
 **Suggested severity:** **High** per host you actually use until dogfood confirms spawn works.
@@ -86,7 +87,7 @@ Static dispatch contracts are **verified** (files exist, installer copies them).
 - Declared `gsd-path*` skills align with the sync manifest and `sync --check`.
 - `HOOKS.md` matches `guard_hook.py` / `git_guard.py` (archive path-first, cp/tee/checkout, case-insensitive `ship:`).
 - `WORKFLOW.md` phase SOP matches skill contracts (handoffs, archive script, explicit-only router).
-- Multi-host install targets in code match README install table (11 targets + shared codex/zed profile).
+- Multi-host install targets in code match README install table (12 targets + shared codex/antigravity/zed/muse profile).
 - Brownfield onboard artifacts (`DOCS-AUDIT.md`, `evidence-codebase.md`) are **pipeline outputs**, not user docs — counts in Aug 02 audit are historical snapshots.
 
 ## Not doc gaps (out of catalog scope)

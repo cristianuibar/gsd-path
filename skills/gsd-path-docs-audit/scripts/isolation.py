@@ -27,11 +27,6 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Dict, Iterator, Optional, Sequence, Set, Tuple
 
-if sys.platform == "win32":
-    import msvcrt
-else:
-    import fcntl
-
 if __package__:
     from .pipeline_git import (
         attest_commit_body,
@@ -439,8 +434,9 @@ def collect_artifact_recoveries(primary: Path) -> list[Dict[str, object]]:
 
 
 def _git_file(repo: Path, revision: str, path: str) -> bytes:
+    git_path = PurePosixPath(path.replace("\\", "/")).as_posix()
     result = subprocess.run(
-        ("git", "-C", str(repo), "show", f"{revision}:{path}"),
+        ("git", "-C", str(repo), "show", f"{revision}:{git_path}"),
         capture_output=True,
         check=False,
     )
@@ -758,7 +754,7 @@ def retire_member_task(
         raise IsolationError(f"member task branch {ref} has unlanded commits")
     destination = sidecar_root(checkout, "task", name)
     copy_rejected = None
-    if force:
+    if force and task_file:
         rejected, copy_rejected = _rejected_member_attempt_error(coordinator, member, task_id, task_file, destination)
         if rejected:
             raise IsolationError(rejected)
@@ -936,9 +932,11 @@ def activate_member_task(
     created = run_git(checkout, "update-ref", ref, member_base, "0" * 40)
     if created.returncode != 0 and run_git(checkout, "rev-parse", "--verify", "--quiet", ref).stdout.strip() != member_base:
         raise IsolationError("could not record member task authorization")
-    return {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
+    result = {"agent": agent, "base": resolved_base, "copy": str(copy), "member": member,
             "member_base": member_base, "status": "in-progress", "task_branch": branch,
             "task_file": task_file, "worktree": str(sidecar)}
+    _write_native_member_dispatch_record(coordinator, result)
+    return result
 
 
 def retained_member_task(
@@ -1050,25 +1048,8 @@ def _member_journal_path(coordinator: Path, task_id: str) -> Path:
 @contextlib.contextmanager
 def _member_landing_lock(coordinator: Path) -> Iterator[None]:
     path = common_git_dir(coordinator).joinpath(*MEMBER_LANDING_DIR, ".lock")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b") as handle:
-        if sys.platform == "win32":
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            if sys.platform == "win32":
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with _common.exclusive_lock(path):
+        yield
 
 
 def _require_member_coordinator_branch(coordinator: Path) -> None:
@@ -1773,7 +1754,7 @@ def activate_task(
             if existing.returncode != 0 or existing.stdout.strip() != resolved_base:
                 _replace_regular_file(task_path, text.encode("utf-8"), mode)
                 raise IsolationError("could not record task worktree authorization")
-    return {
+    result = {
         "agent": agent,
         "base": resolved_base,
         "status": "in-progress",
@@ -1781,6 +1762,30 @@ def activate_task(
         "task_file": normalized_task,
         "worktree": str(worktree),
     }
+    _write_native_dispatch_record(worktree, result)
+    return result
+
+
+def _write_native_dispatch_record(worktree: Path, activation: Dict[str, object]) -> None:
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:
+        return
+    dispatch_driver.record_native_activation(worktree, activation)
+
+
+def _write_native_member_dispatch_record(coordinator: Path, activation: Dict[str, object]) -> None:
+    try:
+        if __package__:
+            from . import dispatch_driver
+        else:
+            import dispatch_driver
+    except ImportError:
+        return
+    dispatch_driver.record_native_member_activation(coordinator, activation)
 
 
 def deactivate_task(

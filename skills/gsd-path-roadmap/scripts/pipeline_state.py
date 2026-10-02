@@ -141,6 +141,8 @@ CROSS_PHASE_TRANSITIONS = {
     ("decide", "done", "plan", "active"),
     ("roadmap", "done", "define", "active"),
     ("plan", "done", "build", "active"),
+    ("plan", "active", "define", "active"),
+    ("plan", "blocked", "define", "active"),
     ("build", "blocked", "define", "active"),
     ("build", "blocked", "plan", "active"),
     ("build", "active", "ship", "active"),
@@ -193,11 +195,24 @@ def _run_git(
     *arguments: str,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    command = _common.git_command(repo, *arguments)
     result = subprocess.run(
-        ["git", "-C", str(repo), *arguments],
+        command,
         capture_output=True,
         encoding="utf-8", errors="replace",
     )
+    if (
+        check
+        and result.returncode != 0
+        and arguments
+        and arguments[0] == "commit"
+        and _common.git_index_lock_retryable(result.stderr)
+    ):
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            encoding="utf-8", errors="replace",
+        )
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
         raise PipelineStateError(f"git {' '.join(arguments)} failed: {detail}")
@@ -1077,7 +1092,7 @@ def route_state(repo: Path, project_dir: str = ".project") -> dict[str, object]:
             result["recovery"] = recovery
             if route.get("phase") == "define":
                 route["mode"] = "corrections"
-            elif route.get("phase") == "plan":
+            elif route.get("phase") == "plan" and recovery.get("source", "build") == "build":
                 route["mode"] = "build-repair"
     if route["action"] == "run-phase" and result["state"]["archive"] is None:
         reason = _pending_discussion_block(_repo_root(repo), route.get("phase"))
@@ -1668,6 +1683,8 @@ def _validate_transition(
         },
         ("define", "done", "plan", "active"): {"planning started"},
         ("decide", "done", "plan", "active"): {"planning started"},
+        ("plan", "active", "define", "active"): {"plan intent corrections requested"},
+        ("plan", "blocked", "define", "active"): {"plan intent corrections requested"},
         ("ship", "blocked", "plan", "active"): {"patch plan reopened"},
         ("ship", "active", "shipped", "done"): {
             "archive preflight passed; shipment recorded",
@@ -1720,9 +1737,10 @@ def transition_state(
             )
             if reason:
                 raise PipelineStateError(reason)
-        if state.phase in {"research", "decide"} and (
+        leaving_define = (state.phase, after.phase, after.status) == ("define", "define", "done")
+        if leaving_define or (state.phase in {"research", "decide"} and (
             after.phase != state.phase or after.status == "done"
-        ):
+        )):
             if __package__:
                 from . import check_handoffs
             else:
@@ -1731,6 +1749,8 @@ def transition_state(
                 except ImportError:  # pragma: no cover - package imports used by tests
                     from scripts import check_handoffs
             validator = {
+                # Approved intent carries its spec-reach probe tables complete.
+                "define": check_handoffs.validate_intent_probes,
                 "research": check_handoffs.validate_research_artifacts,
                 "decide": check_handoffs.validate_decide_artifacts,
             }[state.phase]
@@ -1742,6 +1762,16 @@ def transition_state(
                 and (after.phase, after.status) == ("build", "active")):
             _lock_build_members(resolved)
         if state.phase == "build" and after.phase in {"define", "plan"}:
+            recovery = _build_recovery().begin(resolved, state, after, event)
+            rendered = _append_event(
+                rendered, after.phase,
+                _build_recovery().MARKER + json.dumps(recovery, sort_keys=True),
+            )
+        elif (
+            state.phase == "plan"
+            and state.status in {"active", "blocked"}
+            and (after.phase, after.status) == ("define", "active")
+        ):
             recovery = _build_recovery().begin(resolved, state, after, event)
             rendered = _append_event(
                 rendered, after.phase,

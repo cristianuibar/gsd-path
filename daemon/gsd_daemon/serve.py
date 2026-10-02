@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import hmac
 import io
 import json
 import os
+import secrets
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import List, Optional, Tuple
 
+from . import __version__
+from . import env_files, hosts, project_ops, settings_api, stats
 from .history import append_event, resolve_history_path
 from .model import aggregate
-from .plugin import PluginManager
+from .plugin import OP_LOCK, PluginManager
 from .path_settings import configure
 from .project_files import FileAccessError, request_files
 from .project_data import project_records
@@ -21,12 +26,48 @@ from .watcher import Watcher
 
 DEFAULT_PORT = 8765
 
-_PLUGIN_OP_LOCK = threading.Lock()
+_PLUGIN_OP_LOCK = OP_LOCK
 _PLUGIN_ENDPOINTS = (
     "/api/plugin/install",
     "/api/plugin/update",
     "/api/plugin/uninstall",
+    "/api/plugin/check",
+    "/api/plugin/release",
 )
+TOKEN_HEADER = "X-GSD-Path-Token"
+
+
+def load_token() -> str:
+    """Read the write token, or create it readable by the user only."""
+    path = Path.home() / ".gsd-path" / "app" / "api-token"
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        token = ""
+    if not token:
+        token = secrets.token_urlsafe(32)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(token)
+    return token
+
+# JSON routes that live in their own modules. A handler takes (request handler, body)
+# and returns the payload; ValueError becomes a 400 with its message.
+_JSON_GET = {
+    "/api/config": settings_api.read_config,
+    "/api/diagnostics": settings_api.diagnostics,
+    "/api/stats": stats.route,
+    "/api/hosts": lambda handler, _body: {"hosts": hosts.detect(handler.plugin)},
+}
+_JSON_POST = {
+    "/api/config": settings_api.write_config,
+    "/api/project/op": project_ops.run,
+    # Env content has no GET route: every env request needs the write token.
+    "/api/env/list": env_files.list_route,
+    "/api/env/reveal": env_files.reveal_route,
+    "/api/env/save": env_files.save_route,
+}
 
 
 class _BadRequest(Exception):
@@ -962,6 +1003,7 @@ def _browse_dirs(raw_path: Optional[str]) -> Tuple[int, dict]:
 class _Handler(BaseHTTPRequestHandler):
     watcher: Watcher = None  # set by serve()
     plugin: PluginManager = None  # set by serve()
+    token: Optional[str] = None  # set by serve(); when set, every POST must carry it
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
@@ -974,19 +1016,27 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._respond(200, "application/json", json.dumps({"ok": True}))
             return
+        if path in _JSON_GET:
+            if not self._same_origin():
+                self._respond(403, 'application/json', json.dumps({'error': 'Same-origin requests only.'}))
+                return
+            self._json_route(_JSON_GET[path], None)
+            return
         if path == "/api/fs/browse":
             query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             code, payload = _browse_dirs((query.get("path") or [None])[0])
             self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path.startswith("/status"):
             payload = aggregate(list(self.watcher.projects.values()), utc_now_iso())
-            payload["daemon"] = {"parents": list(self.watcher.config.parents), "poll_seconds": self.watcher.config.poll_seconds}
+            payload["daemon"] = {"parents": list(self.watcher.config.parents), "poll_seconds": self.watcher.config.poll_seconds,
+                                 "version": __version__, "pid": os.getpid()}
             payload["plugin"] = self._plugin_compact()
             self._respond(200, "application/json", json.dumps(payload, indent=2, sort_keys=True))
         elif path == "/api/plugin/status":
             payload = self._plugin_compact()
             try:
                 payload["hosts"] = self.plugin.detect_global()
+                payload["releases"] = self.plugin.releases()
                 roots = sorted(str(status.root) for status in self.watcher.projects.values())
                 payload["projects"] = [self.plugin.detect_project(root) for root in roots]
             except Exception as error:  # detection must never break the dashboard
@@ -1019,6 +1069,11 @@ class _Handler(BaseHTTPRequestHandler):
         if path != '/api/refresh' and self.headers.get_content_type() != 'application/json':
             self._respond(415, 'application/json', json.dumps({'error': 'POST body must be application/json.'}))
             return
+        if self.token and not hmac.compare_digest(
+                (self.headers.get(TOKEN_HEADER) or '').encode(), self.token.encode()):
+            self._respond(403, 'application/json', json.dumps(
+                {'error': 'This monitor accepts changes from the OpenGSD Path app only. Use the app for this action.'}))
+            return
         if path == '/api/path-config':
             self._path_config(True)
             return
@@ -1033,16 +1088,14 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/config/parents":
             self._parents_op()
             return
-        if path not in _PLUGIN_ENDPOINTS:
+        if path not in _JSON_POST and path not in _PLUGIN_ENDPOINTS:
             self._respond(404, "text/plain", "not found")
             return
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length) or b"{}")
-            if not isinstance(body, dict):
-                raise ValueError("body must be a JSON object")
-        except ValueError:
-            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+        body = self._json_body()
+        if body is None:
+            return
+        if path in _JSON_POST:
+            self._json_route(_JSON_POST[path], body)
             return
         if not _PLUGIN_OP_LOCK.acquire(blocking=False):
             self._respond(409, "application/json",
@@ -1069,6 +1122,27 @@ class _Handler(BaseHTTPRequestHandler):
             code, payload = 500, {"error": str(error)}
         finally:
             _PLUGIN_OP_LOCK.release()
+        self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
+
+    def _json_body(self) -> Optional[dict]:
+        """The request body as a JSON object, or None after a 400 answer."""
+        try:
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("body must be a JSON object")
+        except ValueError:
+            self._respond(400, "application/json", json.dumps({"error": "invalid JSON body"}))
+            return None
+        return body
+
+    def _json_route(self, route, body) -> None:
+        try:
+            code, payload = 200, route(self, body)
+        except ValueError as error:
+            code, payload = 400, {"error": str(error)}
+        except Exception as error:
+            # A route names its own refusal code (403 for no token, 409 for a busy daemon).
+            code, payload = getattr(error, "status", 500), {"error": str(error)}
         self._respond(code, "application/json", json.dumps(payload, indent=2, sort_keys=True))
 
     def _same_origin(self) -> bool:
@@ -1214,6 +1288,17 @@ class _Handler(BaseHTTPRequestHandler):
             result = manager.apply_plan(plan, confirm=True)
             result["plan"] = plan
             return 200, result
+        if path == "/api/plugin/check":
+            refresh = manager.refresh_source(ttl_hours=0)
+            return 200, {**manager.check_update(), "ok": refresh["refreshed"], "error": refresh["error"]}
+        if path == "/api/plugin/release":
+            version = body.get("version", "")
+            if version is not None and (not isinstance(version, str) or not version):
+                raise _BadRequest("version must be a release, or null to follow the latest release")
+            try:
+                return 200, manager.select_release(version)
+            except ValueError as error:
+                raise _BadRequest(str(error))
         raise _BadRequest("unknown plugin operation")
 
     def log_message(self, format, *args) -> None:  # noqa: A002 - stdlib signature
@@ -1237,12 +1322,26 @@ class _Handler(BaseHTTPRequestHandler):
         return DASHBOARD_PAGE.replace("__DAEMON_JSON__", json.dumps(daemon)).replace("__RECORDS_CSS__", RECORDS_CSS).replace("__RECORDS_JS__", RECORDS_JS).replace("__LAYOUT_CSS__", LAYOUT_CSS).replace("__LAYOUT_JS__", LAYOUT_JS)
 
 
+class _StopEvent(threading.Event):
+    """Ends the poll loop; setting it also wakes a loop that waits for its next poll."""
+
+    def __init__(self, wake: threading.Event) -> None:
+        super().__init__()
+        self._wake = wake
+
+    def set(self) -> None:
+        super().set()
+        self._wake.set()
+
+
 def serve(watcher: Watcher, port: int = DEFAULT_PORT,
-          plugin: Optional[PluginManager] = None) -> ThreadingHTTPServer:
+          plugin: Optional[PluginManager] = None,
+          token: Optional[str] = None) -> ThreadingHTTPServer:
     # Bind before the first session scan: scanning every host session log on
     # the machine can take a while cold, and the dashboard must not wait on it.
     watcher.poll_once(scan_sessions=False)
     scan_lock = threading.Lock()
+    wake = threading.Event()  # set to start the next poll at once
 
     def scan(scan_sessions=True):
         with scan_lock:
@@ -1252,9 +1351,11 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                     append_event(event)
 
     handler = type("Handler", (_Handler,),
-                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan)})
+                   {"watcher": watcher, "plugin": plugin or PluginManager(), "scan": staticmethod(scan),
+                    "scan_lock": scan_lock, "wake": staticmethod(wake.set),
+                    "token": token})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    stop = threading.Event()
+    stop = _StopEvent(wake)
     server.watcher_stop = stop  # callers may set() to end the poll loop
 
     def poll_loop() -> None:
@@ -1264,7 +1365,8 @@ def serve(watcher: Watcher, port: int = DEFAULT_PORT,
                 scan()
             except Exception:
                 pass  # a failed cycle must never kill the poll loop
-            stop.wait(watcher.config.poll_seconds)
+            wake.wait(watcher.config.poll_seconds)
+            wake.clear()
 
     threading.Thread(target=poll_loop, daemon=True).start()
     return server
@@ -1283,8 +1385,8 @@ def serve_in_thread(
     return server, thread
 
 
-def run(watcher: Watcher, port: int = DEFAULT_PORT) -> None:
-    server = serve(watcher, port)
+def run(watcher: Watcher, port: int = DEFAULT_PORT, require_token: bool = False) -> None:
+    server = serve(watcher, port, token=load_token() if require_token else None)
     host, actual_port = server.server_address[:2]
     print(f"serving on http://{host}:{actual_port}")
     try:

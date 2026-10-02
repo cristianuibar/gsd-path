@@ -1,4 +1,5 @@
 import argparse
+import importlib
 import io
 import json
 import os
@@ -708,6 +709,30 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.round(root, "--wait", "60", "--max-attempts", "3")
         self.assertEqual(receipt["status"], "done", receipt)
         self.assertEqual([item["task"] for item in receipt["landed"]], ["T001", "T002"])
+
+    def test_native_failure_then_round_retry_stops_at_max_attempts(self) -> None:
+        root = self.root
+        self.fixture(root, deps_t002="[T001]")
+        self.activate_native_serial(root)
+        (root / "src/app.py").write_bytes(b"raise SystemExit(1)\n")
+        dispatch_driver.append_log(root / ".project/tasks/T001-demo.md",
+                                   "- 2026-09-27 — implemented src/app.py; Verify fail")
+        receipt = self.driver(root, "finish", "--task-id", "T001")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("Verify failed", receipt["reason"])
+        records = dispatch_driver.records_root(root)
+        self.assertEqual(dispatch_driver.attempts_used(records, "T001"), 1)
+        self.assertEqual(json.loads((records / "T001/attempt-1/state.json").read_text(encoding="utf-8"))["outcome"],
+                         "blocked")
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60", mode="badverify")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertEqual(receipt["dispatched"][0]["attempt"], 2)
+        self.reset_after_failed_serial_attempt(root)
+        receipt = self.round(root, "--wait", "60")
+        self.assertEqual(receipt["status"], "blocked", receipt)
+        self.assertIn("reached the attempt limit (2)", receipt["blocked"][0]["reason"])
+        self.assertEqual(receipt["dispatched"], [])
 
     def test_child_that_asks_then_crashes_is_a_failure_not_a_question(self) -> None:
         root = self.root
@@ -1577,6 +1602,19 @@ class DispatchDriverTests(unittest.TestCase):
         receipt = self.panel(root, "--wait", "60", advertised="claude-opus")
         self.assertEqual(receipt["status"], "skipped", receipt)
         self.assertEqual(self.subjects(root)[0], "build: record wave 1 cycle 1 review")
+
+
+
+class DispatchPinnedRuntimeTests(unittest.TestCase):
+    def test_activate_pinned_runtime_reloads_scripts_isolation(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "-B", "-m", "unittest", "-q",
+             "tests._dispatch_pinned_runtime_inprocess"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
 
 
 if __name__ == "__main__":

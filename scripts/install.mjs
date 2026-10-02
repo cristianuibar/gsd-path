@@ -212,9 +212,10 @@ export const EXPLICIT_ONLY_TARGETS = new Set([
   "cursor",
   "zed",
   "kimi",
+  "muse",
   "shared-agents",
 ]);
-const SHARED_AGENT_TARGETS = new Set(["codex", "antigravity", "zed"]);
+const SHARED_AGENT_TARGETS = new Set(["codex", "antigravity", "zed", "muse"]);
 export const SHARED_AGENT_PROFILE = "shared-agents";
 export const CURSOR_AGENT_FILENAME = "gsd-path.md";
 export const CURSOR_AGENT_BACKUP_NAME = "cursor-agent-gsd-path.md";
@@ -228,7 +229,7 @@ const MANIFEST = JSON.parse(
 );
 
 function sharedInvocations(text) {
-  const pattern = /(`?)(\$gsd-path(?:-[a-z0-9]+)*|\$path)( status)?\1(?: \(Codex\) (?:and|or) (`?)\/(gsd-path(?:-[a-z0-9]+)*|path)( status)?\4 \((?:other hosts|Antigravity\/Zed)\))?/g;
+  const pattern = /(`?)(\$gsd-path(?:-[a-z0-9]+)*|\$path)( status)?\1(?: \(Codex\) (?:and|or) (`?)\/(gsd-path(?:-[a-z0-9]+)*|path)( status)?\4 \((?:other hosts|Antigravity\/Zed\/Muse)\))?/g;
   return text.replace(pattern, (_match, quote, token, arguments_, pairedQuote, pairedSkill, pairedArguments) => {
     const skill = token.slice(1);
     const argumentsText = arguments_ || "";
@@ -237,7 +238,7 @@ function sharedInvocations(text) {
     }
     const codex = `${MANIFEST.hosts.codex.invocation_prefix}${skill}`;
     const others = `${MANIFEST.hosts.antigravity.invocation_prefix}${skill}`;
-    return `${quote}${codex}${argumentsText}${quote} (Codex) or ${quote}${others}${argumentsText}${quote} (Antigravity/Zed)`;
+    return `${quote}${codex}${argumentsText}${quote} (Codex) or ${quote}${others}${argumentsText}${quote} (Antigravity/Zed/Muse)`;
   });
 }
 export function skillNamesForManifest(manifest) {
@@ -355,7 +356,7 @@ export function defaultRoot(target, env = process.env) {
   }
   if (target === "antigravity") return absolutePath("~/.gemini/antigravity-cli/skills");
   if (target === "cursor") return absolutePath("~/.cursor/skills");
-  if (target === "zed") return absolutePath("~/.agents/skills");
+  if (target === "zed" || target === "muse") return absolutePath("~/.agents/skills");
   if (target === "kiro") {
     return absolutePath(path.join(env.KIRO_HOME || expandUser("~/.kiro"), "skills"));
   }
@@ -1204,7 +1205,7 @@ export function deploymentPlans(plans) {
     if (group.length > 1) {
       if (!targets.every((name) => SHARED_AGENT_TARGETS.has(name))) {
         throw new InstallerError(
-          `only Codex, Antigravity, and Zed may share a skills root: ${targets.join(", ")}`
+          `only Codex, Antigravity, Zed, and Muse may share a skills root: ${targets.join(", ")}`
         );
       }
       profile = SHARED_AGENT_PROFILE;
@@ -1558,7 +1559,7 @@ export async function install(sourceRoot, plans, options = {}) {
 }
 
 // Documented project-relative skill roots (verified against each host's
-// official skills docs). Codex, Zed, and Antigravity all discover the
+// official skills docs). Codex, Zed, Muse, and Antigravity all discover the
 // project-level .agents/skills standard directory.
 export function localRoot(target, projectDir) {
   const relative = LOCAL_ROOTS[target];

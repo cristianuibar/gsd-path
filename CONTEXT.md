@@ -109,6 +109,25 @@ Surface contract.
 _Avoid_: UI (unless you mean a screen only), frontend, interface (that is the
 task-to-task Interface contract)
 
+**Edge coverage**:
+The INTENT.md table where define records the user's ruling on each
+applicable edge of each success criterion (boundary, empty input, encoding,
+ordering, and so on): stated in a criterion, held out to a named test, or
+dismissed with a reason.
+_Avoid_: edge cases (bare), test plan
+
+**Held-out check**:
+The named test that pins one `held-out` edge's ruling. PLAN.md
+`## Held-out checks` gives it to one task, whose Verify runs it. Final review
+cites its recorded result before the edge's criterion can be `met`.
+_Avoid_: backstop, extra test
+
+**Prohibition**:
+Something a success criterion must never silently become, recorded in
+INTENT.md `## Prohibitions` with the user's ruling. It is not a veto: a veto
+excludes scope, a prohibition constrains in-scope behavior.
+_Avoid_: veto, non-goal
+
 **Unverified**:
 Available workflow facts whose required validation evidence is unavailable or
 has not passed. They may be displayed, but do not establish that a milestone

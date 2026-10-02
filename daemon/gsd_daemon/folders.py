@@ -5,11 +5,13 @@ import subprocess
 import sys
 from typing import Optional
 
+from . import subprocess_platform
+
 
 def pick_folder() -> Optional[str]:
     try:
         if sys.platform == "darwin":
-            result = subprocess.run(
+            result = subprocess_platform.run(
                 ["osascript", "-e", "POSIX path of (choose folder)"],
                 capture_output=True,
                 text=True,
@@ -21,20 +23,21 @@ def pick_folder() -> Optional[str]:
             return _clean(result.stdout)
         if sys.platform == "win32":
             script = (
+                "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
                 "Add-Type -AssemblyName System.Windows.Forms; "
                 "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
                 "if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath }"
             )
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", script],
+            result = subprocess_platform.run(
+                ["powershell", "-NoProfile", "-STA", "-Command", script],
                 capture_output=True,
-                text=True,
                 timeout=120,
                 check=False,
             )
             if result.returncode != 0:
                 return None
-            return _clean(result.stdout)
+            text = result.stdout.decode("utf-8", errors="replace")
+            return _clean(text)
     except (OSError, subprocess.SubprocessError):
         return None
     return None

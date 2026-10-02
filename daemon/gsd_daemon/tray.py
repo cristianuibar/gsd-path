@@ -7,6 +7,7 @@ import threading
 from typing import List
 
 from . import folders, history, notify
+from . import subprocess_platform
 from .config import Config
 from .serve import serve_in_thread
 from .watcher import Watcher
@@ -54,9 +55,9 @@ def _tooltip(projects) -> str:
 def _reveal(path: str) -> None:
     try:
         if sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", path])
+            subprocess_platform.popen(["open", "-R", path])
         elif sys.platform == "win32":
-            subprocess.Popen(["explorer", "/select,", path])
+            subprocess_platform.popen(["explorer", "/select,", path])
     except OSError:
         pass
 
@@ -64,17 +65,26 @@ def _reveal(path: str) -> None:
 def _open_folder(path: str) -> None:
     try:
         if sys.platform == "darwin":
-            subprocess.Popen(["open", path])
+            subprocess_platform.popen(["open", path])
         elif sys.platform == "win32":
-            subprocess.Popen(["explorer", path])
+            subprocess_platform.popen(["explorer", path])
     except OSError:
         pass
 
 
 def _copy(text: str) -> None:
-    command = ["pbcopy"] if sys.platform == "darwin" else ["clip"]
     try:
-        subprocess.run(command, input=text, text=True, capture_output=True, timeout=5, check=False)
+        if sys.platform == "darwin":
+            subprocess_platform.run(
+                ["pbcopy"], input=text, text=True, capture_output=True, timeout=5, check=False
+            )
+        elif sys.platform == "win32":
+            process = subprocess_platform.popen(
+                ["powershell", "-NoProfile", "-Command", "$input | Set-Clipboard"],
+                stdin=subprocess.PIPE,
+                text=True,
+            )
+            process.communicate(text, timeout=5)
     except (OSError, subprocess.SubprocessError):
         pass
 

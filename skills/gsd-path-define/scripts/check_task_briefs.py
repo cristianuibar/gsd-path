@@ -53,6 +53,9 @@ COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 BACKTICK_PATTERN = re.compile(r"`([^`\n]+)`")
 PATH_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~/-]+")
 VERIFY_BLOCK_PATTERN = re.compile(r"```bash[ \t]*\n(?P<block>.*?)```", re.DOTALL)
+TEXT_TOOL_COMMANDS = frozenset({"awk", "egrep", "fgrep", "gawk", "grep", "gsed", "rg", "sed"})
+REGEX_PATTERN_CHARS = frozenset("|*+?[]()^$.\\")
+PIPELINE_WORKSPACE_DIRS = ("review", "discuss", "build", "plan")
 
 
 class BriefError(RuntimeError):
@@ -73,15 +76,37 @@ def _base_exists(repo: Path, base: str, path: str) -> bool:
     return _run_git(repo, "cat-file", "-e", f"{base}:{path}").returncode == 0
 
 
+def _project_track(task: Path, repo: Path) -> Optional[str]:
+    try:
+        track = task.parent.parent.relative_to(repo).as_posix()
+    except ValueError:
+        return None
+    if track not in {".project", ".project/next"}:
+        return None
+    return track
+
+
 def _supplied_contract(repo: Path, task: Path, token: str) -> bool:
     """Plan approval checkpoints these supplied inputs after the brief gate."""
-    track = task.parent.parent.relative_to(repo).as_posix()
-    if track not in {".project", ".project/next"}:
+    track = _project_track(task, repo)
+    if track is None:
         return False
     if token not in {
         f"{track}/intent/INTENT.md",
         f"{track}/research/SYNTHESIS.md",
     }:
+        return False
+    path = repo / token
+    return path.is_file() and path.resolve() == repo.resolve() / token
+
+
+def _pipeline_workspace_file(repo: Path, task: Path, token: str) -> bool:
+    """Pipeline-owned paths may exist only in the working tree before checkpoint."""
+    track = _project_track(task, repo)
+    if track is None:
+        return False
+    prefixes = tuple(f"{track}/{name}/" for name in PIPELINE_WORKSPACE_DIRS)
+    if not any(token.startswith(prefix) for prefix in prefixes):
         return False
     path = repo / token
     return path.is_file() and path.resolve() == repo.resolve() / token
@@ -151,7 +176,7 @@ def _clean(body: str) -> str:
     return COMMENT_PATTERN.sub("", body).strip()
 
 
-def _looks_like_path(token: str) -> bool:
+def _slash_token_shape(token: str) -> bool:
     return (
         "/" in token
         and PATH_TOKEN_PATTERN.fullmatch(token) is not None
@@ -162,26 +187,91 @@ def _looks_like_path(token: str) -> bool:
     )
 
 
+def _last_segment_has_extension(token: str) -> bool:
+    name = PurePosixPath(token).name
+    return "." in name and not name.startswith(".")
+
+
+def _looks_like_path(
+    token: str,
+    *,
+    repo: Path,
+    git_root: Path,
+    base: str,
+    task: Path,
+) -> bool:
+    if not _slash_token_shape(token):
+        return False
+    if _last_segment_has_extension(token):
+        return True
+    if _base_exists(git_root, base, token):
+        return True
+    if _pipeline_workspace_file(repo, task, token):
+        return True
+    return False
+
+
+def _looks_like_regex_pattern(token: str) -> bool:
+    return any(character in token for character in REGEX_PATTERN_CHARS)
+
+
+def _text_tool_command(command: str) -> bool:
+    return Path(command).name.casefold() in TEXT_TOOL_COMMANDS
+
+
 def _normalize(path: str) -> str:
     return str(PurePosixPath(path))
 
 
-def _prose_tokens(body: str) -> List[str]:
+def _prose_tokens(
+    body: str,
+    *,
+    repo: Path,
+    git_root: Path,
+    base: str,
+    task: Path,
+) -> List[str]:
     cleaned = COMMENT_PATTERN.sub("", body)
-    return [
-        _normalize(match.group(1).strip())
-        for match in BACKTICK_PATTERN.finditer(cleaned)
-        if _looks_like_path(match.group(1).strip())
-    ]
+    tokens: List[str] = []
+    for match in BACKTICK_PATTERN.finditer(cleaned):
+        candidate = match.group(1).strip()
+        if _looks_like_path(
+            candidate, repo=repo, git_root=git_root, base=base, task=task
+        ):
+            tokens.append(_normalize(candidate))
+    return tokens
 
 
-def _verify_tokens(block: str) -> List[str]:
-    tokens = []
+def _verify_tokens(
+    block: str,
+    *,
+    repo: Path,
+    git_root: Path,
+    base: str,
+    task: Path,
+) -> List[str]:
+    tokens: List[str] = []
     for line in block.splitlines():
         parts = line.split()
-        for token in parts[1:]:
-            token = token.strip("\"'")
-            if _looks_like_path(token):
+        if len(parts) < 2:
+            continue
+        command = parts[0]
+        extended_grep = False
+        index = 1
+        while index < len(parts) and parts[index].startswith("-") and "=" not in parts[index]:
+            flag = parts[index]
+            if flag in {"-E", "-G"} or flag.startswith("-E"):
+                extended_grep = True
+            index += 1
+        text_tool = _text_tool_command(command)
+        for raw in parts[index:]:
+            quoted = raw.startswith(("'", '"'))
+            token = raw.strip("\"'")
+            if text_tool and quoted:
+                continue
+            if text_tool and command.casefold() == "grep" and extended_grep and _looks_like_regex_pattern(token):
+                continue
+            if _looks_like_path(token, repo=repo, git_root=git_root, base=base, task=task):
                 tokens.append(_normalize(token))
     return tokens
 
@@ -298,12 +388,15 @@ def _lint_task(
         body = sections.get(name)
         if body is None or not _clean(body):
             continue
-        for token in _prose_tokens(body):
+        for token in _prose_tokens(
+            body, repo=repo, git_root=git_root, base=base, task=path
+        ):
             checked += 1
             if (
                 token not in declared
                 and token not in supplied
                 and not _supplied_contract(repo, path, token)
+                and not _pipeline_workspace_file(repo, path, token)
                 and not _base_exists(git_root, base, token)
             ):
                 problems.append(f"## {name} names a path missing at the layer base: {token}")
@@ -314,9 +407,20 @@ def _lint_task(
         if block is None or not block.group("block").strip():
             problems.append("## Verify must contain a non-empty fenced bash block")
         else:
-            for token in _verify_tokens(block.group("block")):
+            for token in _verify_tokens(
+                block.group("block"),
+                repo=repo,
+                git_root=git_root,
+                base=base,
+                task=path,
+            ):
                 checked += 1
-                if token not in declared and token not in supplied and not _base_exists(git_root, base, token):
+                if (
+                    token not in declared
+                    and token not in supplied
+                    and not _pipeline_workspace_file(repo, path, token)
+                    and not _base_exists(git_root, base, token)
+                ):
                     problems.append(f"## Verify names a path missing at the layer base: {token}")
 
     contract = None
@@ -381,6 +485,65 @@ def validate_task_briefs(
     return {"base": resolved_base, "checked": checked, "tasks": len(task_files)}
 
 
+def validate_plan_task_briefs(
+    root: Path,
+    base: str,
+    project_dir: str = ".project",
+    tasks_dir: Optional[str] = None,
+) -> Dict[str, object]:
+    """Plan gate validation with dependency files and landed historical bases."""
+    if __package__:
+        from . import check_handoffs
+        from .isolation import IsolationError, require_commit, require_full_sha
+    else:
+        try:
+            import check_handoffs
+            from isolation import IsolationError, require_commit, require_full_sha
+        except ModuleNotFoundError as error:
+            if error.name not in {"check_handoffs", "isolation"}:
+                raise
+            from scripts import check_handoffs
+            from scripts.isolation import IsolationError, require_commit, require_full_sha
+    tasks, dependency_files = check_handoffs.plan_brief_inputs(root, project_dir)
+    landed_bases: Dict[str, str] = {}
+    member_base = _member_bases(root)
+    for task_id, text in tasks.items():
+        if check_handoffs._task_scalar(text, task_id, "status") != "done":
+            continue
+        agent = check_handoffs._task_scalar(text, task_id, "agent")
+        if agent in {"", "null"}:
+            raise BriefError(f"{task_id} landed task has no recorded agent")
+        member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
+        base_repo = root
+        if member is not None:
+            located = member_base(member) if isinstance(member, str) and member else None
+            if located is None:
+                raise BriefError(f"repo: names no member in MEMBERS.md: {member}")
+            base_repo = located[0]
+        recorded_base = check_handoffs._task_scalar(text, task_id, "base")
+        recorded_full = require_full_sha(recorded_base)
+        try:
+            if member is not None:
+                try:
+                    landed_bases[task_id] = require_commit(root, recorded_full)
+                except IsolationError:
+                    landed_bases[task_id] = require_commit(base_repo, recorded_full)
+            else:
+                landed_bases[task_id] = require_commit(base_repo, recorded_full)
+        except IsolationError as error:
+            raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
+        dependency_files[task_id] = set()
+    resolved_tasks_dir = tasks_dir or f"{project_dir}/tasks"
+    return validate_task_briefs(
+        root,
+        base,
+        resolved_tasks_dir,
+        dependency_files=dependency_files,
+        landed_bases=landed_bases,
+        member_base=member_base,
+    )
+
+
 def _tasks_dir(value: str) -> str:
     """Argparse type for --tasks-dir: a relative POSIX-style path."""
 
@@ -411,15 +574,29 @@ def parser() -> argparse.ArgumentParser:
         help="relative POSIX-style directory under --repo holding the task files "
         "(default: .project/tasks)",
     )
+    argument_parser.add_argument(
+        "--project-dir",
+        default=None,
+        help="when set, apply plan-approval dependency files and landed-task bases "
+        "(same rules as state_checkpoint plan approval)",
+    )
     return argument_parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     arguments = parser().parse_args(argv)
     try:
-        result = validate_task_briefs(
-            arguments.repo.resolve(), arguments.base, arguments.tasks_dir
-        )
+        if arguments.project_dir is not None:
+            result = validate_plan_task_briefs(
+                arguments.repo.resolve(),
+                arguments.base,
+                arguments.project_dir,
+                None if arguments.tasks_dir == DEFAULT_TASKS_DIR else arguments.tasks_dir,
+            )
+        else:
+            result = validate_task_briefs(
+                arguments.repo.resolve(), arguments.base, arguments.tasks_dir
+            )
     except BriefError as error:
         print(f"task brief validation failed: {error}", file=sys.stderr)
         return 1

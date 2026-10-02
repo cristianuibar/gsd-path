@@ -187,6 +187,9 @@ class InstallerTests(unittest.TestCase):
             Path.home() / ".agents" / "skills", install.default_root("zed", {})
         )
         self.assertEqual(
+            Path.home() / ".agents" / "skills", install.default_root("muse", {})
+        )
+        self.assertEqual(
             Path(os.path.abspath("/tmp/copilot/skills")),
             install.default_root("copilot", {"COPILOT_HOME": "/tmp/copilot"}),
         )
@@ -402,7 +405,7 @@ class InstallerTests(unittest.TestCase):
                 ["--all", "--local", "--source-root", str(self.source)]
             )
             self.assertEqual(0, status, error)
-            self.assertIn("codex+antigravity+zed: installed", output)
+            self.assertIn("codex+antigravity+zed+muse: installed", output)
 
             source_skill = self.source / "skills" / "gsd-path" / "SKILL.md"
             source_skill.write_bytes(
@@ -415,7 +418,7 @@ class InstallerTests(unittest.TestCase):
             os.chdir(previous)
 
         self.assertEqual(0, status, error)
-        self.assertIn("codex+antigravity+zed: updated", output)
+        self.assertIn("codex+antigravity+zed+muse: updated", output)
         installed = project / ".agents" / "skills" / "gsd-path" / "SKILL.md"
         self.assertIn(
             "description: shared update", installed.read_text(encoding="utf-8")
@@ -588,16 +591,16 @@ class InstallerTests(unittest.TestCase):
                         self.assertFalse((staged / name / "agents").exists(), name)
                     elif target == install.SHARED_AGENT_PROFILE:
                         self.assertIn("$gsd-path (Codex)", content, name)
-                        self.assertIn("/gsd-path (Antigravity/Zed)", content, name)
+                        self.assertIn("/gsd-path (Antigravity/Zed/Muse)", content, name)
                         if name == "gsd-path":
                             self.assertIn(
-                                "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+                                "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed/Muse)",
                                 content,
                             )
                         self.assertIn(
                             "shared dispatch for $gsd-path (Codex)", dispatch, name
                         )
-                        self.assertIn("/gsd-path (Antigravity/Zed)", dispatch, name)
+                        self.assertIn("/gsd-path (Antigravity/Zed/Muse)", dispatch, name)
                         self.assertTrue(
                             (staged / name / "agents" / "openai.yaml").is_file(), name
                         )
@@ -646,7 +649,7 @@ class InstallerTests(unittest.TestCase):
                     )
                     invocation = (
                         "`$gsd-path status` (Codex) or "
-                        "`/gsd-path status` (Antigravity/Zed)"
+                        "`/gsd-path status` (Antigravity/Zed/Muse)"
                     )
                     self.assertEqual(router.count(invocation), 1)
                     self.assertNotIn("(other hosts)", router)
@@ -669,6 +672,7 @@ class InstallerTests(unittest.TestCase):
     def test_all_installs_each_target(self):
         roots = {target: self.root / target / "skills" for target in install.TARGETS}
         roots["zed"] = roots["codex"]
+        roots["muse"] = roots["codex"]
         arguments = ["--all", "--source-root", str(self.source)]
         for target, root in roots.items():
             arguments.extend([f"--{target}-root", str(root)])
@@ -682,7 +686,7 @@ class InstallerTests(unittest.TestCase):
             cursor_agent.read_text(encoding="utf-8").endswith("cursor agent\n")
         )
         self.assertIn(
-            f"codex+zed: installed {len(install.SKILL_NAMES)} shared skills",
+            f"codex+zed+muse: installed {len(install.SKILL_NAMES)} shared skills",
             output,
         )
         self.assertIn("custom subagent", output)
@@ -714,6 +718,7 @@ class InstallerTests(unittest.TestCase):
             install.TargetPlan("codex", root),
             install.TargetPlan("antigravity", root),
             install.TargetPlan("zed", root),
+            install.TargetPlan("muse", root),
         ]
         deployments = install._deployment_plans(plans)
         self.assertEqual(
@@ -721,7 +726,7 @@ class InstallerTests(unittest.TestCase):
                 install.DeploymentPlan(
                     install.SHARED_AGENT_PROFILE,
                     root,
-                    ("codex", "antigravity", "zed"),
+                    ("codex", "antigravity", "zed", "muse"),
                 )
             ],
             deployments,
@@ -734,11 +739,14 @@ class InstallerTests(unittest.TestCase):
                 "--codex",
                 "--antigravity",
                 "--zed",
+                "--muse",
                 "--codex-root",
                 str(root),
                 "--antigravity-root",
                 str(root),
                 "--zed-root",
+                str(root),
+                "--muse-root",
                 str(root),
                 "--source-root",
                 str(self.source),
@@ -756,10 +764,10 @@ class InstallerTests(unittest.TestCase):
         content = (root / "gsd-path" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("disable-model-invocation: true", content)
         self.assertIn(
-            "$gsd-path (Codex) or /gsd-path (Antigravity/Zed)", content
+            "$gsd-path (Codex) or /gsd-path (Antigravity/Zed/Muse)", content
         )
         self.assertIn(
-            "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed)",
+            "$gsd-path status (Codex) or /gsd-path status (Antigravity/Zed/Muse)",
             content,
         )
         self.assertTrue((root / "gsd-path" / "agents" / "openai.yaml").is_file())

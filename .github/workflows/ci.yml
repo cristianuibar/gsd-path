@@ -107,3 +107,28 @@ jobs:
         run: python3 -m pip install ./daemon
       - name: Daemon package tests
         run: npm run test:daemon
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend type check and build
+        run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+      # The shell embeds the built frontend, so this runs after the build.
+      - name: Shell tests
+        run: cargo test
+        working-directory: daemon/app/src-tauri

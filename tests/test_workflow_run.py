@@ -216,7 +216,30 @@ class WorkflowRunTests(unittest.TestCase):
             code, receipt = self.preauthorize(root, "intent")
             self.assertEqual((code, receipt["status"]), (0, "complete"), receipt)
             self.assertTrue(state.read_text(encoding="utf-8").endswith("— define — pre-authorized approval: intent\n"))
-            self.assertNotIn("check_handoffs.py", [step["script"] for step in receipt["steps"]])
+            # Intent pre-approval checks only the intent draft, never the plan gate.
+            gates = [step["command"][3] for step in receipt["steps"] if step["script"] == "check_handoffs.py"]
+            self.assertEqual(gates, ["intent"])
+
+    def test_preauthorize_intent_blocks_an_incomplete_edge_probe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.quick_fixture(root, log=GRANT)
+            state = root / ".project/STATE.md"
+            state.write_bytes(state.read_text(encoding="utf-8").replace("milestone: demo", "milestone: null")
+                             .replace("phase: plan", "phase: define").encode("utf-8"))
+            intent = root / ".project/intent/INTENT.md"
+            # The edge the probe raised was never ruled on: a placeholder disposition.
+            intent.write_bytes((intent.read_text(encoding="utf-8") + "\n## Edge coverage\n\n"
+                                "| Edge | Criterion | Category | Disposition | Detail |\n"
+                                "|------|-----------|----------|-------------|--------|\n"
+                                "| E1 | SC1 | boundary | <disposition> | <ruling> |\n").encode("utf-8"))
+            code, receipt = self.preauthorize(root, "intent")
+            self.assertEqual(code, 1, receipt)
+            self.assertEqual(receipt["next"], "ask the owner at this gate")
+            self.assertEqual((receipt["steps"][-1]["script"], receipt["steps"][-1]["exit_code"]),
+                             ("check_handoffs.py", 1))
+            self.assertIn("E1 disposition", receipt["steps"][-1]["stderr"])
+            self.assertFalse(state.read_text(encoding="utf-8").endswith("pre-authorized approval: intent\n"))
 
     def test_preauthorize_blocks_outside_its_grant(self):
         cases = {

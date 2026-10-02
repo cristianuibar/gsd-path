@@ -1005,6 +1005,18 @@ class PipelineGitTests(unittest.TestCase):
             retry = subprocess.run(bind_next, capture_output=True, encoding="utf-8", errors="replace")
             self.assertEqual(retry.returncode, 0, retry.stderr)
 
+    def test_branch_worktrees_parses_legacy_porcelain(self) -> None:
+        output = (
+            "worktree /tmp/main\n"
+            "branch refs/heads/main\n"
+            "HEAD abc\n"
+            "\n"
+            "worktree /tmp/task\n"
+            "branch refs/heads/gsd-path-task/T001\n"
+        )
+        worktrees = pipeline_git.branch_worktrees_from_porcelain(output, nul_separated=False)
+        self.assertEqual(set(worktrees), {"main", "gsd-path-task/T001"})
+
 
 if __name__ == "__main__":
     unittest.main()

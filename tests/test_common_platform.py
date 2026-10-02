@@ -377,5 +377,32 @@ class PopenDetachedTests(unittest.TestCase):
         self.assertFalse(calls[1] & _common._CREATE_BREAKAWAY_FROM_JOB)
 
 
+class GitDrvfsWorkaroundTests(unittest.TestCase):
+    @posix_only
+    def test_drvfs_mount_adds_index_workaround_flags(self) -> None:
+        mounts = "/dev/sda1 /mnt/c drvfs rw,relatime 0 0\n"
+        repo = Path("/mnt/c/Users/demo/repo")
+        with mock.patch.object(Path, "read_text", return_value=mounts), \
+                mock.patch.object(_common.os, "name", "posix"):
+            self.assertEqual(
+                _common.git_drvfs_config_flags(repo),
+                ("-c", "core.preloadindex=false", "-c", "index.threads=1"),
+            )
+
+    @posix_only
+    def test_native_linux_mount_has_no_workaround(self) -> None:
+        mounts = "/dev/sda1 / ext4 rw 0 0\n"
+        repo = Path("/home/demo/repo")
+        with mock.patch.object(Path, "read_text", return_value=mounts), \
+                mock.patch.object(_common.os, "name", "posix"):
+            self.assertEqual(_common.git_drvfs_config_flags(repo), ())
+
+    def test_git_index_lock_retryable(self) -> None:
+        self.assertTrue(_common.git_index_lock_retryable(
+            "fatal: Unable to create '/repo/.git/index.lock': File exists."
+        ))
+        self.assertFalse(_common.git_index_lock_retryable("fatal: not a git repository"))
+
+
 if __name__ == "__main__":
     unittest.main()

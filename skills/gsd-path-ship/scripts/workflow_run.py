@@ -77,7 +77,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
         head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
                               cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
         step("check_task_briefs.py", "--repo", str(repo), "--base", head,
-             "--tasks-dir", f"{project_dir}/tasks")
+             "--tasks-dir", f"{project_dir}/tasks", "--project-dir", project_dir)
         panel = ["validate-plan", "--plan", str(repo / project_dir / "plan/PLAN.md"),
                  "--intent", str(repo / project_dir / "intent/INTENT.md")]
         charter = repo / ".project/CHARTER.md"
@@ -199,7 +199,7 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
             head = subprocess.run(["git", "rev-parse", "--verify", "HEAD"],
                                   cwd=repo, capture_output=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
             step("check_task_briefs.py", "--repo", str(repo), "--base", head,
-                 "--tasks-dir", f"{project_dir}/tasks")
+                 "--tasks-dir", f"{project_dir}/tasks", "--project-dir", project_dir)
             step("check_handoffs.py", "plan", *common)
         elif action == "prepare-task" and _task_member(repo, project_dir, task_id):
             # A member task works in a sidecar of its member; its Verify runs there at finish.
@@ -257,6 +257,9 @@ def run_workflow(repo: Path, action: str, project_dir: str, expected_head: str =
                         ruled.add(row[0])
                 if any(len(row) == 6 and row[4] == "NEEDS-USER" and row[0] not in ruled for row in queue):
                     raise StepFailed("DOCS-AUDIT.md has NEEDS-USER rows without a user ruling")
+            if kind == "intent":
+                # Malformed or incomplete spec-probe tables are not a pre-approvable draft.
+                step("check_handoffs.py", "intent", *common)
             if kind == "plan":
                 if gate_plan()["mode"] != "off":
                     raise StepFailed("pre-approval requires review_panel off")

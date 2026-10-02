@@ -2,6 +2,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -679,6 +680,17 @@ class LoopRunTests(unittest.TestCase):
             result = self.command(spec, "check")
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("run", json.loads(result.stdout)["decision"])
+
+
+class RunShellTests(unittest.TestCase):
+    def test_run_shell_returns_after_command_timeout(self) -> None:
+        start = time.monotonic()
+        exit_code, output = loop_run.run_shell("sleep 30", 0.2)
+        elapsed = time.monotonic() - start
+        self.assertIsNone(exit_code)
+        self.assertIn("timed out", output)
+        self.assertLess(elapsed, 10.0)
+
 
 if __name__ == "__main__":
     unittest.main()

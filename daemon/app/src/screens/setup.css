@@ -1,0 +1,54 @@
+/* Setup wizard steps 2 to 4, and the project page's setup cards. */
+.lead.setup-lead{margin-bottom:26px}
+button.step{cursor:pointer;width:100%}
+button.step:disabled{cursor:default}
+.step.done .step-mark{background:var(--done);color:var(--card);box-shadow:none}
+.sk-agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.sk-agent{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:8px;cursor:pointer;background:var(--card);border:1px solid var(--line)}
+.sk-agent.on{border-color:var(--accent-fill)}
+.sk-agent.missing{opacity:.8}
+.sk-agent input{width:18px;height:18px;margin:0;flex:none;accent-color:var(--accent-fill)}
+.sk-agent b,.sk-agent small{display:block}
+.sk-agent small{font-size:12px;color:var(--faint)}
+.setup-install{padding:18px;display:grid;gap:16px}
+.line.wrap{flex-wrap:wrap;gap:14px}
+.sk-field-side{margin-top:16px}
+.setup-install .sk-field select{min-width:230px}
+.sk-targets{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sk-targets div{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);font-size:13px}
+.sk-targets div:last-child{border-bottom:0}
+.sk-targets .mono{font-size:12px;color:var(--dim);overflow-wrap:anywhere;text-align:right}
+.sk-folders{padding:4px 18px}
+.sk-folder{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.sk-folder:last-child{border-bottom:0}
+.sk-folder .mono{overflow-wrap:anywhere}
+.sk-ask-box{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;padding:12px 16px;border-radius:8px;background:var(--chrome);font-size:13px}
+.sk-ask-box .grow{min-width:240px;overflow-wrap:anywhere}
+.setup-body .error{margin:14px 0 0}
+.sk-folder-count{margin-top:14px;padding:14px 18px;max-width:50%}
+.sk-folder-count b{display:block;font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
+.sk-folder-count span{color:var(--dim);font-size:12.5px}
+
+/* Project page: right column */
+.setup-card{margin-top:20px}
+.setup-card+.setup-card{margin-top:18px}
+.setup-card-head{padding:12px 16px;font-size:12.5px;font-weight:650}
+.setup-card-head span{margin-left:6px;font-size:12px;font-weight:400;color:var(--faint)}
+.setup-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.setup-row .error{margin:0}
+.setup-label{font-size:11px;color:var(--faint)}
+.setup-value{font-weight:600;overflow-wrap:anywhere}
+.setup-row .sub{font-size:12px}
+.setup-path{font-size:11px;color:var(--faint);overflow-wrap:anywhere}
+.sk-ask,.sk-doctor{grid-column:1/-1}
+.sk-ask{display:grid;gap:8px}
+.sk-doctor{margin:0;padding:10px 12px;list-style:none;border-radius:8px;background:var(--chrome);font:12px/1.7 var(--mono);color:var(--dim);overflow-wrap:anywhere}
+.sk-finding{color:var(--danger)}
+.sk-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.member-name{font-weight:600;text-decoration:none}
+.member-reason{font-size:12px;color:var(--danger);margin-top:5px;overflow-wrap:anywhere}
+.setup-foot-note{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
+.see-charts{display:inline-block;margin-top:8px;font-size:12.5px;text-decoration:none}
+.sk-remove{border-top:1px solid var(--line);margin-top:26px;padding-top:8px;display:grid;gap:10px;justify-items:start}
+.sk-remove>*{max-width:100%}
+.sk-remove .sk-plan,.sk-remove .sk-ask{justify-self:stretch}

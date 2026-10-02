@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import errno
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -31,6 +32,7 @@ try:
     from scripts import (_common, archive_milestone, build_state, discussion_validate, isolation,
                          pipeline_state, review_findings, review_panel, workflow_run, task_context, model_policy)
     from scripts import check_handoffs as contracts
+    from scripts.pipeline_git import is_bound_branch
 except ImportError:  # bundled copy inside a skill's scripts directory
     import _common
     import archive_milestone
@@ -44,6 +46,7 @@ except ImportError:  # bundled copy inside a skill's scripts directory
     import review_panel
     import workflow_run
     import model_policy
+    from pipeline_git import is_bound_branch
 
 if os.name == "nt":
     import msvcrt
@@ -71,10 +74,89 @@ class DriverStop(RuntimeError):
 STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
                contracts.HandoffError, review_findings.ReviewFindingsError,
                pipeline_state.PipelineStateError, archive_milestone.ArchiveError, model_policy.PolicyError)
+_RUNTIME_ACTIVATION_ORDER = (
+    "_common",
+    "pipeline_git",
+    "worktree_paths",
+    "build_recovery",
+    "isolation",
+    "pipeline_state",
+    "state_checkpoint",
+    "check_task_briefs",
+    "build_state",
+    "check_handoffs",
+    "task_context",
+    "archive_milestone",
+    "review_findings",
+    "model_policy",
+)
 RECOVERY_BLOCKED = "recovery blocked"
 # The stops the build contract answers with build/blocked when the round raises them (steps 1 and 2);
 # the same stops from review, panel, or skeptics stay with the parent.
 BLOCKING_STOPS = {"dependency-deadlock": "dependency deadlock", RECOVERY_BLOCKED: "blocked recovery"}
+
+
+def _bundled_helpers() -> bool:
+    return "scripts.isolation" not in sys.modules
+
+
+def _refresh_stop_errors() -> None:
+    global STOP_ERRORS
+    STOP_ERRORS = (DriverStop, isolation.IsolationError, build_state.BuildStateError,
+                   contracts.HandoffError, review_findings.ReviewFindingsError,
+                   pipeline_state.PipelineStateError, archive_milestone.ArchiveError,
+                   model_policy.PolicyError)
+
+
+def _reload_pinned_modules(runtime_root: Path) -> None:
+    global isolation, build_state, task_context, contracts, pipeline_state
+    global archive_milestone, review_findings, model_policy
+    if _bundled_helpers():
+        path = str(runtime_root)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+        for name in _RUNTIME_ACTIVATION_ORDER:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+        isolation = sys.modules["isolation"]
+        build_state = sys.modules["build_state"]
+        task_context = sys.modules["task_context"]
+        contracts = sys.modules["check_handoffs"]
+        pipeline_state = sys.modules["pipeline_state"]
+        archive_milestone = sys.modules["archive_milestone"]
+        review_findings = sys.modules["review_findings"]
+        model_policy = sys.modules["model_policy"]
+    else:
+        import scripts
+        path = str(runtime_root)
+        if path not in scripts.__path__:
+            scripts.__path__ = [path, *[entry for entry in scripts.__path__ if entry != path]]
+        for name in _RUNTIME_ACTIVATION_ORDER:
+            module = sys.modules.get(f"scripts.{name}")
+            if module is not None:
+                importlib.reload(module)
+        isolation = scripts.isolation
+        build_state = scripts.build_state
+        task_context = scripts.task_context
+        contracts = scripts.check_handoffs
+        pipeline_state = scripts.pipeline_state
+        archive_milestone = scripts.archive_milestone
+        review_findings = scripts.review_findings
+        model_policy = scripts.model_policy
+    _refresh_stop_errors()
+
+
+def _activate_pinned_runtime(repo: Path) -> None:
+    if not os.path.lexists(repo / ".gsd-path/runtime.json"):
+        return
+    resolved = subprocess.run(
+        [sys.executable, "-B", str(repo / ".gsd-path/status_runtime.py"),
+         "--repo", str(repo), "--runtime-path"],
+        cwd=repo, capture_output=True, encoding="utf-8", errors="replace")
+    if resolved.returncode:
+        raise DriverStop(resolved.stderr.strip() or "pinned runtime resolution failed")
+    _reload_pinned_modules(Path(resolved.stdout.strip()))
 
 
 def now() -> str:
@@ -105,6 +187,169 @@ def attempts_used(root: Path, task_id: str) -> int:
     """Dispatches of this task in this milestone, excluding question redispatches."""
     return sum(1 for path in (root / task_id).glob("attempt-*/state.json")
                if load_state(path).get("origin") == "dispatch")
+
+
+def dispatch_primary(worktree: Path) -> Path:
+    """The bound-branch primary that owns dispatch records for a task checkout."""
+    worktree = worktree.resolve()
+    if is_bound_branch(isolation.require_attached(worktree)):
+        return worktree
+    matches = [
+        path.resolve()
+        for path, branch in isolation._registered_worktrees(worktree).items()
+        if branch and is_bound_branch(branch.removeprefix("refs/heads/"))
+    ]
+    if len(matches) != 1:
+        raise isolation.IsolationError(
+            "dispatch records require exactly one primary worktree for the bound branch")
+    return matches[0]
+
+
+def should_open_native_shell(root: Path, task_id: str, base: str) -> bool:
+    """Whether activate-task should append a native dispatch attempt record."""
+    task_dir = root / task_id
+    if not task_dir.is_dir():
+        return True
+    attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                      key=lambda path: attempt_number(path.parent))
+    if not attempts:
+        return True
+    latest = read_attempt(attempts[-1])
+    if latest.get("outcome") is None and not latest.get("command"):
+        return False
+    if latest.get("outcome") == "blocked" and str(latest.get("base")) == base:
+        return False
+    return True
+
+
+def open_native_shell(primary: Path, *, task_id: str, base: str, worktree: str, task_file: str,
+                      task_branch: Optional[str], mode: str, wave: Optional[int] = None,
+                      title: Optional[str] = None, files: Optional[List[str]] = None,
+                      sidecar: Optional[object] = None, member: Optional[str] = None,
+                      member_base: Optional[str] = None, contract_file: Optional[str] = None) -> None:
+    """Open a dispatch attempt record for a host-spawned coder before it runs."""
+    root = records_root(primary)
+    root.mkdir(parents=True, exist_ok=True)
+    record: Dict[str, object] = {
+        "task_id": task_id,
+        "base": base,
+        "worktree": worktree,
+        "task_file": task_file,
+        "task_branch": task_branch,
+        "mode": mode,
+        "origin": "dispatch",
+        "outcome": None,
+        "dispatched_at": now(),
+        "native": True,
+    }
+    if wave is not None:
+        record["wave"] = wave
+    if title is not None:
+        record["title"] = title
+    if files is not None:
+        record["files"] = files
+    if sidecar is not None:
+        record["sidecar"] = sidecar
+    if member is not None:
+        record["member"] = member
+    if member_base is not None:
+        record["member_base"] = member_base
+    if contract_file is not None:
+        record["contract_file"] = contract_file
+    task_dir = root / task_id
+    if not should_open_native_shell(root, task_id, base):
+        attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                          key=lambda path: attempt_number(path.parent))
+        if not attempts:
+            return
+        state_path = attempts[-1]
+        state = load_state(state_path)
+        if state.get("outcome") is not None or state.get("command"):
+            return
+        attempt = state.get("attempt")
+        state.update(record)
+        if attempt is not None:
+            state["attempt"] = attempt
+        state["outcome"] = None
+        for key in ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit",
+                    "answer", "command", "usage_recorded"):
+            state.pop(key, None)
+        save_state(state_path, state)
+        exit_path = state_path.with_name("exit.json")
+        if exit_path.is_file():
+            exit_path.unlink()
+        return
+    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
+    attempt_dir = task_dir / f"attempt-{attempt}"
+    attempt_dir.mkdir(parents=True)
+    record["attempt"] = attempt
+    save_state(attempt_dir / "state.json", record)
+
+
+def record_native_activation(worktree: Path, activation: Dict[str, object]) -> None:
+    """Record a native task activation in the milestone dispatch ledger."""
+    primary = dispatch_primary(worktree)
+    task_file = str(activation["task_file"])
+    task_path = worktree / task_file
+    fields, _ = isolation.task_frontmatter(task_path.read_text(encoding="utf-8"))
+    task_id = str(activation.get("task_id") or (fields or {}).get("id"))
+    wave = None
+    if fields and fields.get("wave") is not None:
+        wave = int(fields["wave"])
+    open_native_shell(
+        primary,
+        task_id=task_id,
+        base=str(activation["base"]),
+        worktree=str(activation["worktree"]),
+        task_file=task_file,
+        task_branch=activation.get("task_branch"),
+        mode="parallel" if activation.get("task_branch") else "serial",
+        wave=wave,
+        title=str(fields.get("title")) if fields else None,
+        files=list(fields.get("files") or []) if fields else None,
+    )
+
+
+def record_native_member_activation(coordinator: Path, activation: Dict[str, object]) -> None:
+    """Record a native member-task activation in the coordinator dispatch ledger."""
+    task_file = str(activation["task_file"])
+    sidecar = Path(str(activation["worktree"]))
+    copy = Path(str(activation["copy"]))
+    fields, _ = isolation.task_frontmatter(copy.read_text(encoding="utf-8"))
+    task_id = str(activation.get("task_id") or (fields or {}).get("id"))
+    wave = None
+    if fields and fields.get("wave") is not None:
+        wave = int(fields["wave"])
+    open_native_shell(
+        coordinator,
+        task_id=task_id,
+        base=str(activation["base"]),
+        worktree=str(sidecar),
+        task_file=copy.relative_to(sidecar).as_posix(),
+        task_branch=str(activation["task_branch"]),
+        mode="member",
+        wave=wave,
+        title=str(fields.get("title")) if fields else None,
+        files=list(fields.get("files") or []) if fields else None,
+        member=str(activation["member"]),
+        member_base=str(activation["member_base"]),
+        contract_file=task_file,
+    )
+
+
+def reusable_shell_attempt(root: Path, state: Dict[str, object]) -> Optional[Path]:
+    """A native activation shell the driver can attach its child wrapper to."""
+    task_dir = root / str(state["task_id"])
+    attempts = sorted(task_dir.glob("attempt-*/state.json"),
+                      key=lambda path: attempt_number(path.parent))
+    if not attempts:
+        return None
+    prior = read_attempt(attempts[-1])
+    if prior.get("outcome") is not None or prior.get("command") or prior.get("pid"):
+        return None
+    if str(prior.get("base")) != str(state.get("base")):
+        return None
+    return attempts[-1].parent
 
 
 def acquire_lock(primary: Path) -> BinaryIO:
@@ -307,7 +552,7 @@ def retain_selection(root: Path, state: Dict[str, object]) -> Dict[str, object]:
                 raise DriverStop('cannot redispatch while the previous child is active')
             if prior.get('model_selection'):
                 state['model_selection'] = prior['model_selection']
-            else:
+            elif prior.get('command'):
                 state['command'] = prior['command']
     reassignment = task_dir / 'model-reassignment.json'
     if reassignment.exists():
@@ -323,13 +568,23 @@ def spawn(root: Path, state: Dict[str, object], options: argparse.Namespace,
     state = retain_selection(root, state)
     task_dir = root / str(state["task_id"])
     argv, selection = selected_command(state, options, command or options.child_command)
-    attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
-    attempt_dir = task_dir / f"attempt-{attempt}"
-    attempt_dir.mkdir(parents=True)
+    attempt_dir = reusable_shell_attempt(root, state)
+    if attempt_dir is None:
+        attempt = max((attempt_number(path) for path in task_dir.glob("attempt-*")), default=0) + 1
+        attempt_dir = task_dir / f"attempt-{attempt}"
+        attempt_dir.mkdir(parents=True)
+    else:
+        attempt = attempt_number(attempt_dir)
     stale = ("pid", "finished_at", "exit_code", "timed_out", "reason", "question", "commit", "answer",
              "usage_recorded")
-    state = {key: value for key, value in state.items()
-             if not key.startswith("_") and key not in stale}
+    incoming = {key: value for key, value in state.items()
+                if not key.startswith("_") and key not in stale}
+    if (attempt_dir / "state.json").is_file():
+        preserved = {key: value for key, value in read_attempt(attempt_dir / "state.json").items()
+                     if not key.startswith("_") and key not in stale}
+        state = {**preserved, **incoming}
+    else:
+        state = incoming
     if selection is not None:
         state['model_selection'] = selection
     state.update({"attempt": attempt, "command": argv,
@@ -717,6 +972,9 @@ class Round:
                 elif state.get("finished_at") is None:
                     if child_running(state):
                         self.receipt["in_flight"].append(self.summary(state))
+                    elif (state.get("native") and not state.get("command") and not state.get("pid")
+                          and self.isolate_live(state)):
+                        continue
                     else:
                         self.fail(state, ORPHANED)
                 else:
@@ -790,8 +1048,14 @@ class Round:
     # dispatch -------------------------------------------------------------
 
     def in_flight_states(self) -> List[Dict[str, object]]:
-        return [state for state in latest_states(self.root)
-                if state.get("outcome") is None and state.get("wave") == self.receipt["wave"]]
+        states = []
+        for state in latest_states(self.root):
+            if state.get("outcome") is not None or state.get("wave") != self.receipt["wave"]:
+                continue
+            if state.get("native") and not state.get("command") and not state.get("pid"):
+                continue
+            states.append(state)
+        return states
 
     def checkpoint_bookkeeping(self) -> None:
         open_ids = {state["task_id"] for state in latest_states(self.root)
@@ -2026,6 +2290,7 @@ def main(argv=None) -> int:
     if arguments.action == "_child":
         return child_main(arguments.state)
     primary = arguments.repo.resolve()
+    _activate_pinned_runtime(primary)
     lock = None
     try:
         if arguments.action != "status":
@@ -2078,8 +2343,22 @@ def main(argv=None) -> int:
                     raise DriverStop(f"task {arguments.task_id} dispatch record is {record['outcome']}; "
                                      "use round")
                 if record.get("finished_at") is None:
-                    raise DriverStop(f"task {arguments.task_id} still has a running child")
-                current.classify(record)
+                    if child_running(record):
+                        raise DriverStop(f"task {arguments.task_id} still has a running child")
+                    if record.get("command"):
+                        raise DriverStop(f"task {arguments.task_id} still has a running child")
+                    live = state_from_task(primary, arguments.task_id)
+                    merged = dict(record, **live)
+                    merged["_path"] = record["_path"]
+                    try:
+                        landing = finish_task(primary, merged)
+                    except STOP_ERRORS as error:
+                        update_state(record, outcome="blocked", reason=str(error))
+                        raise
+                    update_state(record, outcome="landed", commit=landing["commit"])
+                    current.receipt["landed"].append(landing)
+                else:
+                    current.classify(record)
             else:  # a coder dispatched by hand: derive the isolate from the task frontmatter
                 current.receipt["landed"].append(
                     finish_task(primary, native or state_from_task(primary, arguments.task_id)))

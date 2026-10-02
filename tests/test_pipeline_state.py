@@ -12,6 +12,8 @@ from unittest import mock
 from scripts import pipeline_git, pipeline_state, state_checkpoint, state_promote
 from tests.test_task_briefs import PLAN_WAVE, TASK_TEMPLATE
 
+PIPELINE_STATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_state.py"
+
 
 SETTLED_SYNTHESIS = """# Synthesis
 
@@ -903,6 +905,49 @@ class PipelineStateTests(unittest.TestCase):
                     result = pipeline_state.transition_state(repo, expected, changes, event)
                     self.assertEqual(result["state"]["status"], changes["status"])
 
+    def test_define_done_transition_requires_complete_probe_tables(self) -> None:
+        criteria = "## Success criteria\n\n1. First outcome.\n2. Second outcome.\n"
+        head = (
+            "## Edge coverage\n\n"
+            "| Edge | Criterion | Category | Disposition | Detail |\n"
+            "|------|-----------|----------|-------------|--------|\n"
+        )
+        incomplete = head + "| E1 | SC1 | none | dismissed | static |\n"
+        complete = incomplete + "| E2 | SC2 | none | dismissed | static |\n"
+        expected = {"phase": "define", "status": "active", "branch": "gsd-path/M001", "archive": None}
+        changes = {"status": "done"}
+        event = "intent approved"
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / ".project"
+            (project / "intent").mkdir(parents=True)
+            state = project / "STATE.md"
+            intent = project / "intent/INTENT.md"
+            active = state_text(phase="define", status="active", branch="gsd-path/M001").encode("utf-8")
+            state.write_bytes(active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + incomplete).encode("utf-8"))
+            with self.assertRaisesRegex(pipeline_state.PipelineStateError, "define handoff failed"):
+                pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(state.read_bytes(), active)
+
+            intent.write_bytes(("# Intent\n\n" + criteria + "\n" + complete).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # An intent written before the probe carries no tables and still passes.
+            state.write_bytes(active)
+            intent.write_bytes(("# Intent\n\n" + criteria).encode("utf-8"))
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
+            # Program mode has a CHARTER and no INTENT.md.
+            state.write_bytes(active)
+            intent.unlink()
+            (project / "CHARTER.md").write_bytes(b"# Charter\n")
+            result = pipeline_state.transition_state(repo, expected, changes, event)
+            self.assertEqual(result["state"]["status"], "done")
+
     def test_transition_compares_expected_state_before_atomic_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -1000,6 +1045,89 @@ class PipelineStateTests(unittest.TestCase):
                     {"phase": "build", "status": "active"},
                     "start somehow",
                 )
+
+    def _plan_intent_correction_repo(self, *, status: str = "active") -> Path:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repo = Path(temporary.name)
+        run_git(repo, "init", "-b", "gsd-path/M001")
+        run_git(repo, "config", "user.name", "GSD Path Test")
+        run_git(repo, "config", "user.email", "test@example.com")
+        project = repo / ".project"
+        for directory in ("plan", "intent"):
+            (project / directory).mkdir(parents=True)
+        (project / "STATE.md").write_bytes(
+            state_text(
+                phase="plan",
+                status=status,
+                branch="gsd-path/M001",
+            ).encode("utf-8"),
+        )
+        (project / "intent/INTENT.md").write_bytes(
+            b"# Intent\n\nLane: quick\n\n## Success criteria\n\n- SC1: observable behavior\n",
+        )
+        (project / "plan/PLAN.md").write_bytes(PLAN_WAVE.format(title="demo").encode("utf-8"))
+        run_git(repo, "add", ".project")
+        run_git(repo, "commit", "-m", "fixture: plan intent correction base")
+        return repo
+
+    def test_plan_intent_correction_transitions_to_define_from_active(self) -> None:
+        repo = self._plan_intent_correction_repo()
+        result = pipeline_state.transition_state(
+            repo,
+            {
+                "phase": "plan",
+                "status": "active",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            {"phase": "define", "status": "active"},
+            "plan intent corrections requested",
+        )
+        self.assertEqual(result["state"]["phase"], "define")
+        self.assertEqual(result["state"]["status"], "active")
+        text = (repo / ".project/STATE.md").read_text(encoding="utf-8")
+        self.assertIn("build recovery:", text)
+        recovery = pipeline_state._build_recovery().context(repo, text)
+        self.assertTrue(recovery and recovery["active"])
+        self.assertEqual(recovery["source"], "plan")
+        self.assertEqual(recovery["kind"], "define")
+        route = pipeline_state.route_state(repo)["route"]
+        self.assertEqual(route["phase"], "define")
+        self.assertEqual(route["mode"], "corrections")
+
+    def test_plan_intent_correction_transitions_to_define_from_blocked(self) -> None:
+        repo = self._plan_intent_correction_repo(status="blocked")
+        result = pipeline_state.transition_state(
+            repo,
+            {
+                "phase": "plan",
+                "status": "blocked",
+                "branch": "gsd-path/M001",
+                "archive": None,
+            },
+            {"phase": "define", "status": "active"},
+            "plan intent corrections requested",
+        )
+        self.assertEqual((result["state"]["phase"], result["state"]["status"]), ("define", "active"))
+
+    def test_plan_intent_correction_requires_exact_event(self) -> None:
+        repo = self._plan_intent_correction_repo()
+        with self.assertRaisesRegex(
+            pipeline_state.PipelineStateError,
+            "requires event: plan intent corrections requested",
+        ):
+            pipeline_state.transition_state(
+                repo,
+                {
+                    "phase": "plan",
+                    "status": "active",
+                    "branch": "gsd-path/M001",
+                    "archive": None,
+                },
+                {"phase": "define", "status": "active"},
+                "build intent corrections requested",
+            )
 
     def test_transition_cannot_enter_build_on_lookahead_track(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1473,7 +1601,7 @@ class PipelineStateTests(unittest.TestCase):
                 state_path.write_bytes(content.encode("utf-8"))
                 command = [
                     sys.executable,
-                    str(Path(pipeline_state.__file__).resolve()),
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
                     "transition",
                     "--repo",
                     str(repo),
@@ -1606,7 +1734,7 @@ class PipelineStateTests(unittest.TestCase):
                 )
                 command = [
                     sys.executable,
-                    str(Path(pipeline_state.__file__).resolve()),
+                    str(PIPELINE_STATE_SCRIPT.resolve()),
                     "approve",
                     "--repo",
                     str(repo),
@@ -1634,7 +1762,7 @@ class PipelineStateTests(unittest.TestCase):
             repo, _ = self._approval_repo(tmp, "plan")
             command = [
                 sys.executable,
-                str(Path(pipeline_state.__file__).resolve()),
+                str(PIPELINE_STATE_SCRIPT.resolve()),
                 "approve",
                 "--repo",
                 str(repo),

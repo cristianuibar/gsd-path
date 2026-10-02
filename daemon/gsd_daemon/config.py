@@ -81,7 +81,13 @@ class Config:
     def save(self, path: Optional[Union[str, Path]] = None) -> Path:
         resolved = resolve_config_path(path)
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+        # Keep keys this class does not own (for example plugin_repo).
+        try:
+            current = json.loads(resolved.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        data = {**current, **self.to_dict()} if isinstance(current, dict) else self.to_dict()
+        payload = json.dumps(data, indent=2, sort_keys=True) + "\n"
         fd, tmp = tempfile.mkstemp(prefix=resolved.name + ".", dir=str(resolved.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:

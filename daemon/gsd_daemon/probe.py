@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from . import gitinfo
+from . import gitinfo, subprocess_platform
 from .history import resolve_history_path
 from .model import ProjectStatus, TaskSummary
 
@@ -630,7 +630,7 @@ def _runtime_status(root: str) -> Optional[dict]:
     try:
         # The daemon's own interpreter: python3 is usually absent on Windows,
         # where process start and git are also slow enough to need the margin.
-        result = subprocess.run(
+        result = subprocess_platform.run(
             [sys.executable, "-B", str(runtime), "status", "--repo", root],
             capture_output=True,
             encoding="utf-8",

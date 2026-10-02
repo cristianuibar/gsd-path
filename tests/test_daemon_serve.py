@@ -141,6 +141,10 @@ class ServeTests(unittest.TestCase):
         payload = json.loads(body)
         self.assertEqual(payload["schema"], "gsd-path-daemon/status/v1")
         self.assertIn("generated_at", payload)
+        # The app identifies and compares a running daemon by these two fields.
+        from gsd_daemon import __version__
+        self.assertEqual(payload["daemon"]["version"], __version__)
+        self.assertEqual(payload["daemon"]["pid"], os.getpid())
         self.assertEqual(len(payload["projects"]), 1)
         project = payload["projects"][0]
         for key in ("project", "milestone", "phase", "status", "branch", "git",
@@ -367,7 +371,8 @@ class PostOriginTests(unittest.TestCase):
     """Every POST route refuses cross-site pages, DNS rebinding, and non-JSON bodies."""
 
     ROUTES = ("/api/plugin/install", "/api/plugin/update", "/api/plugin/uninstall",
-              "/api/config/parents", "/api/path-config", "/api/refresh")
+              "/api/plugin/check", "/api/plugin/release",
+              "/api/config/parents", "/api/config", "/api/path-config", "/api/refresh")
 
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -444,6 +449,83 @@ class PostOriginTests(unittest.TestCase):
         status, payload = self.post("/api/refresh", origin, body="")  # dashboard sends no body or type
         self.assertEqual(status, 200, payload)
         self.assertEqual(self.scans, [1])
+
+
+class PostTokenTests(PostOriginTests):
+    """With a token set, every POST also needs the X-GSD-Path-Token header."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.server.RequestHandlerClass.token = "s3cret"
+        self.json = {"Content-Type": "application/json"}
+
+    def test_missing_token_refused(self):
+        self.assert_refused(self.json, 403)
+
+    def test_wrong_token_refused(self):
+        self.assert_refused({**self.json, "X-GSD-Path-Token": "s3cre"}, 403)
+
+    def test_refusal_names_the_app(self):
+        _, payload = self.post("/api/refresh", self.json)
+        self.assertIn("OpenGSD Path app", payload["error"])
+
+    def test_same_origin_json_requests_still_work(self):
+        token = {**self.json, "X-GSD-Path-Token": "s3cret"}
+        status, payload = self.post("/api/plugin/uninstall", token)
+        self.assertEqual((status, payload["ok"]), (200, True), payload)
+        self.plugin.apply_plan.assert_called_once_with({"plan": []}, confirm=True)
+        status, payload = self.post("/api/refresh", token)
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(self.scans, [1])
+
+    def test_reads_need_no_token(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("GET", "/status")
+        self.assertEqual(conn.getresponse().status, 200)
+        conn.close()
+
+
+class RequireTokenCliTests(unittest.TestCase):
+    """`serve --require-token` creates the token file and enforces its content."""
+
+    def test_token_file_gates_posts_and_is_reused(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        home = Path(tmp.name).resolve()
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home),
+               "GSD_DAEMON_CONFIG": str(home / "daemon.json"),
+               "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "daemon"),
+               "PYTHONUNBUFFERED": "1"}
+        token_file = home / ".gsd-path" / "app" / "api-token"
+
+        def start():
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "gsd_daemon", "serve", "--port", "0", "--require-token"],
+                env=env, stdout=subprocess.PIPE, text=True)
+            self.addCleanup(proc.wait)
+            self.addCleanup(proc.kill)
+            self.addCleanup(proc.stdout.close)
+            return proc, int(proc.stdout.readline().strip().rsplit(":", 1)[1])
+
+        def refresh(port, headers):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("POST", "/api/refresh", headers=headers)
+            status = conn.getresponse().status
+            conn.close()
+            return status
+
+        proc, port = start()
+        token = token_file.read_text(encoding="utf-8")
+        self.assertGreaterEqual(len(token), 32)
+        if os.name != "nt":
+            self.assertEqual(token_file.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(refresh(port, {}), 403)
+        self.assertEqual(refresh(port, {"X-GSD-Path-Token": token}), 200)
+        proc.kill()
+        proc.wait()
+        _, port = start()
+        self.assertEqual(token_file.read_text(encoding="utf-8"), token)
+        self.assertEqual(refresh(port, {"X-GSD-Path-Token": token}), 200)
 
 
 class BrowseEndpointTests(unittest.TestCase):

@@ -46,7 +46,9 @@ Resolve sibling links against this role file's directory.
   from the same model family is one evidence path; independence comes
   from re-run evidence, different sources, or a different model family.
 - Pass any reasonable satisfied reading of an ambiguous wave criterion and
-  warn that it needs tightening.
+  warn that it needs tightening, unless INTENT.md `## Edge coverage` or
+  `## Prohibitions` rules on that reading: a ruling there binds, and a
+  reading that contradicts it fails.
 - Do not edit code, tasks, plans, or implementation state.
 
 Return verdicts and the review output path without extra prose.

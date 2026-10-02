@@ -100,6 +100,10 @@ Obtain a confident answer in every area before finishing:
    give every named surface at least one success criterion observable
    there. A criterion satisfied by a passing test alone does not cover a
    surface.
+9. **Edges and prohibitions** — once the success criteria are drafted, run
+   the [spec-reach probes](references/spec-probes.md): every applicable edge
+   and every kept prohibition gets the user's ruling in INTENT.md
+   `## Edge coverage` and `## Prohibitions`.
 
 ## Program mode
 
@@ -149,7 +153,10 @@ State ownership. There is no re-interview of charter or roadmap scope:
    `Lane: milestone`, `Surfaces:` copied verbatim from the entry, and
    `Review panel:` copied from CHARTER.md (default
    the configured preference when CHARTER omits it). The confirmation may override the copied
-   panel value; do not invent `detected` or a named list. When brownfield,
+   panel value; do not invent `detected` or a named list. Run the
+   [spec-reach probes](references/spec-probes.md) over the derived criteria
+   and draft `## Edge coverage` and `## Prohibitions` with recommended
+   rulings. When brownfield,
    fill `## Current state` from the map, record doc-vs-code rulings as in
    Brownfield mode, and add protected existing behavior under Scope out.
    Write Ground truth paths from the track root: `.project` normally, or
@@ -157,7 +164,9 @@ State ownership. There is no re-interview of charter or roadmap scope:
    active `research/` paths.
 3. Present one confirmation, not an interview: playback the derivation (and
    brownfield ground truth when present), link the resolved absolute INTENT.md
-   path, and ask approve or adjust. A requested change that contradicts the
+   path, and ask approve or adjust. The confirmation lists each proposed edge
+   and prohibition ruling for the user to accept or change; it never rules on
+   them silently. A requested change that contradicts the
    charter or the resolved roadmap entry is a scope change — this phase never
    edits the roadmap; surface it to the user for a `$gsd-path-roadmap` re-slice
    at the next milestone boundary.
@@ -254,7 +263,15 @@ question. The rules change for every primary mode:
    the brownfield map already established. Milestone mode skips this step.
 5. Stop when coverage is complete or the user says `enough`. Record remaining
    uncertainty under `## Open questions` with `RESEARCH` or `NEEDS-USER`.
-6. Classify the proposed milestone lane before writing the approval draft.
+   `enough` does not skip the next step.
+6. In standard mode, run the [spec-reach probes](references/spec-probes.md)
+   over the drafted success criteria: one question round for edges, then one
+   for kept prohibitions, each with a recommended ruling first. A ruling
+   observable where the user sees the work becomes or amends a success
+   criterion; write every ruling into `## Edge coverage` and
+   `## Prohibitions`. Program mode skips this step (each milestone runs it
+   in milestone mode); milestone mode runs it inside its confirmation.
+7. Classify the proposed milestone lane before writing the approval draft.
    Milestone mode keeps `Lane: milestone` and skips this classification.
    Program mode writes CHARTER.md instead of INTENT.md. Otherwise choose
    `quick` when scope fits at most two deliverable-sized tasks (project
@@ -275,6 +292,11 @@ question. The rules change for every primary mode:
 ## Output contract
 
 At approval, retain the already reviewed `Lane:` value and its one-line reason.
+Before every approval question on INTENT.md, run the bundled `python3
+<absolute-bundled-script> intent --repo <absolute-root>` helper
+(`scripts/check_handoffs.py`, plus `--project-dir .project/next` in
+lookahead). It checks the success criteria, Surfaces, and both probe tables;
+fix a failure in the draft before asking. It approves nothing.
 Before presenting an approval draft without a CHARTER or explicit panel choice,
 read `settings.review_panel.value` from the selected runtime's `path_config.py
 show --repo <absolute-root>` (bundle for legacy projects; off for older selected
@@ -302,5 +324,8 @@ Use the executable phase handoff in AGENTS.md for the next action.
 - In brownfield mode, state mapped facts for correction; never re-ask them.
 - Treat solution-shaped problems as hypotheses and uncover the underlying pain.
 - Preserve vetoes and corrections verbatim.
+- Never rule on an edge's behavior or a prohibition yourself; recommend,
+  then record the user's ruling. An edge the user has not ruled on is a
+  required answer, including under pre-approval.
 - Wrap up when every coverage-checklist area is answered or the user signals
   done, and tag remaining gaps.

@@ -293,20 +293,48 @@ def _symbolic_branch(repo: Path) -> str:
     return result.stdout.strip()
 
 
+def worktree_list_porcelain(repo: Path) -> tuple[str, bool]:
+    """Return worktree list output and whether it is NUL-separated."""
+    result = _run_git(repo, "worktree", "list", "--porcelain", "-z", check=False)
+    if result.returncode == 0:
+        return result.stdout, True
+    result = _run_git(repo, "worktree", "list", "--porcelain", check=False)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip() or "could not list worktrees"
+        raise PipelineGitError(message)
+    return result.stdout, False
+
+
+def branch_worktrees_from_porcelain(output: str, *, nul_separated: bool) -> dict[str, Path]:
+    worktrees: dict[str, Path] = {}
+    if nul_separated:
+        current_path: Optional[Path] = None
+        for field in output.split("\0"):
+            if not field:
+                continue
+            if field.startswith("worktree "):
+                current_path = Path(field.removeprefix("worktree ")).resolve()
+            elif field.startswith("branch ") and current_path is not None:
+                ref = field.removeprefix("branch ")
+                prefix = "refs/heads/"
+                if ref.startswith(prefix):
+                    worktrees[ref.removeprefix(prefix)] = current_path
+        return worktrees
+    for block in output.strip().split("\n\n"):
+        fields = block.splitlines()
+        if not fields or not fields[0].startswith("worktree "):
+            continue
+        current_path = Path(fields[0].removeprefix("worktree ")).resolve()
+        for line in fields[1:]:
+            if line.startswith("branch refs/heads/"):
+                worktrees[line.removeprefix("branch refs/heads/")] = current_path
+    return worktrees
+
+
 def _branch_worktrees(repo: Path) -> dict[str, Path]:
     """Return every checked-out local branch from Git's worktree registry."""
-    output = _run_git(repo, "worktree", "list", "--porcelain", "-z").stdout
-    worktrees: dict[str, Path] = {}
-    current_path: Optional[Path] = None
-    for field in output.split("\0"):
-        if field.startswith("worktree "):
-            current_path = Path(field.removeprefix("worktree ")).resolve()
-        elif field.startswith("branch ") and current_path is not None:
-            ref = field.removeprefix("branch ")
-            prefix = "refs/heads/"
-            if ref.startswith(prefix):
-                worktrees[ref.removeprefix(prefix)] = current_path
-    return worktrees
+    output, nul_separated = worktree_list_porcelain(repo)
+    return branch_worktrees_from_porcelain(output, nul_separated=nul_separated)
 
 
 def _remote_ref_sha(repo: Path, ref: str) -> Optional[str]:
