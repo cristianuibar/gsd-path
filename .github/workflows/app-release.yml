@@ -105,8 +105,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          shopt -s nullglob globstar
-          files=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*.{dmg,msi,deb,AppImage})
+          # find, not a ** glob: the bash on macOS runners is 3.2 and has no globstar.
+          files=()
+          while IFS= read -r file; do files+=("$file"); done < <(
+            find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
+              \( -name '*.dmg' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' \))
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "the build made no installer" >&2
             exit 1
@@ -118,12 +121,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          shopt -s nullglob globstar
           # One update file and one signature per platform, under a fixed name that latest.json points to.
           for update in ${{ matrix.updates }}; do
             platform="${update%%=*}"
             ext="${update#*=}"
-            found=(src-tauri/target/${{ matrix.target }}/release/bundle/**/*."$ext")
+            found=()
+            while IFS= read -r file; do found+=("$file"); done < <(
+              find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f -name "*.$ext")
             if [[ ${#found[@]} -ne 1 || ! -f "${found[0]}.sig" ]]; then
               echo "expected one signed .$ext update file, found: ${found[*]:-none}" >&2
               exit 1
