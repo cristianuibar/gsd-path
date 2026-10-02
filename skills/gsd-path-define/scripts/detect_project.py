@@ -382,7 +382,7 @@ def is_verified_skill_bundle_at(relative: str, directory_fd: int, root: Path) ->
             _FILE_READ_ATTRIBUTES,
             _PIN_SHARE,
             _FILE_OPEN,
-            _FILE_NON_DIRECTORY_FILE,
+            0,
         )
         status = os.fstat(skill_fd)
     except FileNotFoundError:

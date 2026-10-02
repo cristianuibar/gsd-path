@@ -63,8 +63,12 @@ a leftover temporary file on Windows, which lets an interrupted create resume.
   `iter_worktree_files_windows_anchored`). Each parent directory is opened
   relative to its pinned parent and stays open, so it cannot be swapped for a
   junction while a read is in progress. `os.fstat` on a handle does not report
-  the reparse tag, so `is_link_like` also calls `lstat` on the path, which is
-  stable while the handle pins it. The walk still lists names by path, because
+  the reparse tag, so `is_link_like` also calls `lstat` on the path. The path
+  is stable while a directory handle or an evidence read handle pins it. The
+  stat-only file handles in the walk and in the `SKILL.md` probe do not pin
+  the file; they only decide if a name is listed or a bundle is skipped, and
+  file content is always read through the pinned reader. The walk still lists
+  names by path, because
   Windows CPython cannot list a directory from a descriptor; each name is then
   opened relative to the pinned handle. `tests/test_detect_project.py` checks
   that a rename is refused while the handles are held and that a junction is
