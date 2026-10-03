@@ -3,6 +3,8 @@
 Each action runs one helper from the plugin source (``install.py`` or
 ``members.py``) and returns its output. The helper owns every rule; this
 module only chooses the command and refuses a project the daemon does not watch.
+Two exceptions: a hook action migrates a legacy runtime first, and ``hooks-init``
+without hosts uses the agents installed on this computer.
 """
 from __future__ import annotations
 

@@ -1,6 +1,7 @@
 """Project setup actions for the app: hooks, health check, and member repair.
 
-The daemon only chooses the helper command; the helper owns every rule.
+The daemon chooses the helper command; the helper owns every rule. The daemon
+also picks the hosts for Add guards and migrates a legacy runtime first.
 """
 import json
 import os
