@@ -63,7 +63,9 @@ the plugin and the app, and see project stats.
   macOS builds carry an ad-hoc signature, which Apple Silicon requires; users
   still approve the app once in Privacy & Security. Windows shows a SmartScreen
   warning. OS code signing is required before the first non-prerelease app
-  release.
+  release. Update 2026-10: `app-release.yml` signs macOS builds with a
+  Developer ID certificate and notarizes them when the Apple secrets are set
+  (see `docs/app-macos-signing-guide.md`); Windows signing is still open.
 
 **Considered options:** Electron (same shape, much larger app); three native
 shells (Swift, C#, GTK) with three codebases to keep equal; a frozen daemon
