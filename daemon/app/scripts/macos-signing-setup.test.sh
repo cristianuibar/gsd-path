@@ -15,7 +15,7 @@ cat > "$work/bin/security" <<'EOF'
 echo "$*" >> "$SECURITY_LOG"
 case "$1" in
   find-identity) echo "  1) 0123456789ABCDEF \"$STUB_IDENTITY\"" ;;
-  list-keychains) [ "$3" = "-s" ] || echo '    "/Users/test/Library/Keychains/login.keychain-db"' ;;
+  list-keychains) [ "$4" = "-s" ] || echo '    "/Users/test/Library/Keychains/login.keychain-db"' ;;
   import) cp "$2" "$SECURITY_LOG.imported" ;;
 esac
 EOF
@@ -69,5 +69,6 @@ check "all secrets: the notarization key file holds the key" $?
 STUB_IDENTITY="Developer ID Application: Someone Else (ZZZZZ99999)" run mismatch "${all[@]}"
 [ "$status" -ne 0 ] && echo "$output" | grep -q "does not hold"; check "wrong certificate: the script fails and says so" $?
 [ ! -s "$work/mismatch/github_env" ]; check "wrong certificate: no signing variables" $?
+has "$work/mismatch/security.log" "delete-keychain $work/mismatch/app-signing.keychain-db"; check "wrong certificate: the keychain is deleted" $?
 
 exit "$failed"

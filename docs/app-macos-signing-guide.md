@@ -80,8 +80,7 @@ revoke it.
 4. Write down the **Key ID** (the `XXXXXXXXXX` part) and the **Issuer ID**
    shown at the top of the page.
 
-Alternative: your Apple ID plus an app-specific password
-(`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). Use one method, not both.
+This workflow supports only the App Store Connect API key method.
 
 ## Step 4. Add the repository secrets
 

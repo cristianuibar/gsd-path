@@ -28,7 +28,9 @@ fi
 
 keychain="$work/app-signing.keychain-db"
 certificate="$work/certificate.p12"
-trap 'rm -f "$certificate"' EXIT
+# On a failure, delete the keychain here: the workflow cleanup step only knows
+# the keychain after APP_SIGNING_KEYCHAIN is exported.
+trap 'status=$?; rm -f "$certificate"; [ "$status" -eq 0 ] || security delete-keychain "$keychain" 2> /dev/null || true' EXIT
 password="$(openssl rand -hex 24)"
 printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A > "$certificate"
 security create-keychain -p "$password" "$keychain"
