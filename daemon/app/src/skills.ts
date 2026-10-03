@@ -7,8 +7,6 @@ export type PluginHost = { installed: boolean; version: string | null; root?: st
 /** One project from detect_project() in the daemon. */
 export type ProjectSetup = {
   root: string; local_skills: string[]; runtime: boolean; contracts: boolean; hooks: boolean; runtime_version: string | null;
-  /** The old in-repository runtime layout. The runtime update migrates it; the installer refuses a hook refresh before that. */
-  runtime_legacy?: boolean;
 };
 export type Releases = { latest: string | null; selected: string | null; versions: string[]; source?: "npm" | "git" };
 export type PluginStatus = {

@@ -556,7 +556,6 @@ class PluginManager:
             "contracts": contracts,
             "hooks": hooks,
             "runtime_version": runtime_version if runtime_version is not None else (self._read_version_stamp(runtime_dir) if runtime else None),
-            "runtime_legacy": self._legacy_runtime(project),
         }
 
     @staticmethod

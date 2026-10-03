@@ -135,16 +135,6 @@ describe("setupRows", () => {
     expect(row(setupRows(setup({ runtime: false, runtime_version: null }), "1.4.0", null, NAMES), "runtime")).toMatchObject({
       value: "Not installed", action: null, ok: false });
   });
-  it("sends a legacy runtime to the update and offers no hook refresh that the installer refuses", () => {
-    const rows = setupRows(setup({ runtime_version: "1.1.0", runtime_legacy: true }), "1.4.0", null, NAMES);
-    expect(row(rows, "runtime")).toEqual({
-      key: "runtime", label: "Runtime", value: "1.1.0", sub: "Old runtime layout. The update migrates it and keeps the guard hooks.", ok: false,
-      action: { label: "Update to 1.4.0", primary: true, run: "update" } });
-    expect(row(rows, "hooks")).toEqual({
-      key: "hooks", label: "Guard hooks", value: "Installed", sub: "Update the runtime first, then refresh.", ok: false, action: null });
-    expect(row(setupRows(setup({ runtime_legacy: true, hooks: false }), "1.4.0", null, NAMES), "hooks")).toEqual({
-      key: "hooks", label: "Guard hooks", value: "None", sub: "Update the runtime first, then add the guards.", ok: false, action: null });
-  });
   it("offers Add guards when the guard hooks are missing", () => {
     expect(row(setupRows(setup({ hooks: false }), "1.4.0", null, NAMES), "hooks")).toMatchObject({
       value: "None", sub: "Edits to archived work and unapproved ship commits are not blocked.",

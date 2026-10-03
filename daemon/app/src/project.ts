@@ -146,15 +146,10 @@ export function setupRows(setup: ProjectSetup | undefined, latest: string | null
       action: setup.runtime_version ? quiet("Restore", "runtime-restore") : null,
     } : {
       key: "runtime", label: "Runtime", value: setup.runtime_version || "No version stamp", ok: !pending,
-      sub: setup.runtime_legacy ? "Old runtime layout. The update migrates it and keeps the guard hooks."
-        : pending ? "Newer runtime available" : "Guard hooks are kept on update",
+      sub: pending ? "Newer runtime available" : "Guard hooks are kept on update",
       action: pending ? { label: `Update to ${latest}`, primary: true, run: "update" } : null,
     });
-    // The installer refuses both hook actions on the old runtime layout; the runtime update migrates it.
-    rows.push(setup.runtime_legacy ? {
-      key: "hooks", label: "Guard hooks", value: setup.hooks ? "Installed" : "None", ok: false, action: null,
-      sub: setup.hooks ? "Update the runtime first, then refresh." : "Update the runtime first, then add the guards.",
-    } : setup.hooks ? {
+    rows.push(setup.hooks ? {
       key: "hooks", label: "Guard hooks", value: "Installed", sub: "pre-commit, commit-msg, pre-push", ok: false,
       action: quiet("Refresh", "hooks-refresh"),
     } : {

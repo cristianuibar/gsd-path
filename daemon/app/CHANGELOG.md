@@ -7,11 +7,11 @@ The app has its own version and `app-v<version>` tags, separate from the
 ## [0.1.2] - 2026-10-03
 
 ### Fixed
-- A project on the old runtime layout (`.gsd-path/runtime/`) no longer offers
-  a guard hook **Refresh** or **Add guards** that fails with "legacy runtime
-  requires --runtime-migrate before refresh". The Guard hooks row now says to
-  update the runtime first, and the Runtime row says its update migrates the
-  old layout.
+- Guard hooks **Refresh** and **Add guards** work on a project with the old
+  runtime layout (`.gsd-path/runtime/`). The app migrates the runtime first, in
+  the same click, in place of the error "legacy runtime requires
+  --runtime-migrate before refresh". Migration changes only `.gsd-path` files
+  and leaves them as an unstaged Git change to review.
 
 ## [0.1.1] - 2026-10-03
 
