@@ -146,3 +146,6 @@ jobs:
       - name: Release upload script
         shell: bash
         run: bash daemon/app/scripts/release-upload.test.sh
+      - name: macOS signing setup script
+        shell: bash
+        run: bash daemon/app/scripts/macos-signing-setup.test.sh

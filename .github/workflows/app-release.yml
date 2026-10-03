@@ -1,8 +1,14 @@
 name: App release
 
 # Builds the OpenGSD Path desktop app (daemon/app) and attaches the installers
-# to a GitHub pre-release. Builds are unsigned (macOS: ad-hoc), so they are for
-# testers only; see docs/adr/0005-native-dashboard-app.md.
+# to a GitHub pre-release; see docs/adr/0005-native-dashboard-app.md.
+#
+# macOS builds are signed with a Developer ID certificate and notarized when the
+# Apple secrets are set (docs/app-macos-signing-guide.md): APPLE_CERTIFICATE,
+# APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_API_KEY,
+# APPLE_API_ISSUER, and APPLE_API_KEY_P8. With none of them set, macOS builds
+# keep an ad-hoc signature, as forks and local builds do. Windows and Linux
+# builds have no OS code signature.
 #
 # It also signs the update files with the updater key (repository secrets
 # TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and, when
@@ -42,10 +48,15 @@ jobs:
       - name: Create the pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          MACOS_SIGNED: ${{ secrets.APPLE_CERTIFICATE != '' }}
         run: |
+          if [[ "$MACOS_SIGNED" == "true" ]]; then
+            notes="Tester build. macOS builds are signed and notarized. Windows shows a SmartScreen warning."
+          else
+            notes="Tester build. Unsigned: macOS asks for approval in Privacy & Security, and Windows shows a SmartScreen warning."
+          fi
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
-            --prerelease --title "OpenGSD Path app ${GITHUB_REF_NAME#app-v}" \
-            --notes "Tester build. Unsigned: macOS asks for approval in Privacy & Security, and Windows shows a SmartScreen warning."
+            --prerelease --title "OpenGSD Path app ${GITHUB_REF_NAME#app-v}" --notes "$notes"
 
   build:
     needs: release
@@ -90,15 +101,48 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - run: npm ci
+      - name: Set up Apple signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        # Tested with a stand-in `security` by the `app-release-scripts` job in ci.yml.
+        run: bash scripts/macos-signing-setup.sh "$RUNNER_TEMP"
       - name: Build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
         # Update files are made only here: a local build has no signing key.
-        run: >
-          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-          --config '{"bundle":{"createUpdaterArtifacts":true}}'
+        # With Apple signing set up, the Developer ID replaces the ad-hoc "-" from
+        # tauri.conf.json, and Tauri notarizes with the APPLE_API_* variables.
+        run: |
+          set -euo pipefail
+          config="$(node -p 'JSON.stringify({bundle: {createUpdaterArtifacts: true,
+            ...(process.env.APPLE_SIGNING_IDENTITY ? {macOS: {signingIdentity: process.env.APPLE_SIGNING_IDENTITY}} : {})}})')"
+          npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$config"
+      - name: Check the Developer ID signature and notarization
+        if: runner.os == 'macOS' && env.APP_SIGNING_KEYCHAIN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -n 1)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --verbose=2 "$app" 2>&1 | grep -F "Authority=$APPLE_SIGNING_IDENTITY"
+          xcrun stapler validate "$app"
+          # Information only: Gatekeeper may be turned off on the runner.
+          spctl --assess --type execute --verbose=2 "$app" || true
+      - name: Remove the signing keychain and notarization key
+        if: always() && runner.os == 'macOS' && env.APP_SIGNING_KEYCHAIN != ''
+        shell: bash
+        run: |
+          security delete-keychain "$APP_SIGNING_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/notarization-key.p8"
       - name: Upload the installers and the signed update files
         shell: bash
         env:

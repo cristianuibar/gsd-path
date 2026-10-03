@@ -48,7 +48,9 @@ Only one copy of the app runs per identifier; a second start only focuses the fi
 
 Set the same version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `package.json`, merge, then
 push the tag `app-v<version>`. The `App release` workflow builds the `.dmg` (arm64 and x64), `.msi`, `.deb`,
-and AppImage files and attaches them to a GitHub pre-release. The builds are unsigned.
+and AppImage files and attaches them to a GitHub pre-release. When the Apple secrets are set, the macOS builds are
+signed with the Developer ID certificate and notarized ([guide](../../docs/app-macos-signing-guide.md)); without
+them they keep an ad-hoc signature. Windows and Linux builds are unsigned.
 
 ## Updates
 
