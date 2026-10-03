@@ -4,6 +4,13 @@ Changes to the desktop app in `daemon/app` and the monitor daemon it bundles.
 The app has its own version and `app-v<version>` tags, separate from the
 [npm package](../../CHANGELOG.md). Newest first.
 
+## [0.1.1] - 2026-10-03
+
+### Changed
+- macOS builds are signed with a Developer ID certificate and notarized by
+  Apple, so macOS no longer shows "Apple could not verify OpenGSD Path". The
+  app opens without an approval in Privacy & Security.
+
 ## [0.1.0] - 2026-10-02
 
 First tester pre-release. Builds have no OS code signature.
