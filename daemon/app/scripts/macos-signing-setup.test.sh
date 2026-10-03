@@ -58,6 +58,7 @@ has "$work/full/security.log" "-T /usr/bin/codesign"; check "all secrets: codesi
 has "$work/full/security.log" "list-keychains -d user -s $work/full/app-signing.keychain-db /Users/test/Library/Keychains/login.keychain-db"
 check "all secrets: the new keychain is searched first, login stays" $?
 [ ! -e "$work/full/certificate.p12" ]; check "all secrets: the certificate file is removed" $?
+! has "$work/full/security.log" "delete-keychain"; check "all secrets: the keychain is kept for the build" $?
 has "$work/full/github_env" "APPLE_SIGNING_IDENTITY=$identity"; check "all secrets: the identity is exported" $?
 has "$work/full/github_env" "APPLE_API_KEY=KEYID12345" && has "$work/full/github_env" "APPLE_API_ISSUER=issuer-uuid"
 check "all secrets: the notarization IDs are exported" $?
