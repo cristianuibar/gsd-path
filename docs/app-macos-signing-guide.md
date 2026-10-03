@@ -3,9 +3,10 @@
 Goal: a user downloads the `.dmg`, opens the app, and macOS does not show
 "Apple could not verify OpenGSD Path".
 
-Today the build is ad-hoc signed (`bundle.macOS.signingIdentity` is `"-"` in
-`daemon/app/src-tauri/tauri.conf.json`) and `.github/workflows/app-release.yml`
-has no Apple step. macOS needs two things:
+Without the Apple secrets the build is ad-hoc signed
+(`bundle.macOS.signingIdentity` is `"-"` in
+`daemon/app/src-tauri/tauri.conf.json`), and macOS shows that dialog. macOS
+needs two things:
 
 1. **Signing** with a *Developer ID Application* certificate.
 2. **Notarization**: Apple scans the signed app and issues a ticket.
