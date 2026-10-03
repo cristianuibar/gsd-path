@@ -13,8 +13,8 @@ from typing import List
 
 from .plugin import GIT_HOOK_NAMES, OP_LOCK, _tail
 
-# op -> installer flag. Each takes "--project <root>". hooks-init also takes the
-# request's `hosts` as host flags; the installer refuses it without one.
+# op -> installer flag. Each takes "--project <root>". hooks-init also takes host
+# flags: the request's `hosts`, or the agents with GSD Path installed on this computer.
 INSTALLER_OPS = {
     "hooks-init": "--hooks-init",
     "hooks-refresh": "--hooks-refresh",
@@ -27,6 +27,7 @@ HOOK_OPS = ("hooks-init", "hooks-refresh", "hooks-refresh-full")
 OPS = (*INSTALLER_OPS, "members", "member-hooks", "member-repair")
 # Same text as MEMBER_HOOK_MARKER in install.py, which writes these hooks.
 MEMBER_HOOK_MARKER = "gsd-path member guard"
+NO_AGENT_ERROR = "No agent has GSD Path skills installed on this computer. Install the skills for an agent first."
 
 
 class Busy(Exception):
@@ -61,7 +62,14 @@ def _members(plugin, root: str) -> dict:
 def _dispatch(plugin, root: str, op: str, body: dict) -> dict:
     preview: List[str] = ["--dry-run"] if body.get("dry_run") else []
     if op in INSTALLER_OPS:
-        hosts = [f"--{host}" for host in plugin._validate_hosts(body.get("hosts") or [])] if op == "hooks-init" else []
+        hosts: List[str] = []
+        if op == "hooks-init":
+            chosen = plugin._validate_hosts(body.get("hosts") or []) or [
+                host for host, state in plugin.detect_global().items() if state["installed"]
+            ]
+            if not chosen:
+                return {"ok": False, "stdout_tail": "", "error": NO_AGENT_ERROR}
+            hosts = [f"--{host}" for host in chosen]
         migrated = None
         if op in HOOK_OPS and plugin._legacy_runtime(Path(root)):
             # One click in the app: migrate the old layout, then do the hook action.
