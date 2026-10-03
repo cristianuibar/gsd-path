@@ -154,6 +154,13 @@ class ArgvTests(unittest.TestCase):
         self.assertIn("--project", argv)
         self.assertIn("--dry-run", argv)
 
+    def test_update_project_migrates_a_legacy_runtime(self):
+        project = Path(self.tmp.name) / "legacy"
+        (project / ".gsd-path" / "runtime").mkdir(parents=True)
+        self.manager.update_project(project)
+        self.assertIn("--runtime-migrate", self.argv())
+        self.assertNotIn("--runtime-upgrade", self.argv())
+
     def test_updates_refresh_source_and_surface_fetch_failure(self):
         for scope in ("global", "project"):
             with self.subTest(scope=scope):
@@ -318,12 +325,16 @@ class DetectionTests(unittest.TestCase):
         self.assertTrue(result["hooks"])
         self.assertTrue(result["contracts"])
         self.assertIsNone(result["runtime_version"])
+        # The in-repository runtime folder without runtime.json is the legacy layout.
+        self.assertTrue(result["runtime_legacy"])
         (runtime / "VERSION").write_bytes("1.1.0\n".encode("utf-8"))
         self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.1.0")
         (project / ".gsd-path/runtime.json").write_bytes(json.dumps({
             "schema": "gsd-path/runtime/v1", "version": "1.2.3", "digest": "a" * 64,
         }).encode("utf-8"))
         self.assertEqual(self.manager.detect_project(project)["runtime_version"], "1.2.3")
+        self.assertFalse(self.manager.detect_project(project)["runtime_legacy"])
+        self.assertFalse(self.manager.detect_project(Path(self.tmp.name) / "empty")["runtime_legacy"])
         plan = self.manager.plan_uninstall_project(project)
         self.assertIn(str(runtime / "VERSION"), [entry["path"] for entry in plan["plan"]])
         self.manager.apply_plan(plan, confirm=True)

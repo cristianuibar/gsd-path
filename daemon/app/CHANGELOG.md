@@ -4,6 +4,15 @@ Changes to the desktop app in `daemon/app` and the monitor daemon it bundles.
 The app has its own version and `app-v<version>` tags, separate from the
 [npm package](../../CHANGELOG.md). Newest first.
 
+## [0.1.2] - 2026-10-03
+
+### Fixed
+- A project on the old runtime layout (`.gsd-path/runtime/`) no longer offers
+  a guard hook **Refresh** or **Add guards** that fails with "legacy runtime
+  requires --runtime-migrate before refresh". The Guard hooks row now says to
+  update the runtime first, and the Runtime row says its update migrates the
+  old layout.
+
 ## [0.1.1] - 2026-10-03
 
 ### Changed

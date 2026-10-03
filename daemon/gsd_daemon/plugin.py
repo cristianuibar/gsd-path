@@ -556,7 +556,14 @@ class PluginManager:
             "contracts": contracts,
             "hooks": hooks,
             "runtime_version": runtime_version if runtime_version is not None else (self._read_version_stamp(runtime_dir) if runtime else None),
+            "runtime_legacy": self._legacy_runtime(project),
         }
+
+    @staticmethod
+    def _legacy_runtime(project: Path) -> bool:
+        """The old in-repository runtime folder. The installer migrates it before any refresh."""
+        runtime_root = project / HOOKS_DIRECTORY
+        return not os.path.lexists(runtime_root / "runtime.json") and os.path.lexists(runtime_root / "runtime")
 
     @staticmethod
     def _py_files(directory: Path) -> List[Path]:
@@ -659,9 +666,7 @@ class PluginManager:
             if not refresh["refreshed"]:
                 return {"ok": False, "error": refresh["error"], "stdout_tail": "", "argv": []}
         project = str(Path(os.path.abspath(os.path.expanduser(str(root)))))
-        runtime_root = Path(project) / HOOKS_DIRECTORY
-        legacy = not os.path.lexists(runtime_root / "runtime.json") and os.path.lexists(runtime_root / "runtime")
-        tail = ["--runtime-migrate" if legacy else "--runtime-upgrade", "--project", project]
+        tail = ["--runtime-migrate" if self._legacy_runtime(Path(project)) else "--runtime-upgrade", "--project", project]
         if dry_run:
             tail.append("--dry-run")
         result = self._run_installer("update-project", tail)
