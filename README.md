@@ -163,9 +163,9 @@ entry on the [releases page](https://github.com/open-gsd/gsd-path/releases):
 (Linux). The app needs Python 3.9+ and Git; its first screen checks for both
 and shows the fix when one is missing.
 
-The builds have no OS code signature yet. On macOS, approve the app once in
-**System Settings → Privacy & Security**. On Windows, SmartScreen shows a
-warning; choose **More info → Run anyway**.
+macOS builds are signed with a Developer ID and notarized by Apple from 0.1.1
+on, so they open without a warning. Windows builds have no code signature yet:
+SmartScreen shows a warning; choose **More info → Run anyway**.
 
 What the app does:
 
