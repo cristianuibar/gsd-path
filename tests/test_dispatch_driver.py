@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -556,7 +557,21 @@ class DispatchDriverTests(unittest.TestCase):
 
         self.assertEqual(receipt["status"], "blocked", receipt)
         self.assertIn("reconcile the attempt and any retained Verify sidecar", receipt["blocked"][0]["reason"])
-        self.assertIn("pipeline_diagnose.py diagnose --repo", receipt["blocked"][0]["reason"])
+        diagnostic_command = re.search(
+            r"inventory it with `([^`]+)`", receipt["blocked"][0]["reason"]
+        )
+        self.assertIsNotNone(diagnostic_command, receipt["blocked"][0]["reason"])
+        self.assertEqual(
+            shlex.split(diagnostic_command.group(1)),
+            [
+                sys.executable,
+                "-B",
+                str((PROJECT_ROOT / "scripts/pipeline_diagnose.py").resolve()),
+                "diagnose",
+                "--repo",
+                str(root.resolve()),
+            ],
+        )
         self.assertEqual(receipt["dispatched"], [])
         self.assertEqual(receipt["landed"], [])
         self.assertTrue(dispatch_driver.isolation.sidecar_root(
