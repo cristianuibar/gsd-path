@@ -4,6 +4,18 @@ Changes to the desktop app in `daemon/app` and the monitor daemon it bundles.
 The app has its own version and `app-v<version>` tags, separate from the
 [npm package](../../CHANGELOG.md). Newest first.
 
+## [0.1.2] - 2026-10-03
+
+### Fixed
+- Guard hooks **Refresh** and **Add guards** work on a project with the old
+  runtime layout (`.gsd-path/runtime/`). The app migrates the runtime first, in
+  the same click, in place of the error "legacy runtime requires
+  --runtime-migrate before refresh". Migration changes only `.gsd-path` files
+  and leaves them as an unstaged Git change to review.
+- **Add guards** adds the guards for the agents that have GSD Path skills
+  installed on this computer. With no agent installed, it changes nothing and
+  tells you to install the skills for an agent first.
+
 ## [0.1.1] - 2026-10-03
 
 ### Changed

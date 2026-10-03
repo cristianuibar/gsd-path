@@ -154,6 +154,13 @@ class ArgvTests(unittest.TestCase):
         self.assertIn("--project", argv)
         self.assertIn("--dry-run", argv)
 
+    def test_update_project_migrates_a_legacy_runtime(self):
+        project = Path(self.tmp.name) / "legacy"
+        (project / ".gsd-path" / "runtime").mkdir(parents=True)
+        self.manager.update_project(project)
+        self.assertIn("--runtime-migrate", self.argv())
+        self.assertNotIn("--runtime-upgrade", self.argv())
+
     def test_updates_refresh_source_and_surface_fetch_failure(self):
         for scope in ("global", "project"):
             with self.subTest(scope=scope):

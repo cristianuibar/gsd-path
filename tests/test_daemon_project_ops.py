@@ -1,14 +1,19 @@
 """Project setup actions for the app: hooks, health check, and member repair.
 
-The daemon only chooses the helper command; the helper owns every rule.
+The daemon chooses the helper command; the helper owns every rule. The daemon
+also picks the hosts for Add guards and migrates a legacy runtime first.
 """
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "daemon"))
 
@@ -48,6 +53,12 @@ class Case(unittest.TestCase):
         return [call[2:] for call in self.calls]
 
 
+def install_agent(plugin, host):
+    skill = plugin.global_root(host) / "gsd-path"
+    skill.mkdir(parents=True)
+    (skill / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+
+
 class InstallerOpTests(Case):
     def test_each_op_runs_its_installer_flag_on_the_project(self):
         for op, flag in (("hooks-refresh", "--hooks-refresh"),
@@ -64,6 +75,26 @@ class InstallerOpTests(Case):
         self.calls.clear()
         with self.assertRaises(ValueError):
             self.run_op(op="hooks-init", hosts=["--all"])
+        self.assertEqual(self.calls, [])
+
+    def test_hooks_init_without_hosts_uses_the_agents_installed_on_this_computer(self):
+        install_agent(self.plugin, "grok")
+        install_agent(self.plugin, "claude")
+        for body in ({}, {"hosts": []}):
+            with self.subTest(body=body):
+                self.calls.clear()
+                result = self.run_op(op="hooks-init", **body)
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(self.helper_args(), [["--hooks-init", "--claude", "--grok", "--project", self.root]])
+
+    def test_hooks_init_without_hosts_or_an_installed_agent_runs_nothing(self):
+        for dry_run in (False, True):
+            with self.subTest(dry_run=dry_run):
+                result = self.run_op(op="hooks-init", dry_run=dry_run)
+                self.assertEqual(result, {"ok": False, "stdout_tail": "", "error": project_ops.NO_AGENT_ERROR})
+        self.assertEqual(
+            project_ops.NO_AGENT_ERROR,
+            "No agent has GSD Path skills installed on this computer. Install the skills for an agent first.")
         self.assertEqual(self.calls, [])
 
     def test_dry_run_adds_the_installer_preview_flag(self):
@@ -106,6 +137,120 @@ class InstallerOpTests(Case):
             release.set()
             first.join(5)
         self.assertEqual(len(self.calls), 1)
+
+
+class LegacyRuntimeTests(Case):
+    """The installer refuses a hook action on the old .gsd-path/runtime/ layout; one click migrates first."""
+
+    def setUp(self):
+        super().setUp()
+        (Path(self.root) / ".gsd-path" / "runtime").mkdir(parents=True)
+        self.migrate = ["--runtime-migrate", "--project", self.root]
+
+    def test_a_hook_action_migrates_the_old_layout_first(self):
+        self.answers[("install.py", "--runtime-migrate")] = (0, "migrated\n", "")
+        self.answers[("install.py", "--hooks-refresh")] = (0, "refreshed\n", "")
+        result = self.run_op(op="hooks-refresh")
+        self.assertEqual(self.helper_args(), [self.migrate, ["--hooks-refresh", "--project", self.root]])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["stdout_tail"], "migrated\nrefreshed")
+        self.calls.clear()
+        self.run_op(op="hooks-init", hosts=["claude"])
+        self.assertEqual(self.helper_args(), [self.migrate, ["--hooks-init", "--claude", "--project", self.root]])
+
+    def test_add_guards_without_hosts_migrates_then_uses_the_installed_agents(self):
+        install_agent(self.plugin, "claude")
+        result = self.run_op(op="hooks-init")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.helper_args(), [self.migrate, ["--hooks-init", "--claude", "--project", self.root]])
+
+    def test_add_guards_without_an_installed_agent_does_not_migrate(self):
+        for dry_run in (False, True):
+            with self.subTest(dry_run=dry_run):
+                result = self.run_op(op="hooks-init", dry_run=dry_run)
+                self.assertFalse(result["ok"])
+                self.assertEqual(result["error"], project_ops.NO_AGENT_ERROR)
+        self.assertEqual(self.calls, [])
+
+    def test_a_preview_shows_only_the_migration_and_writes_nothing_else(self):
+        self.run_op(op="hooks-refresh", dry_run=True)
+        self.assertEqual(self.helper_args(), [[*self.migrate, "--dry-run"]])
+
+    def test_a_failed_migration_stops_before_the_hook_action(self):
+        self.answers[("install.py", "--runtime-migrate")] = (1, "", "error: resolve local edits first\n")
+        result = self.run_op(op="hooks-refresh")
+        self.assertEqual(self.helper_args(), [self.migrate])
+        self.assertFalse(result["ok"])
+        self.assertIn("resolve local edits first", result["error"])
+
+    def test_other_actions_and_migrated_projects_do_not_migrate(self):
+        self.run_op(op="doctor")
+        self.assertEqual(self.helper_args(), [["--doctor", "--project", self.root]])
+        self.calls.clear()
+        (Path(self.root) / ".gsd-path" / "runtime.json").write_text("{}", encoding="utf-8")
+        self.run_op(op="hooks-refresh")
+        self.assertEqual(self.helper_args(), [["--hooks-refresh", "--project", self.root]])
+
+
+class LegacyRuntimeInstallerTests(unittest.TestCase):
+    """The same action against the real installer and a real Git project."""
+
+    def legacy_project(self, guards):
+        source = Path(__file__).resolve().parents[1]
+        sys.path.insert(0, str(source))
+        from scripts import install
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = Path(tmp.name).resolve()
+        repo, home = base / "project", base / "home"
+        repo.mkdir(); home.mkdir()
+        environment = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+
+        def git(*args):
+            return subprocess.check_output(["git", "-c", "core.excludesFile=/dev/null", *args], cwd=repo,
+                                           encoding="utf-8", errors="replace", stderr=subprocess.PIPE, env=environment).strip()
+        git("init", "-b", "main"); git("config", "user.name", "t"); git("config", "user.email", "t@example.invalid")
+        runtime = repo / ".gsd-path" / "runtime"
+        runtime.mkdir(parents=True)
+        for name in install.PROJECT_RUNTIME_SCRIPTS:
+            shutil.copy2(source / "scripts" / name, runtime / name)
+        for name in (*(install.GUARD_SCRIPTS if guards else ()), "status_runtime.py"):
+            shutil.copy2(source / "scripts" / name, runtime.parent / name)
+        git("add", "."); git("commit", "-m", "legacy runtime")
+
+        def runner(argv, cwd=None):
+            argv = [str(part) for part in argv]
+            argv[1] = str(source / "scripts" / "install.py")  # the checkout under test, not a clone
+            done = subprocess.run(argv, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace", env=environment)
+            return done.returncode, done.stdout, done.stderr
+
+        plugin = PluginManager(home=base / "daemon-home", user_home=home, runner=runner,
+                               git_runner=lambda argv, cwd=None: (0, "", ""), environ={},
+                               repo="https://example.invalid/gsd-path.git")
+        (plugin.src_dir / ".git").mkdir(parents=True)
+        handler = SimpleNamespace(plugin=plugin, watcher=SimpleNamespace(projects={str(repo): object()}))
+        return repo, git, handler
+
+    def assert_migrated(self, repo, git):
+        self.assertFalse((repo / ".gsd-path" / "runtime").exists())
+        self.assertTrue((repo / ".gsd-path" / "runtime.json").is_file())
+        self.assertEqual(git("diff", "--cached", "--name-only"), "")  # migration never stages
+
+    def test_refresh_on_a_legacy_project_migrates_and_refreshes_with_the_real_installer(self):
+        repo, git, handler = self.legacy_project(guards=True)
+        result = project_ops.run(handler, {"root": str(repo), "op": "hooks-refresh"})
+        self.assertTrue(result["ok"], result)
+        self.assert_migrated(repo, git)
+
+    def test_add_guards_on_a_legacy_project_uses_the_installed_agent_with_the_real_installer(self):
+        from scripts import install
+        repo, git, handler = self.legacy_project(guards=False)
+        install_agent(handler.plugin, "claude")
+        result = project_ops.run(handler, {"root": str(repo), "op": "hooks-init"})
+        self.assertTrue(result["ok"], result)
+        self.assert_migrated(repo, git)
+        for name in install.GUARD_SCRIPTS:
+            self.assertTrue((repo / ".gsd-path" / name).is_file(), name)
 
 
 class MemberTests(Case):

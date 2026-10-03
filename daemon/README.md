@@ -149,9 +149,14 @@ gsd-path-daemon plugin <status|install|update|uninstall>          # manage the s
   project. `op` is `hooks-init`, `hooks-refresh`, `hooks-refresh-full`,
   `runtime-restore`, `doctor`, `members`, `member-hooks`, or `member-repair`.
   Each runs one helper from the plugin source (`install.py` or `members.py`)
-  and returns its output; the daemon adds no rule of its own. `hooks-init`
-  passes `hosts` (host ids) to the installer, which needs at least one. A second
-  operation while one runs returns 409.
+  and returns its output. The daemon adds two rules of its own. `hooks-init`
+  passes `hosts` (host ids) to the installer; with no `hosts`, it uses the
+  agents that have GSD Path skills installed on this computer, and with none
+  installed it returns an error and runs nothing. On a project with the legacy
+  `.gsd-path/runtime/` layout, the three `hooks-*` ops run `--runtime-migrate`
+  first and then the hook action, and return both outputs; with `dry_run` they
+  return only the migration preview, and a failed migration stops there. A
+  second operation while one runs returns 409.
 - `POST /api/env/list`, `/api/env/reveal`, `/api/env/save` — read and change
   one of a watched project's `.env`, `.env.local`, `.env.development`,
   `.env.production`. `list` returns names only; `reveal` returns one value;
