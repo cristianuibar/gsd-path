@@ -164,8 +164,9 @@ entry on the [releases page](https://github.com/open-gsd/gsd-path/releases):
 and shows the fix when one is missing.
 
 macOS builds are signed with a Developer ID and notarized by Apple from 0.1.1
-on, so they open without a warning. Windows builds have no code signature yet:
-SmartScreen shows a warning; choose **More info → Run anyway**.
+on, so they open without an approval in Privacy & Security. Windows builds have
+no code signature yet: SmartScreen shows a warning; choose **More info → Run
+anyway**.
 
 What the app does:
 
