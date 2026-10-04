@@ -71,6 +71,45 @@ class MemberTaskBriefTests(unittest.TestCase):
             return str(error)
         return ""
 
+    def prepare_landed_member_task(self, coordinator_base: bool = True):
+        member_base = git(self.member, "rev-parse", "HEAD")
+        git(self.member, "rm", "-q", "src/app.py")
+        git(self.member, "commit", "-q", "-m", "drop app")
+        git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
+        (self.coordinator / ".project" / "plan").mkdir(parents=True, exist_ok=True)
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="demo").encode("utf-8"))
+        task = member_task("T001", "src/new.py", "Follow `src/app.py`.",
+                           verify="test -f src/app.py")
+        recorded_base = self.head if coordinator_base else member_base
+        task = task.replace("status: pending", "status: done").replace(
+            "agent: null", "agent: coder").replace("base: null", f"base: {recorded_base}")
+        task = self.set_member_base(task, f"member_base: {member_base}")
+        self.write("T001", task)
+        return member_base, task
+
+    @staticmethod
+    def set_member_base(task: str, field: str = None) -> str:
+        task = "".join(line for line in task.splitlines(keepends=True)
+                       if not line.startswith("member_base:"))
+        if field is not None:
+            task = task.replace("repo: web\n", f"repo: web\n{field}\n", 1)
+        return task
+
+    def assert_coordinator_base_misses_member_history(self, member_base: str) -> None:
+        self.assertNotEqual(git(self.member, "rev-parse", "HEAD"), member_base)
+        self.assertFalse((self.member / "src" / "app.py").exists())
+        git(self.member, "cat-file", "-e", f"{member_base}:src/app.py")
+        coordinator_has_member_base = subprocess.run(
+            ["git", "-C", str(self.coordinator), "cat-file", "-e",
+             f"{member_base}^{{commit}}"], capture_output=True, check=False,
+        )
+        self.assertNotEqual(coordinator_has_member_base.returncode, 0)
+        with self.assertRaisesRegex(check_task_briefs.BriefError,
+                                    "path missing at the layer base: src/app.py"):
+            check_task_briefs.validate_task_briefs(
+                self.coordinator, self.head, landed_bases={"T001": self.head})
+
     def test_member_task_paths_resolve_in_the_member(self) -> None:
         self.write("T001", member_task("T001", "src/new.py", "Follow `src/app.py` in the member.",
                                        verify="test -f src/app.py"))
@@ -100,30 +139,63 @@ class MemberTaskBriefTests(unittest.TestCase):
         self.assertIn("path missing at the layer base: src/app.py", self.problems())
         check_task_briefs.validate_task_briefs(self.coordinator, self.head, landed_bases={"T001": old})
 
-    def test_plan_approval_resolves_landed_base_in_member(self) -> None:
-        old = git(self.member, "rev-parse", "HEAD")
-        self.assertNotEqual(subprocess.run(
-            ["git", "cat-file", "-e", f"{old}^{{commit}}"], cwd=self.coordinator,
-            capture_output=True, check=False,
-        ).returncode, 0)
-        git(self.member, "rm", "-q", "src/app.py")
-        git(self.member, "commit", "-q", "-m", "drop app")
-        git(self.member, "update-ref", "refs/remotes/origin/main", "HEAD")
-        (self.coordinator / ".project" / "plan").mkdir()
-        (self.coordinator / ".project" / "plan" / "PLAN.md").write_bytes(
-            PLAN_WAVE.format(title="demo").encode("utf-8"))
-        task = member_task("T001", "src/new.py", "Follow `src/app.py`.",
-                           verify="test -f src/app.py")
-        task = task.replace("status: pending", "status: done").replace(
-            "agent: null", "agent: coder").replace("base: null", f"base: {old}")
-        self.write("T001", task)
+    def test_plan_checkpoint_uses_a_landed_members_recorded_member_base(self) -> None:
+        member_base, _task = self.prepare_landed_member_task()
+        self.assert_coordinator_base_misses_member_history(member_base)
 
         state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
 
-        self.write("T001", task.replace(f"base: {old}", f"base: {'0' * 40}"))
-        with self.assertRaisesRegex(pipeline_state.PipelineStateError,
-                                    "landed task has invalid historical base"):
-            state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+    def test_plan_task_gate_uses_a_landed_members_recorded_member_base(self) -> None:
+        member_base, _task = self.prepare_landed_member_task()
+        self.assert_coordinator_base_misses_member_history(member_base)
+
+        result = check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+        self.assertEqual(result["tasks"], 1)
+
+    def test_invalid_landed_member_bases_are_rejected_by_both_plan_validators(self) -> None:
+        member_base, task = self.prepare_landed_member_task()
+        blob = git(self.member, "rev-parse", f"{member_base}:src/app.py")
+        invalid = (
+            ("malformed", "member_base: not-a-full-sha"),
+            ("missing commit", f"member_base: {'0' * 40}"),
+            ("coordinator commit", f"member_base: {self.head}"),
+            ("member blob", f"member_base: {blob}"),
+            ("non-string", "member_base: [not, a, commit]"),
+        )
+        for label, field in invalid:
+            with self.subTest(member_base=label):
+                self.write("T001", self.set_member_base(task, field))
+                with self.assertRaisesRegex(pipeline_state.PipelineStateError,
+                                            "invalid historical base"):
+                    state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+                with self.assertRaisesRegex(check_task_briefs.BriefError,
+                                            "invalid historical base"):
+                    check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+
+    def test_absent_null_or_empty_member_base_keeps_legacy_base_resolution(self) -> None:
+        member_base, task = self.prepare_landed_member_task(coordinator_base=False)
+        for label, field in (("absent", None), ("null", "member_base: null"),
+                             ("empty string", 'member_base: ""'), ("empty list", "member_base: []")):
+            with self.subTest(member_base=label):
+                self.write("T001", self.set_member_base(task, field))
+                state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+                result = check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+                self.assertEqual(result["tasks"], 1)
+
+    def test_landed_coordinator_task_ignores_member_base(self) -> None:
+        member_base = git(self.member, "rev-parse", "HEAD")
+        task = member_task("T001", "lib/server.py", "Edit `lib/server.py`.", repo="",
+                           verify="test -f lib/server.py")
+        task = task.replace("status: pending", "status: done").replace(
+            "agent: null", "agent: coder").replace("base: null", f"base: {self.head}\nmember_base: {member_base}")
+        self.write("T001", task)
+        (self.coordinator / ".project" / "plan").mkdir(parents=True, exist_ok=True)
+        (self.coordinator / ".project" / "plan" / "PLAN.md").write_bytes(
+            PLAN_WAVE.format(title="demo").encode("utf-8"))
+
+        state_checkpoint._validate_plan_briefs(self.coordinator, "plan", ".project")
+        result = check_task_briefs.validate_plan_task_briefs(self.coordinator, self.head, ".project")
+        self.assertEqual(result["tasks"], 1)
 
     def test_member_brief_during_build_resolves_at_the_bound_branch_tip(self) -> None:
         git(self.member, "checkout", "-q", "-b", "gsd-path/acme-M001")
