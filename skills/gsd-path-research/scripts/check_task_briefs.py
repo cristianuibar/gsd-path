@@ -485,6 +485,56 @@ def validate_task_briefs(
     return {"base": resolved_base, "checked": checked, "tasks": len(task_files)}
 
 
+def _resolve_landed_task_base(
+    task_id: str,
+    recorded_base: str,
+    recorded_member_base: object,
+    coordinator_repo: Path,
+    member_repo: Optional[Path],
+) -> str:
+    """Resolve a landed task's historical base in the repository it names."""
+    if __package__:
+        from .isolation import IsolationError, require_commit, require_full_sha
+    else:
+        try:
+            from isolation import IsolationError, require_commit, require_full_sha
+        except ModuleNotFoundError as error:
+            if error.name != "isolation":
+                raise
+            from scripts.isolation import IsolationError, require_commit, require_full_sha
+
+    recorded_full = require_full_sha(recorded_base)
+    if member_repo is None:
+        try:
+            return require_commit(coordinator_repo, recorded_full)
+        except IsolationError as error:
+            raise BriefError(
+                f"{task_id} landed task has invalid historical base: {error}"
+            ) from error
+
+    legacy_member_base = (
+        recorded_member_base is None
+        or (isinstance(recorded_member_base, str)
+            and recorded_member_base.strip().casefold() in {"", "null", "~"})
+        or (isinstance(recorded_member_base, list) and not recorded_member_base)
+    )
+    try:
+        if not legacy_member_base:
+            if not isinstance(recorded_member_base, str):
+                raise IsolationError(
+                    f"member_base must be a full 40-character SHA: {recorded_member_base}"
+                )
+            member_full = require_full_sha(recorded_member_base)
+            return require_commit(member_repo, member_full)
+        try:
+            return require_commit(coordinator_repo, recorded_full)
+        except IsolationError:
+            return require_commit(member_repo, recorded_full)
+    except IsolationError as error:
+        raise BriefError(
+            f"{task_id} landed task has invalid historical base: {error}"
+        ) from error
+
 def plan_validation_bases(
     root: Path, project_dir: str, member_base=None, *, initial: bool = True,
 ) -> Tuple[Dict[str, str], Dict[str, Set[str]], Dict[str, str]]:
@@ -495,16 +545,16 @@ def plan_validation_bases(
     """
     if __package__:
         from . import check_handoffs
-        from .isolation import IsolationError, require_commit, require_full_sha
+        from .isolation import IsolationError
     else:
         try:
             import check_handoffs
-            from isolation import IsolationError, require_commit, require_full_sha
+            from isolation import IsolationError
         except ModuleNotFoundError as error:
             if error.name not in {"check_handoffs", "isolation"}:
                 raise
             from scripts import check_handoffs
-            from scripts.isolation import IsolationError, require_commit, require_full_sha
+            from scripts.isolation import IsolationError
     if member_base is None:
         member_base = _member_bases(root)
     try:
@@ -518,7 +568,8 @@ def plan_validation_bases(
             agent = check_handoffs._task_scalar(text, task_id, "agent")
             if agent in {"", "null"}:
                 raise BriefError(f"{task_id} landed task has no recorded agent")
-            member = check_handoffs._strict_frontmatter(text, task_id).get("repo")
+            fields = check_handoffs._strict_frontmatter(text, task_id)
+            member = fields.get("repo")
             base_repo = root
             if member is not None:
                 located = member_base(member) if isinstance(member, str) and member else None
@@ -527,14 +578,13 @@ def plan_validation_bases(
                 base_repo = located[0]
             recorded_base = check_handoffs._task_scalar(text, task_id, "base")
             try:
-                recorded_full = require_full_sha(recorded_base)
-                if member is not None:
-                    try:
-                        landed_bases[task_id] = require_commit(root, recorded_full)
-                    except IsolationError:
-                        landed_bases[task_id] = require_commit(base_repo, recorded_full)
-                else:
-                    landed_bases[task_id] = require_commit(base_repo, recorded_full)
+                landed_bases[task_id] = _resolve_landed_task_base(
+                    task_id,
+                    recorded_base,
+                    fields.get("member_base") if member is not None else None,
+                    root,
+                    base_repo if member is not None else None,
+                )
             except IsolationError as error:
                 raise BriefError(f"{task_id} landed task has invalid historical base: {error}") from error
             dependency_files[task_id] = set()
