@@ -1454,6 +1454,8 @@ class GuardHookTests(unittest.TestCase):
             parent = Path(temporary)
             owned = self.init_git_repo(parent / "owned")
             safe = self.init_git_repo(parent / "safe")
+            owned_path = shlex.quote(owned.as_posix())
+            safe_path = shlex.quote(safe.as_posix())
             for repo in (owned, safe):
                 self.git(repo, "branch", "same-name")
             project = owned / ".project"
@@ -1463,25 +1465,25 @@ class GuardHookTests(unittest.TestCase):
             )
             with mock.patch.dict(os.environ, {"PWD": str(safe), "OLDPWD": str(safe), "W": str(safe)}):
                 for root, command in (
-                    (safe, f'cd {owned} && git -C "$PWD" branch -D same-name'),
-                    (owned, f'cd {safe} && git -C "$OLDPWD" branch -D same-name'),
+                    (safe, f'cd {owned_path} && git -C "$PWD" branch -D same-name'),
+                    (owned, f'cd {safe_path} && git -C "$OLDPWD" branch -D same-name'),
                     (owned, 'git -C "$PWD" branch -D same-name'),
                     (owned, 'unset W; git -C "$W" branch -D same-name'),
                 ):
                     with self.subTest(root=root, command=command):
                         self.assert_denied(self.bash_in(root, command))
                 for root, command in (
-                    (owned, f'cd {safe} && git -C "$PWD" branch -D same-name'),
-                    (safe, f'cd {owned} && git -C "$OLDPWD" branch -D same-name'),
+                    (owned, f'cd {safe_path} && git -C "$PWD" branch -D same-name'),
+                    (safe, f'cd {owned_path} && git -C "$OLDPWD" branch -D same-name'),
                     (safe, 'git -C "$PWD" branch -D same-name'),
                     (safe, 'unset W; git -C "$W" branch -D same-name'),
-                    (owned, f'W={safe}; git -C "$W" branch -D same-name'),
-                    (owned, f'git -C {safe} branch -D same-name'),
+                    (owned, f'W={safe_path}; git -C "$W" branch -D same-name'),
+                    (owned, f'git -C {safe_path} branch -D same-name'),
                 ):
                     with self.subTest(root=root, command=command):
                         self.assert_allowed(self.bash_in(root, command))
                 self.assert_denied(
-                    self.bash_in(safe, f"git -C {owned} branch -D same-name")
+                    self.bash_in(safe, f"git -C {owned_path} branch -D same-name")
                 )
 
     def test_git_c_literal_parameter_paths_fail_closed_for_scoped_deletion(self):
