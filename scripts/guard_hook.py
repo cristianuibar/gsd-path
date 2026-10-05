@@ -2039,6 +2039,31 @@ def shell_tokens(command):
     return tokens
 
 
+def shell_parameter_quoting_uncertain(command):
+    """Detect literal parameters whose quoting is lost by shell_tokens."""
+    command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+    quote = None
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if quote == "'":
+            if NAMED_SHELL_PARAMETER_SYNTAX.match(command, index):
+                return True
+            if character == "'":
+                quote = None
+        elif character == "\\":
+            if NAMED_SHELL_PARAMETER_SYNTAX.match(command, index + 1):
+                return True
+            index += 1
+        elif character in "'\"":
+            if quote is None:
+                quote = character
+            elif character == quote:
+                quote = None
+        index += 1
+    return False
+
+
 def command_segments(tokens):
     """Yield simple commands with separators and leading control words removed."""
     segment = []
@@ -3082,7 +3107,8 @@ def destructive_git_reason(
                 resolved_aliases | {command},
                 initial_assignments=assignments,
                 working_directories=directories,
-                cwd_reliable=cwd_reliable,
+                # Non-shell Git aliases do not expand environment parameters.
+                cwd_reliable=cwd_reliable and not NAMED_SHELL_PARAMETER_SYNTAX.search(alias),
                 git_context_reliable=segment_git_context_reliable,
             )
             if reason is not None:
@@ -3534,7 +3560,8 @@ def command_denial(command, working_directories, allow_destructive=True):
             ):
                 return ARCHIVE_REASON
         reason = destructive_git_reason(
-            tokens, working_directories=working_directories
+            tokens, working_directories=working_directories,
+            cwd_reliable=not shell_parameter_quoting_uncertain(outer),
         ) or protected_shell_write_reason(tokens, working_directories)
     except ValueError as error:
         raise ValueError(describe_substitutions(str(error), substitutions)) from None

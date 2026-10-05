@@ -1484,6 +1484,40 @@ class GuardHookTests(unittest.TestCase):
                     self.bash_in(safe, f"git -C {owned} branch -D same-name")
                 )
 
+    def test_git_c_literal_parameter_paths_fail_closed_for_scoped_deletion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            safe = self.init_git_repo(Path(temporary) / "quote-safe")
+            owned = self.init_git_repo(safe / "$PWD")
+            for repo in (safe, owned):
+                self.git(repo, "branch", "same-name")
+            project = owned / ".project"
+            project.mkdir()
+            (project / "STATE.md").write_text(
+                "---\nphase: build\nbranch: same-name\n---\n", encoding="utf-8"
+            )
+            self.git(safe, "config", "alias.literal-path", '-C "$PWD" branch -D')
+            with mock.patch.dict(os.environ, {"PWD": str(safe)}):
+                for command in (
+                    "git -C '$PWD' branch -D same-name",
+                    "git '-C$PWD' branch -D same-name",
+                    r"git -C \$PWD branch -D same-name",
+                    r"git -C\$PWD branch -D same-name",
+                    "W='$PWD'; git -C \"$W\" branch -D same-name",
+                    "command git -C '$PWD' branch -D same-name",
+                    "echo \"'\"; git -C '$PWD' branch -D same-name",
+                    "git literal-path same-name",
+                ):
+                    with self.subTest(command=command):
+                        self.assert_denied(self.bash_in(safe, command))
+                for command in (
+                    'git -C "$PWD" branch -D same-name',
+                    f"git -C {shlex.quote(str(safe))} branch -D same-name",
+                    f'W={shlex.quote(str(safe))}; git -C "$W" branch -D same-name',
+                    "git -C '$PWD' status --short",
+                ):
+                    with self.subTest(command=command):
+                        self.assert_allowed(self.bash_in(safe, command))
+
     def test_ownership_scoping_fails_closed_for_env_git_context_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
