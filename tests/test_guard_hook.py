@@ -1518,6 +1518,41 @@ class GuardHookTests(unittest.TestCase):
                     with self.subTest(command=command):
                         self.assert_allowed(self.bash_in(safe, command))
 
+    def test_git_c_cmd_parameter_spellings_fail_closed_for_scoped_deletion(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            safe = self.init_git_repo(Path(temporary) / "syntax-safe")
+            self.git(safe, "branch", "same-name")
+            for spelling in ("%W%", "!W!"):
+                owned = self.init_git_repo(safe / spelling)
+                self.git(owned, "branch", "same-name")
+                project = owned / ".project"
+                project.mkdir()
+                (project / "STATE.md").write_text(
+                    "---\nphase: build\nbranch: same-name\n---\n", encoding="utf-8"
+                )
+                self.git(safe, "config", "alias.literal-cmd-path", f'-C "{spelling}" branch -D')
+                with mock.patch.dict(os.environ, {"W": str(safe), "INDIRECT": spelling}):
+                    for command in (
+                        f"git -C {spelling} branch -D same-name",
+                        f"git -C '{spelling}' branch -D same-name",
+                        f'git "-C{spelling}" branch -D same-name',
+                        f'P="{spelling}"; git -C "$P" branch -D same-name',
+                        'git -C "$INDIRECT" branch -D same-name',
+                        'P=$INDIRECT; git -C "$P" branch -D same-name',
+                        f"command git -C '{spelling}' branch -D same-name",
+                        "git literal-cmd-path same-name",
+                    ):
+                        with self.subTest(spelling=spelling, command=command):
+                            self.assert_denied(self.bash_in(safe, command))
+                    for command in (
+                        f"git -C {shlex.quote(str(safe))} branch -D same-name",
+                        'git -C "$W" branch -D same-name',
+                        f'INDIRECT={shlex.quote(str(safe))}; git -C "$INDIRECT" branch -D same-name',
+                        f"git -C '{spelling}' status --short",
+                    ):
+                        with self.subTest(spelling=spelling, command=command):
+                            self.assert_allowed(self.bash_in(safe, command))
+
     def test_ownership_scoping_fails_closed_for_env_git_context_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)

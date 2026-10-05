@@ -2042,6 +2042,9 @@ def shell_tokens(command):
 def shell_parameter_quoting_uncertain(command):
     """Detect literal parameters whose quoting is lost by shell_tokens."""
     command = strip_heredoc_bodies(LINE_CONTINUATION.sub(r"\1 ", command))
+    # These forms expand in cmd, but are literal directory text in POSIX shells.
+    if CMD_PARAMETER_SYNTAX.search(command):
+        return True
     quote = None
     index = 0
     while index < len(command):
@@ -3061,6 +3064,14 @@ def destructive_git_reason(
     for segment, directories, assignments, _prefix in shell_segment_contexts(
         tokens, working_directories or [os.getcwd()], initial_assignments
     ):
+        # A dollar expansion can introduce literal percent/bang text; the second
+        # expansion pass must not silently reinterpret it as a different path.
+        cwd_reliable = cwd_reliable and not any(
+            CMD_PARAMETER_SYNTAX.search(NAMED_SHELL_PARAMETER_SYNTAX.sub(
+                lambda match: environment_parameter_value(match, assignments), token
+            ))
+            for token in segment
+        )
         segment_git_context_reliable = (
             git_context_reliable
             and not env_wrapper_changes_git_context(segment)
@@ -3108,7 +3119,10 @@ def destructive_git_reason(
                 initial_assignments=assignments,
                 working_directories=directories,
                 # Non-shell Git aliases do not expand environment parameters.
-                cwd_reliable=cwd_reliable and not NAMED_SHELL_PARAMETER_SYNTAX.search(alias),
+                cwd_reliable=cwd_reliable and not (
+                    NAMED_SHELL_PARAMETER_SYNTAX.search(alias)
+                    or CMD_PARAMETER_SYNTAX.search(alias)
+                ),
                 git_context_reliable=segment_git_context_reliable,
             )
             if reason is not None:
